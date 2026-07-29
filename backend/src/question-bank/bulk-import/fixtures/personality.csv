@@ -1,0 +1,26 @@
+module_slug,question_text,option_a,option_a_weights,option_b,option_b_weights,option_c,option_c_weights,option_d,option_d_weights,tags
+personality,I enjoy trying approaches nobody on the team has used before.,Strongly agree,openness:2,Agree,openness:1,Disagree,openness:-1,Strongly disagree,openness:-2,fixture;openness
+personality,When a project introduces an unfamiliar tool my first reaction is curiosity.,Strongly agree,openness:2,Agree,openness:1,Disagree,openness:-1,Strongly disagree,openness:-2,fixture;openness
+personality,I read about subjects well outside my own field.,Strongly agree,openness:2,Agree,openness:1,Disagree,openness:-1,Strongly disagree,openness:-2,fixture;openness
+personality,I would rather refine something that already works than redesign it.,Strongly agree,openness:-2,Agree,openness:-1,Disagree,openness:1,Strongly disagree,openness:2,fixture;openness;reverse-keyed
+personality,Open-ended problems with no obvious method appeal to me.,Strongly agree,openness:2,Agree,openness:1,Disagree,openness:-1,Strongly disagree,openness:-2,fixture;openness
+personality,I plan my week in advance.,Strongly agree,conscientiousness:2,Agree,conscientiousness:1,Disagree,conscientiousness:-1,Strongly disagree,conscientiousness:-2,fixture;conscientiousness
+personality,I double-check my work before submitting it.,Strongly agree,conscientiousness:2,Agree,conscientiousness:1,Disagree,conscientiousness:-1,Strongly disagree,conscientiousness:-2,fixture;conscientiousness
+personality,I often leave tasks until close to the deadline.,Strongly agree,conscientiousness:-2,Agree,conscientiousness:-1,Disagree,conscientiousness:1,Strongly disagree,conscientiousness:2,fixture;conscientiousness;reverse-keyed
+personality,I keep detailed notes and records of my work.,Strongly agree,conscientiousness:2,Agree,conscientiousness:1,Disagree,conscientiousness:-1,Strongly disagree,conscientiousness:-2,fixture;conscientiousness
+personality,I finish what I start even when it stops being interesting.,Strongly agree,conscientiousness:2,Agree,conscientiousness:1,Disagree,conscientiousness:-1,Strongly disagree,conscientiousness:-2,fixture;conscientiousness
+personality,Meeting new people energises me.,Strongly agree,extraversion:2,Agree,extraversion:1,Disagree,extraversion:-1,Strongly disagree,extraversion:-2,fixture;extraversion
+personality,I speak up early in group discussions.,Strongly agree,extraversion:2,Agree,extraversion:1,Disagree,extraversion:-1,Strongly disagree,extraversion:-2,fixture;extraversion
+personality,After a full day of meetings I feel drained.,Strongly agree,extraversion:-2,Agree,extraversion:-1,Disagree,extraversion:1,Strongly disagree,extraversion:2,fixture;extraversion;reverse-keyed
+personality,I would rather present my team's work myself than have someone else do it.,Strongly agree,extraversion:2,Agree,extraversion:1,Disagree,extraversion:-1,Strongly disagree,extraversion:-2,fixture;extraversion
+personality,I would rather work alone than as part of a group.,Strongly agree,extraversion:-2;agreeableness:-1,Agree,extraversion:-1,Disagree,extraversion:1,Strongly disagree,extraversion:2;agreeableness:1,fixture;extraversion;reverse-keyed
+personality,I go out of my way to help colleagues who have fallen behind.,Strongly agree,agreeableness:2,Agree,agreeableness:1,Disagree,agreeableness:-1,Strongly disagree,agreeableness:-2,fixture;agreeableness
+personality,In a disagreement I look for the other person's point of view first.,Strongly agree,agreeableness:2,Agree,agreeableness:1,Disagree,agreeableness:-1,Strongly disagree,agreeableness:-2,fixture;agreeableness
+personality,I find it easy to tell someone their work is not good enough.,Strongly agree,agreeableness:-2,Agree,agreeableness:-1,Disagree,agreeableness:1,Strongly disagree,agreeableness:2,fixture;agreeableness;reverse-keyed
+personality,I trust new teammates until they give me a reason not to.,Strongly agree,agreeableness:2,Agree,agreeableness:1,Disagree,agreeableness:-1,Strongly disagree,agreeableness:-2,fixture;agreeableness
+personality,I would rather reach a compromise than win an argument.,Strongly agree,agreeableness:2,Agree,agreeableness:1,Disagree,agreeableness:-1,Strongly disagree,agreeableness:-2,fixture;agreeableness
+personality,Tight deadlines make me anxious.,Strongly agree,neuroticism:2,Agree,neuroticism:1,Disagree,neuroticism:-1,Strongly disagree,neuroticism:-2,fixture;neuroticism
+personality,I stay calm when a project goes badly wrong.,Strongly agree,neuroticism:-2,Agree,neuroticism:-1,Disagree,neuroticism:1,Strongly disagree,neuroticism:2,fixture;neuroticism;reverse-keyed
+personality,I worry about mistakes long after they have been fixed.,Strongly agree,neuroticism:2,Agree,neuroticism:1,Disagree,neuroticism:-1,Strongly disagree,neuroticism:-2,fixture;neuroticism
+personality,Critical feedback from a manager affects me for days.,Strongly agree,neuroticism:2,Agree,neuroticism:1,Disagree,neuroticism:-1,Strongly disagree,neuroticism:-2,fixture;neuroticism
+personality,I recover quickly from setbacks at work.,Strongly agree,neuroticism:-2,Agree,neuroticism:-1,Disagree,neuroticism:1,Strongly disagree,neuroticism:2,fixture;neuroticism;reverse-keyed

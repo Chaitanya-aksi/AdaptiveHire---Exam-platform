@@ -1,0 +1,36 @@
+module_slug,question_text,option_a,option_b,option_c,option_d,correct_option,difficulty_score,tags
+logical-reasoning,"Which word does not belong: Dog, Cat, Lion, Chair?",Dog,Cat,Lion,Chair,D,600,fixture;odd-one-out
+logical-reasoning,"What comes next: 5, 10, 20, 40, ?",60,70,80,100,C,650,fixture;sequences
+logical-reasoning,"Which does not belong: Apple, Banana, Carrot, Mango?",Apple,Banana,Carrot,Mango,C,650,fixture;odd-one-out
+logical-reasoning,"What comes next: 1, 4, 9, 16, ?",20,24,25,36,C,700,fixture;sequences
+logical-reasoning,"What comes next: 3, 6, 12, 24, ?",36,42,48,54,C,700,fixture;sequences
+logical-reasoning,A is taller than B. C is taller than A. Who is tallest?,A,B,C,Cannot be determined,C,700,fixture;ordering
+logical-reasoning,"Which does not belong: Delhi, Mumbai, Paris, Chennai?",Delhi,Mumbai,Paris,Chennai,C,700,fixture;odd-one-out
+logical-reasoning,"What comes next in the letter series: A, C, E, G, ?",H,I,J,K,B,750,fixture;letter-series
+logical-reasoning,"What comes next: 7, 14, 28, 56, ?",84,98,112,126,C,750,fixture;sequences
+logical-reasoning,"What comes next: 4, 9, 16, 25, ?",30,32,36,49,C,750,fixture;sequences
+logical-reasoning,"What comes next: 1, 1, 2, 3, 5, 8, ?",11,12,13,15,C,800,fixture;sequences
+logical-reasoning,"Which number does not belong: 2, 3, 5, 7, 9?",2,3,7,9,D,800,fixture;odd-one-out
+logical-reasoning,A is B's father and B is C's sister. What is A to C?,Brother,Uncle,Father,Grandfather,C,850,fixture;blood-relations
+logical-reasoning,"What comes next: 2, 6, 12, 20, ?",28,30,32,36,B,900,fixture;sequences
+logical-reasoning,"What comes next: 100, 81, 64, 49, ?",25,30,36,42,C,900,fixture;sequences
+logical-reasoning,"What comes next in the letter series: Z, X, V, T, ?",S,R,Q,P,B,900,fixture;letter-series
+logical-reasoning,"Which does not belong: Square, Circle, Triangle, Cube?",Square,Circle,Triangle,Cube,D,900,fixture;odd-one-out
+logical-reasoning,"If TAP is written as UBQ, how is CAT written?",DBU,DBT,CBU,DAU,A,900,fixture;coding
+logical-reasoning,"You walk 5 km north, turn right, then walk 3 km. Which direction are you facing?",North,South,East,West,C,900,fixture;directions
+logical-reasoning,"Which month comes next: JAN, MAR, MAY, ?",JUN,JUL,AUG,SEP,B,900,fixture;patterns
+logical-reasoning,"If A=1, B=2 and so on, what is the sum of the letters in BAD?",6,7,8,9,B,950,fixture;coding
+logical-reasoning,"All Bloops are Razzies and all Razzies are Lazzies. Are all Bloops Lazzies?",Yes,No,Only some,Cannot be determined,A,950,fixture;syllogisms
+logical-reasoning,"What comes next: 1, 8, 27, 64, ?",100,125,144,216,B,950,fixture;sequences
+logical-reasoning,All roses are flowers and all flowers need water. Do all roses need water?,Yes,No,Only some roses,Cannot be determined,A,1000,fixture;syllogisms
+logical-reasoning,"Which number does not belong: 121, 144, 169, 200?",121,144,169,200,D,1000,fixture;odd-one-out
+logical-reasoning,P is the brother of Q and Q is the mother of R. What is P to R?,Father,Uncle,Brother,Cousin,B,1000,fixture;blood-relations
+logical-reasoning,"You walk 10 m south, turn left, walk 5 m, turn left, then walk 10 m. Which direction are you facing?",North,South,East,West,A,1050,fixture;directions
+logical-reasoning,"Pointing at a photograph, a man says 'She is my mother's only daughter.' Who is she?",His mother,His sister,His daughter,His wife,B,1050,fixture;blood-relations
+logical-reasoning,In a row of 20 people X is 7th from the left. What is X's position from the right?,13,14,15,16,B,1050,fixture;ordering
+logical-reasoning,"If today is Wednesday, what day will it be 15 days from now?",Wednesday,Thursday,Friday,Saturday,B,1100,fixture;calendars
+logical-reasoning,"What comes next: 3, 7, 15, 31, ?",47,55,63,71,C,1100,fixture;sequences
+logical-reasoning,All cats are animals and some animals are wild. Can we conclude that some cats are wild?,Yes,No,Only domestic ones,Always,B,1100,fixture;syllogisms
+logical-reasoning,"What comes next: 2, 5, 11, 23, ?",35,41,47,53,C,1150,fixture;sequences
+logical-reasoning,"If 5 people each shake hands with everyone else exactly once, how many handshakes occur?",8,10,15,20,B,1150,fixture;combinatorics
+logical-reasoning,Some pens are books and all books are papers. Can we conclude that some pens are papers?,Yes,No,Only hardbacks,Cannot be determined,A,1200,fixture;syllogisms

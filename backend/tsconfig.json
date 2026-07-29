@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    // @types/jest and @types/multer register global declarations; naming them
+    // keeps editors from flagging `describe`/`expect` and `Express.Multer`.
+    "types": ["node", "jest", "multer"]
+  },
+  "include": ["src/**/*", "test/**/*"],
+  // tsconfig.build.json narrows this back to src for the emitted build.
+  "exclude": ["node_modules", "dist"]
+}

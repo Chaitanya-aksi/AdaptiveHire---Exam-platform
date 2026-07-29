@@ -1,0 +1,31 @@
+module_slug,question_text,option_a,option_b,option_c,option_d,correct_option,difficulty_score,tags
+verbal-ability,What is the plural of 'child'?,childs,children,childrens,childes,B,600,fixture;grammar
+verbal-ability,Choose the correct form: She ___ to school every day.,go,goes,going,gone,B,600,fixture;grammar
+verbal-ability,Choose the correct form: The book ___ on the table.,is,are,were,be,A,650,fixture;grammar
+verbal-ability,Choose the antonym of 'ancient'.,old,modern,historic,aged,B,700,fixture;antonyms
+verbal-ability,Which of these is a preposition?,quickly,under,jump,happy,B,700,fixture;grammar
+verbal-ability,Choose the correct sentence.,He don't like coffee,He doesn't like coffee,He not like coffee,He no like coffee,B,700,fixture;grammar
+verbal-ability,Which of these is an adverb?,beautiful,beautifully,beauty,beautify,B,750,fixture;grammar
+verbal-ability,Choose the synonym of 'abundant'.,scarce,plentiful,tiny,rare,B,800,fixture;synonyms
+verbal-ability,Choose the antonym of 'expand'.,grow,enlarge,contract,widen,C,800,fixture;antonyms
+verbal-ability,Choose the antonym of 'scarce'.,rare,abundant,limited,thin,B,800,fixture;antonyms
+verbal-ability,Which word is spelled correctly?,seperate,separate,seperete,saparate,B,850,fixture;spelling
+verbal-ability,What does the idiom 'once in a blue moon' mean?,Very often,Very rarely,At night,Without warning,B,850,fixture;idioms
+verbal-ability,Which word is spelled correctly?,accommodate,acommodate,accomodate,acomodate,A,900,fixture;spelling
+verbal-ability,What does the idiom 'break the ice' mean?,To start a conversation,To end a friendship,To act coldly,To take a risk,A,900,fixture;idioms
+verbal-ability,What does the idiom 'hit the nail on the head' mean?,To work hard,To be exactly right,To cause damage,To finish early,B,900,fixture;idioms
+verbal-ability,Choose the synonym of 'meticulous'.,careless,careful,quick,lazy,B,950,fixture;synonyms
+verbal-ability,Choose the correct form: He has been working here ___ 2015.,since,for,from,at,A,950,fixture;grammar
+verbal-ability,Choose the synonym of 'candid'.,rude,frank,shy,quiet,B,1000,fixture;synonyms
+verbal-ability,Choose the synonym of 'obstinate'.,flexible,stubborn,cheerful,weak,B,1000,fixture;synonyms
+verbal-ability,Choose the antonym of 'transparent'.,clear,opaque,glassy,visible,B,1000,fixture;antonyms
+verbal-ability,Choose the passive form of 'She wrote a letter'.,A letter was written by her,A letter is written by her,A letter has written by her,She was written a letter,A,1000,fixture;grammar
+verbal-ability,Choose the correct sentence.,Between you and I,Between you and me,Between I and you,Between me and I,B,1050,fixture;grammar
+verbal-ability,Choose the synonym of 'lucid'.,muddy,clear,dark,complicated,B,1050,fixture;synonyms
+verbal-ability,Choose the antonym of 'benevolent'.,kind,generous,malevolent,gentle,C,1100,fixture;antonyms
+verbal-ability,Choose the correct form: If I ___ rich I would travel the world.,am,was,were,be,C,1100,fixture;grammar
+verbal-ability,Choose the correct form: Neither of the boys ___ present.,was,were,are,have,A,1150,fixture;grammar
+verbal-ability,Choose the antonym of 'frugal'.,thrifty,extravagant,careful,economical,B,1150,fixture;antonyms
+verbal-ability,Choose the synonym of 'vindicate'.,accuse,justify,ignore,punish,B,1200,fixture;synonyms
+verbal-ability,Choose the synonym of 'ephemeral'.,eternal,short-lived,powerful,concealed,B,1250,fixture;synonyms
+verbal-ability,Choose the synonym of 'reticent'.,talkative,reserved,angry,bold,B,1250,fixture;synonyms

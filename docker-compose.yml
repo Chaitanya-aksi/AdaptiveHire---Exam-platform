@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: adaptivehire-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-adaptivehire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adaptivehire}
+      POSTGRES_DB: ${POSTGRES_DB:-adaptivehire}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-adaptivehire} -d ${POSTGRES_DB:-adaptivehire}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: adaptivehire-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    container_name: adaptivehire-backend
+    restart: unless-stopped
+    command: npm run start:dev
+    env_file:
+      - .env
+    environment:
+      # Inside the compose network the services are reachable by service name
+      # on their standard ports; the .env values are host-side only.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+    ports:
+      - '${PORT:-3001}:3000'
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/test:/app/test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

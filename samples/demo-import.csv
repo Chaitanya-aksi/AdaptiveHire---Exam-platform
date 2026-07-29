@@ -1,0 +1,11 @@
+module_slug,question_text,option_a,option_a_weights,option_b,option_b_weights,option_c,option_c_weights,option_d,option_d_weights,correct_option,difficulty_score,tags
+aptitude,What is 35% of 400?,120,,140,,160,,180,,B,900,demo-import
+aptitude,A car travels 150 km in 2.5 hours. What is its average speed?,50 km/h,,55 km/h,,60 km/h,,65 km/h,,C,850,demo-import
+aptitude,If 8 books cost 320 rupees what do 5 books cost?,180,,200,,220,,240,,B,800,demo-import
+logical-reasoning,"What comes next: 6, 11, 21, 41, ?",61,,71,,81,,91,,C,1150,demo-import
+logical-reasoning,"Which does not belong: Violin, Guitar, Flute, Cello?",Violin,,Guitar,,Flute,,Cello,,C,950,demo-import
+personality,I keep a written to-do list.,Strongly agree,conscientiousness:2,Agree,conscientiousness:1,Disagree,conscientiousness:-1,Strongly disagree,conscientiousness:-2,,,demo-import
+aptitude,DELIBERATE ERROR — no correct_option given,120,,150,,180,,200,,,900,demo-import
+apptitude,DELIBERATE ERROR — module slug is misspelled,1,,2,,3,,4,,A,800,demo-import
+aptitude,DELIBERATE ERROR — correct_option Z is not one of the options,10,,20,,30,,40,,Z,800,demo-import
+aptitude,DELIBERATE ERROR — only three options supplied,10,,20,,30,,,,B,800,demo-import
