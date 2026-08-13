@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -8,11 +9,16 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
-import { Repository } from 'typeorm';
-import { AdaptiveEngineService } from '../adaptive-engine/adaptive-engine.service';
+import { QueryFailedError, Repository } from 'typeorm';
+import {
+  AdaptiveEngineService,
+  type SubmittedAnswer,
+} from '../adaptive-engine/adaptive-engine.service';
 import { AbilityEstimatorService } from '../adaptive-engine/ability-estimator/ability-estimator.service';
 import type { ModuleRunState } from '../adaptive-engine/engine.types';
+import { EvaluationService } from '../adaptive-engine/evaluation/evaluation.service';
 import type { SelectedQuestion } from '../adaptive-engine/question-selector/question-selector.service';
+import { PersonalityQuestionDetails } from '../question-bank/entities/personality-question-details.entity';
 import { AssessmentsService } from '../assessments/assessments.service';
 import {
   InvitationStatus,
@@ -32,6 +38,7 @@ import {
   reportJobId,
   type ReportGenerationJob,
 } from '../queues/report-generation/report-generation.job';
+import { SubmitAnswerDto } from './dto/submit-answer.dto';
 import { AssessmentSession } from './entities/assessment-session.entity';
 import { Response as ResponseRow } from './entities/response.entity';
 import { SessionModuleResult } from './entities/session-module-result.entity';
@@ -78,6 +85,7 @@ export class SessionsService {
     private readonly assessments: AssessmentsService,
     private readonly engine: AdaptiveEngineService,
     private readonly estimator: AbilityEstimatorService,
+    private readonly evaluation: EvaluationService,
     private readonly store: RedisSessionService,
     @InjectQueue(AUTO_SUBMIT_QUEUE)
     private readonly autoSubmit: Queue<AutoSubmitJob>,
@@ -118,11 +126,31 @@ export class SessionsService {
     const existing = await this.sessions.findOne({ where: { invitationId } });
     if (existing) return this.resume(existing);
 
-    return this.createSession(invitation);
+    try {
+      return await this.createSession(invitation);
+    } catch (error) {
+      // Two starts for one invitation raced each other — a double-click, two
+      // tabs, or React's development double-mount. `invitationId` is unique, so
+      // one insert wins and the other lands here. The loser joins the session
+      // the winner created instead of failing: from the candidate's side both
+      // clicks meant "let me in", and they used to get a 500 for the second.
+      if (!isUniqueViolation(error)) throw error;
+
+      const winner = await this.sessions.findOne({ where: { invitationId } });
+      if (!winner) throw error;
+
+      this.logger.warn(
+        `Concurrent start for invitation ${invitationId} — joining session ` +
+          `${winner.id} created by the call that won the race`,
+      );
+      return this.resume(winner);
+    }
   }
 
   private async createSession(invitation: Invitation): Promise<SessionStep> {
-    const assessment = await this.assessments.findOne(invitation.assessmentId);
+    const assessment = await this.assessments.findOneForSession(
+      invitation.assessmentId,
+    );
     if (assessment.modules.length === 0) {
       throw new ConflictException(
         'This assessment has no modules configured yet.',
@@ -152,6 +180,10 @@ export class SessionsService {
       status: InvitationStatus.IN_PROGRESS,
     });
 
+    // Resolved once per session: an empty pool means "no restriction", so the
+    // selector should not pay for a subquery discovering that on every question.
+    const poolRestricted = assessment.questionPool.length > 0;
+
     const state: SessionState = {
       sessionId: session.id,
       candidateId: session.candidateId,
@@ -167,6 +199,11 @@ export class SessionsService {
       modules: assessment.modules.map((config) =>
         this.engine.createModuleState({
           moduleId: config.moduleId,
+          // The assessment's owner, not the candidate's — a candidate belongs to
+          // no organisation, and this is what scopes the questions they are served.
+          organisationId: assessment.organisationId,
+          assessmentId: assessment.id,
+          poolRestricted,
           slug: config.module.slug,
           name: config.module.name,
           description: config.module.description,
@@ -252,9 +289,10 @@ export class SessionsService {
   async submitAnswer(
     candidateId: string,
     sessionId: string,
-    questionId: string,
-    selectedOption: string,
+    dto: SubmitAnswerDto,
   ): Promise<SessionStep> {
+    const { questionId } = dto;
+    const answer = toSubmittedAnswer(dto);
     const state = await this.load(candidateId, sessionId);
     const now = Date.now();
 
@@ -292,14 +330,7 @@ export class SessionsService {
     }
 
     const question = await this.loadServedQuestion(served.questionId);
-    await this.applyAnswer(
-      state,
-      module,
-      question,
-      selectedOption,
-      served,
-      now,
-    );
+    await this.applyAnswer(state, module, question, answer, served, now);
     await this.store.save(state);
 
     return this.advance(state);
@@ -371,8 +402,10 @@ export class SessionsService {
         servedAt: now,
       };
       // Consumed at serve time, not at answer time: a question the candidate
-      // walks away from is still spent.
+      // walks away from is still spent, and its probe twin must stay out of the
+      // paper either way.
       module.seenQuestionIds.push(step.question.id);
+      this.engine.markProbeServed(module, step.question);
       await this.store.save(state);
 
       return this.toQuestionStep(state, module, state.served, step.question);
@@ -385,23 +418,29 @@ export class SessionsService {
     state: SessionState,
     module: ModuleRunState,
     question: SelectedQuestion,
-    selectedOption: string | null,
+    answer: SubmittedAnswer,
     served: ServedQuestion,
     now: number,
   ): Promise<void> {
+    // The sequence number is settled before scoring so a probe pair can record
+    // which two rows of the session's answer list it is made of.
+    state.answeredTotal += 1;
     const outcome = await this.engine.recordAnswer(
       module,
       question,
-      selectedOption,
+      answer,
+      state.answeredTotal,
     );
-
-    state.answeredTotal += 1;
 
     await this.responses.insert({
       sessionId: state.sessionId,
       moduleId: module.moduleId,
       questionId: question.id,
-      selectedOption,
+      // Exactly one of these is set on an answered question; both stay null
+      // when the clock ran out with it on screen.
+      selectedOption: answer.kind === 'option' ? answer.selectedOption : null,
+      selectedOptions:
+        answer.kind === 'ranking' ? answer.selectedOptions : null,
       isCorrect: outcome.isCorrect,
       abilityEstimateAfter: toNumeric(outcome.abilityEstimateAfter),
       questionDifficultyAtServe: toNumeric(outcome.questionDifficultyAtServe),
@@ -423,7 +462,14 @@ export class SessionsService {
     if (state.served && state.served.moduleId === module.moduleId) {
       const served = state.served;
       const question = await this.loadServedQuestion(served.questionId);
-      await this.applyAnswer(state, module, question, null, served, now);
+      await this.applyAnswer(
+        state,
+        module,
+        question,
+        { kind: 'unanswered' },
+        served,
+        now,
+      );
     }
 
     module.status = 'completed';
@@ -454,6 +500,7 @@ export class SessionsService {
           ? toNumeric(this.engine.finalAbility(module))
           : null,
         traitScores: attempted ? this.engine.finalTraitScores(module) : null,
+        probeResults: attempted ? this.engine.probeResults(module) : null,
         questionsAnswered: module.answered,
         questionsCorrect: module.correct,
         stopReason: module.stopReason,
@@ -571,10 +618,17 @@ export class SessionsService {
       `Rebuilding session ${session.id} from the database — live state was gone`,
     );
 
-    const assessment = await this.assessments.findOne(session.assessmentId);
+    const assessment = await this.assessments.findOneForSession(
+      session.assessmentId,
+    );
+    const poolRestricted = assessment.questionPool.length > 0;
+
     const modules = assessment.modules.map((config) =>
       this.engine.createModuleState({
         moduleId: config.moduleId,
+        organisationId: assessment.organisationId,
+        assessmentId: assessment.id,
+        poolRestricted,
         slug: config.module.slug,
         name: config.module.name,
         description: config.module.description,
@@ -600,6 +654,12 @@ export class SessionsService {
       module.answered += 1;
       module.status = 'in_progress';
 
+      // Whether this answer can be compared with its probe twin at all: a
+      // question the clock ran out on has no choice to compare.
+      const wasAnswered =
+        answer.selectedOption !== null ||
+        Boolean(answer.selectedOptions?.length);
+
       if (module.scoringType === ScoringType.OBJECTIVE) {
         const difficulty = Number(answer.questionDifficultyAtServe ?? 0);
         // Information is measured against the estimate the question was
@@ -611,16 +671,42 @@ export class SessionsService {
         module.ability = Number(answer.abilityEstimateAfter ?? module.ability);
         this.estimator.trackAbility(module, module.ability);
         if (answer.isCorrect) module.correct += 1;
-      } else if (answer.selectedOption) {
-        const chosen = answer.question.personalityDetails?.options.find(
-          (option) => option.key === answer.selectedOption,
+
+        this.engine.replayProbe(
+          module,
+          answer.question,
+          answer.sequenceNumber,
+          wasAnswered
+            ? { kind: 'objective', isCorrect: answer.isCorrect === true }
+            : { kind: 'unanswered' },
         );
-        if (chosen) {
-          this.estimator.applyTraitWeights(
-            module.traitTallies,
-            chosen.traitWeights,
-          );
+      } else {
+        // Replay the trait contribution through the engine rather than
+        // re-deriving it here. A ranking answer's weights depend on the
+        // position of every option, so reading `selectedOption` alone (which
+        // is null for rankings) would silently drop the whole answer.
+        const details = answer.question.personalityDetails;
+        const replayed = details
+          ? this.replayTraitAnswer(details, answer)
+          : null;
+        if (replayed) {
+          this.estimator.applyTraitWeights(module.traitTallies, replayed);
         }
+        if (details?.pattern) {
+          module.patternCounts[details.pattern] =
+            (module.patternCounts[details.pattern] ?? 0) + 1;
+        }
+
+        this.engine.replayProbe(
+          module,
+          answer.question,
+          answer.sequenceNumber,
+          // An answer whose weights could not be replayed is uncomparable
+          // rather than a disagreement — same treatment as a timeout.
+          wasAnswered && replayed
+            ? { kind: 'trait', weights: replayed }
+            : { kind: 'unanswered' },
+        );
       }
     }
 
@@ -671,6 +757,38 @@ export class SessionsService {
 
     await this.store.save(state);
     return state;
+  }
+
+  /**
+   * Trait weights for one stored answer, replayed during rehydration.
+   *
+   * Returns null for a question that timed out unanswered — it contributed
+   * nothing at the time and must contribute nothing now. Evaluation errors are
+   * swallowed rather than thrown: a question edited since it was answered
+   * should cost that one answer's contribution, not the candidate's session.
+   */
+  private replayTraitAnswer(
+    details: PersonalityQuestionDetails,
+    answer: ResponseRow,
+  ): Record<string, number> | null {
+    try {
+      if (answer.selectedOptions?.length) {
+        return this.evaluation.evaluateRanking(details, answer.selectedOptions)
+          .traitWeights;
+      }
+      if (answer.selectedOption) {
+        return this.evaluation.evaluatePersonality(
+          details,
+          answer.selectedOption,
+        ).traitWeights;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Could not replay answer ${answer.id} while rebuilding session ` +
+          `${answer.sessionId}: ${describe(error)}`,
+      );
+    }
+    return null;
   }
 
   private async loadServedQuestion(
@@ -735,6 +853,7 @@ export class SessionsService {
         key: option.key,
         text: option.text,
       })),
+      pattern: question.personalityDetails?.pattern ?? null,
     };
   }
 
@@ -778,7 +897,9 @@ export class SessionsService {
   private async finishedViewFromDb(
     session: AssessmentSession,
   ): Promise<SessionView> {
-    const assessment = await this.assessments.findOne(session.assessmentId);
+    const assessment = await this.assessments.findOneForSession(
+      session.assessmentId,
+    );
     const results = await this.moduleResults.find({
       where: { sessionId: session.id },
     });
@@ -844,9 +965,46 @@ export class SessionsService {
   }
 }
 
+/**
+ * Turns the request payload into the engine's answer union, rejecting the two
+ * ambiguous cases. Whether the shape actually suits the question that was
+ * served is a separate check, made by the engine against the stored pattern.
+ */
+function toSubmittedAnswer(dto: SubmitAnswerDto): SubmittedAnswer {
+  const hasOption = dto.selectedOption !== undefined;
+  const hasRanking = dto.selectedOptions !== undefined;
+
+  if (hasOption && hasRanking) {
+    throw new BadRequestException(
+      'Send either "selectedOption" or "selectedOptions", not both',
+    );
+  }
+  if (hasRanking) {
+    return { kind: 'ranking', selectedOptions: dto.selectedOptions! };
+  }
+  if (hasOption) {
+    return { kind: 'option', selectedOption: dto.selectedOption! };
+  }
+  throw new BadRequestException(
+    'An answer needs "selectedOption", or "selectedOptions" for a ranking',
+  );
+}
+
 /** TypeORM maps `numeric` columns to strings; keep the conversion in one place. */
 function toNumeric(value: number | null): string | null {
   return value === null ? null : String(value);
+}
+
+/**
+ * Postgres `unique_violation`. Matched on the SQLSTATE rather than the message
+ * so it survives a driver upgrade or a non-English server locale.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as QueryFailedError & { code?: string }).code === '23505'
+  );
 }
 
 function describe(error: unknown): string {

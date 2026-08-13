@@ -83,10 +83,16 @@ export class InvitationsService {
   async bulkInvite(
     assessmentId: string,
     rows: RawRow[],
+    organisationId: string,
     invitedById: string,
   ): Promise<BulkInviteResult> {
-    // Throws 404 if the assessment doesn't exist — validated once up front.
-    const assessment = await this.assessments.findOne(assessmentId);
+    // Throws 404 if the assessment doesn't exist *or* belongs to another
+    // organisation — validated once up front, so no row can invite a candidate
+    // into somebody else's assessment.
+    const assessment = await this.assessments.findOne(
+      assessmentId,
+      organisationId,
+    );
 
     const failures: InviteFailure[] = [];
     const seen = new Set<string>();
@@ -189,9 +195,13 @@ export class InvitationsService {
   async inviteSingle(
     assessmentId: string,
     dto: CreateInvitationDto,
+    organisationId: string,
     invitedById: string,
   ): Promise<AssessmentInvitationView> {
-    const assessment = await this.assessments.findOne(assessmentId);
+    const assessment = await this.assessments.findOne(
+      assessmentId,
+      organisationId,
+    );
     const email = dto.email.trim().toLowerCase();
 
     let outcome: { created: boolean; invitation: Invitation };
@@ -233,8 +243,11 @@ export class InvitationsService {
    * their attempt with it — revoking is the honest option there, and the error
    * says so rather than failing on a foreign key.
    */
-  async remove(invitationId: string): Promise<{ id: string; deleted: true }> {
-    const invitation = await this.findOneOrThrow(invitationId);
+  async remove(
+    invitationId: string,
+    organisationId: string,
+  ): Promise<{ id: string; deleted: true }> {
+    const invitation = await this.findOneOrThrow(invitationId, organisationId);
 
     const session = await this.sessions.findOne({
       where: { invitationId },
@@ -256,8 +269,11 @@ export class InvitationsService {
    * refused by `POST /sessions/start`, and a completed attempt keeps its
    * report — the recruiter is withdrawing the invitation, not the result.
    */
-  async revoke(invitationId: string): Promise<AssessmentInvitationView> {
-    const invitation = await this.findOneOrThrow(invitationId);
+  async revoke(
+    invitationId: string,
+    organisationId: string,
+  ): Promise<AssessmentInvitationView> {
+    const invitation = await this.findOneOrThrow(invitationId, organisationId);
 
     if (invitation.status !== InvitationStatus.REVOKED) {
       await this.invitations.update(invitationId, {
@@ -276,9 +292,20 @@ export class InvitationsService {
     );
   }
 
-  private async findOneOrThrow(invitationId: string): Promise<Invitation> {
+  /**
+   * One invitation, and only if it belongs to the asking organisation.
+   *
+   * Scoped through the assessment rather than by a column on the invitation
+   * itself: the owning company is a fact about the assessment, and copying it
+   * onto every invitation would be a second copy that can drift out of step with
+   * the first. One join is cheaper than that risk.
+   */
+  private async findOneOrThrow(
+    invitationId: string,
+    organisationId: string,
+  ): Promise<Invitation> {
     const invitation = await this.invitations.findOne({
-      where: { id: invitationId },
+      where: { id: invitationId, assessment: { organisationId } },
     });
     if (!invitation) {
       throw new NotFoundException(`Invitation ${invitationId} not found`);
@@ -317,9 +344,12 @@ export class InvitationsService {
 
   async listForAssessment(
     assessmentId: string,
+    organisationId: string,
   ): Promise<AssessmentInvitationView[]> {
-    // Validates the assessment exists (404 otherwise).
-    await this.assessments.findOne(assessmentId);
+    // Validates the assessment exists and belongs to this organisation (404
+    // otherwise). Without this, an id from another company would list its
+    // candidates' names and email addresses.
+    await this.assessments.findOne(assessmentId, organisationId);
 
     const rows = await this.invitations.find({
       where: { assessmentId },

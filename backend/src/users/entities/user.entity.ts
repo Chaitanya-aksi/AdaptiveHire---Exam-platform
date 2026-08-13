@@ -3,11 +3,14 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserRole } from '../../common/enums';
+import { Organisation } from '../../organisations/entities/organisation.entity';
 
 export interface RecentRefreshToken {
   /** Argon2 hash — the plaintext token never touches the database. */
@@ -56,6 +59,25 @@ export class User {
 
   @Column({ type: 'enum', enum: UserRole })
   role!: UserRole;
+
+  /**
+   * The hiring company this account belongs to, and the scope of everything it
+   * can see.
+   *
+   * Set for every `recruiter_admin` and null for every candidate — a candidate
+   * belongs to no company, and sits assessments for whoever invites them. The
+   * column is nullable because of that, not because a recruiter may go without
+   * one: registration always creates the pair together.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  organisationId!: string | null;
+
+  @ManyToOne(() => Organisation, (organisation) => organisation.members, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'organisationId' })
+  organisation!: Organisation | null;
 
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;

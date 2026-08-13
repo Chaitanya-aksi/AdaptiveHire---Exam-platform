@@ -8,6 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentOrg } from '../common/decorators/current-org.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums';
@@ -38,8 +39,8 @@ export class UsersController {
   /** Directory listing. Never exposes password or refresh-token columns. */
   @Roles(UserRole.RECRUITER_ADMIN)
   @Get()
-  list(@Query() query: QueryUsersDto) {
-    return this.users.list(query);
+  list(@Query() query: QueryUsersDto, @CurrentOrg() organisationId: string) {
+    return this.users.list(query, organisationId);
   }
 
   /**
@@ -49,8 +50,10 @@ export class UsersController {
    */
   @Roles(UserRole.RECRUITER_ADMIN)
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.users.createByAdmin(dto);
+  create(@Body() dto: CreateUserDto, @CurrentOrg() organisationId: string) {
+    // The organisation comes from the creating recruiter, never the payload — a
+    // client-supplied one would let anybody add a member to another company.
+    return this.users.createByAdmin({ ...dto, organisationId });
   }
 
   @Patch('me')

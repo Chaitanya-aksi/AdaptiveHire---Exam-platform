@@ -1,17 +1,37 @@
 import { useEffect, useState } from 'react';
-import type { RuntimeQuestion } from '../../lib/types';
+import type { AnswerPayload, RuntimeQuestion } from '../../lib/types';
+import { RankingQuestion } from './RankingQuestion';
 
 interface QuestionCardProps {
   question: RuntimeQuestion;
   sequenceNumber: number;
   /** Disables the form while an answer is in flight. */
   busy: boolean;
-  onSubmit: (option: string) => void;
+  onSubmit: (payload: AnswerPayload) => void;
 }
 
 /**
- * One question, one answer, no going back — the selection resets whenever the
- * question changes so a stale choice can't be carried forward.
+ * Prompt shown above the options, by behavioural pattern.
+ *
+ * Every one of these says the same thing in a different way: there is nothing
+ * to score well on. A candidate who believes one option is the "employer
+ * answer" gives us their guess at that instead of their behaviour, which is
+ * the exact failure mode the behavioural patterns exist to avoid.
+ */
+const PATTERN_HINT: Record<string, string> = {
+  situational:
+    'There is no right answer. Choose what you would most likely actually do.',
+  forced_choice:
+    'Both are positive. Choose the one that describes you better.',
+  trade_off:
+    'Neither is better than the other. Choose the one you would prefer.',
+};
+
+/**
+ * One question, one answer, no going back. Ranking questions need a different
+ * interaction and a different payload, so they are delegated wholesale;
+ * everything else — objective, situational, forced-choice, trade-off and
+ * legacy Likert — is a single choice.
  *
  * There is no "previous" control anywhere in this component on purpose: the
  * server would reject it, and offering a button that always fails is worse
@@ -27,18 +47,35 @@ export function QuestionCard({
 
   useEffect(() => setSelected(null), [question.id]);
 
+  if (question.pattern === 'ranking') {
+    return (
+      <RankingQuestion
+        question={question}
+        busy={busy}
+        onSubmit={(selectedOptions) => onSubmit({ selectedOptions })}
+      />
+    );
+  }
+
+  const hint = question.pattern ? PATTERN_HINT[question.pattern] : null;
+  // Two-option patterns read as a comparison rather than a list, so the CSS
+  // lays them out side by side where there is room.
+  const pairwise =
+    question.pattern === 'forced_choice' || question.pattern === 'trade_off';
+
   return (
     <form
       className="card card-pad assess-question"
       onSubmit={(event) => {
         event.preventDefault();
-        if (selected && !busy) onSubmit(selected);
+        if (selected && !busy) onSubmit({ selectedOption: selected });
       }}
     >
       <p className="assess-qnum">Question {sequenceNumber}</p>
       <h2 className="assess-qtext">{question.text}</h2>
+      {hint && <p className="muted small assess-hint">{hint}</p>}
 
-      <div className="assess-options">
+      <div className={`assess-options${pairwise ? ' pairwise' : ''}`}>
         {question.options.map((option) => (
           <label
             key={option.key}

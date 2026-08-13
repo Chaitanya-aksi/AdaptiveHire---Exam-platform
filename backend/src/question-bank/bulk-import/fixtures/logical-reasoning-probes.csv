@@ -1,0 +1,13 @@
+module_slug,question_text,option_a,option_b,option_c,option_d,correct_option,difficulty_score,probe_group,tags
+logical-reasoning,"What comes next: 2, 5, 10, 17, ?",24,26,28,30,B,900,pgl-seq-quadratic,fixture;probe;sequences
+logical-reasoning,"Complete the pattern: 3, 6, 11, 18, ?",25,29,27,31,C,900,pgl-seq-quadratic,fixture;probe;sequences
+logical-reasoning,"All engineers are graduates. Some graduates are managers. Which statement must be true?",All engineers are managers,Some engineers are managers,Some graduates are engineers,No engineer is a manager,C,1000,pgl-syllogism,fixture;probe;syllogisms
+logical-reasoning,"All architects hold a licence. Some licence holders work abroad. Which statement must be true?",Some licence holders are architects,All architects work abroad,Some architects work abroad,No architect works abroad,A,1000,pgl-syllogism,fixture;probe;syllogisms
+logical-reasoning,"Which one does not belong: Copper, Iron, Zinc, Granite?",Copper,Iron,Zinc,Granite,D,650,pgl-odd-metal,fixture;probe;odd-one-out
+logical-reasoning,"Pick the item unlike the others: Marble, Silver, Nickel, Aluminium.",Marble,Silver,Nickel,Aluminium,A,650,pgl-odd-metal,fixture;probe;odd-one-out
+logical-reasoning,"Pointing to a photograph, Ravi says: 'She is the daughter of my grandfather's only son.' How is she related to Ravi?",His sister,His cousin,His aunt,His niece,A,850,pgl-kinship,fixture;probe;blood-relations
+logical-reasoning,"Meera introduces a man as 'the only brother of my mother'. How is he related to Meera?",Her father,Her uncle,Her cousin,Her brother-in-law,B,850,pgl-kinship,fixture;probe;blood-relations
+logical-reasoning,"If FROG is written as GSPH, how is BIRD written in the same code?",CJSE,AHQC,CJSF,DKTF,A,950,pgl-letter-shift,fixture;probe;coding-decoding
+logical-reasoning,"In a certain code LAMP becomes KZLO. What does DESK become?",EFTL,CDRJ,CDRK,BCQI,B,950,pgl-letter-shift,fixture;probe;coding-decoding
+logical-reasoning,"Four friends stand in a line. Ravi is to the left of Sunil but to the right of Priya. Anil is to the right of Sunil. Who stands at the far left?",Ravi,Priya,Sunil,Anil,B,1050,pgl-ordering,fixture;probe;arrangements
+logical-reasoning,"In a queue of four, Nita is ahead of Kiran but behind Deepa. Farah is behind Kiran. Who is last in the queue?",Farah,Deepa,Kiran,Nita,A,1050,pgl-ordering,fixture;probe;arrangements

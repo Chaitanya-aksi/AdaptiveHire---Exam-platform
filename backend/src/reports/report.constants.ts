@@ -38,3 +38,51 @@ export const BORDERLINE_AT = 40;
  * to say more. Proctoring violations never affect it.
  */
 export const MIN_COVERAGE_RATIO = 0.6;
+
+/**
+ * Behavioural consistency bands, and the line above which a repeat probe counts
+ * as having held. Used only to word the report.
+ *
+ * Neither consistency nor a probe result moves the hiring recommendation. They
+ * are not lie detectors: answering differently in different situations is
+ * ordinary human behaviour, and the report's job is to point the recruiter at
+ * the per-answer evidence rather than to score anyone down for it.
+ *
+ * Trait *scores* do reach the recommendation, but only through the composites
+ * below and only at `BEHAVIORAL_WEIGHT` — a statement about fit for a kind of
+ * work, never a rating of the personality itself, and no single trait can move
+ * the outcome. How reliably a trait was expressed stays out of it entirely.
+ */
+export const CONSISTENT_AT = 0.7;
+export const VARIED_AT = 0.4;
+
+// ── Behavioural composites ─────────────────────────────────────────────────
+
+/**
+ * Bands for a behavioural composite, used for wording only.
+ *
+ * Deliberately narrower than STRONG_SCORE/WEAK_SCORE: a composite is a weighted
+ * mean of several traits, so it sits closer to the middle than any single trait
+ * does, and reusing the trait thresholds would report every candidate as
+ * unremarkable. "Developing" rather than "weak" because these describe fit for
+ * a kind of work, not a deficiency.
+ */
+export const BEHAVIORAL_STRONG_AT = 65;
+export const BEHAVIORAL_MODERATE_AT = 45;
+
+/**
+ * How the two halves of a candidate's result combine into the overall score
+ * that drives the recommendation.
+ *
+ * Ability leads because it is the harder measure: an objective answer is right
+ * or wrong, while a behavioural one is a self-report of what someone would do.
+ * The behavioural share is real but minority — enough that a strong profile
+ * lifts a middling score and a poor one tempers a good score, not enough for
+ * either to decide the outcome on its own.
+ *
+ * When only one half exists it takes the full weight, so a personality-only
+ * assessment produces a real score and a real recommendation instead of sitting
+ * at "borderline" forever, and an objective-only assessment is unaffected.
+ */
+export const ABILITY_WEIGHT = 0.7;
+export const BEHAVIORAL_WEIGHT = 0.3;

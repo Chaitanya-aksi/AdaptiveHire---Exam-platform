@@ -1,4 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { CurrentOrg } from '../common/decorators/current-org.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums';
 import { ReportsService } from './reports.service';
@@ -18,20 +19,27 @@ export class ReportsController {
   @Get('assessments/:assessmentId')
   listForAssessment(
     @Param('assessmentId', ParseUUIDPipe) assessmentId: string,
+    @CurrentOrg() organisationId: string,
   ) {
-    return this.reports.listForAssessment(assessmentId);
+    return this.reports.listForAssessment(assessmentId, organisationId);
   }
 
   /** Layer one: the stored summary, scores and recommendation. */
   @Get('sessions/:sessionId')
-  summary(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
-    return this.reports.summary(sessionId);
+  summary(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.reports.summary(sessionId, organisationId);
   }
 
   /** Layer two: every answer and every proctoring event, queried live. */
   @Get('sessions/:sessionId/detail')
-  detail(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
-    return this.reports.detail(sessionId);
+  detail(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.reports.detail(sessionId, organisationId);
   }
 
   /**
@@ -39,7 +47,10 @@ export class ReportsController {
    * escape hatch if a queued job failed in a way the read path didn't catch.
    */
   @Post('sessions/:sessionId/regenerate')
-  regenerate(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
-    return this.reports.generate(sessionId);
+  regenerate(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.reports.regenerate(sessionId, organisationId);
   }
 }

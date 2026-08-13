@@ -20,6 +20,27 @@ export enum QuestionStatus {
   ARCHIVED = 'archived',
 }
 
+/**
+ * How a behavioural question is put to the candidate.
+ *
+ * All four live inside the single Personality module — they are presentation
+ * and scoring shapes, not separate subjects. None of them has a correct
+ * answer; each option carries trait weights instead.
+ *
+ * A question with a null pattern is a legacy agree/disagree Likert item, the
+ * format this engine exists to move away from. Those stay servable but rare.
+ */
+export enum BehavioralPattern {
+  /** Workplace scenario, one choice. */
+  SITUATIONAL = 'situational',
+  /** Two equally positive alternatives — measures preference, not quality. */
+  FORCED_CHOICE = 'forced_choice',
+  /** Two competing priorities, e.g. speed against thoroughness. */
+  TRADE_OFF = 'trade_off',
+  /** Every option ordered, most like you first. Position changes the weight. */
+  RANKING = 'ranking',
+}
+
 export enum InvitationStatus {
   PENDING = 'pending',
   IN_PROGRESS = 'in_progress',

@@ -96,7 +96,20 @@ export function AssessmentReports() {
                       {attempt.overallScore === null ? (
                         <span className="muted">—</span>
                       ) : (
-                        <strong>{attempt.overallScore}</strong>
+                        <>
+                          <strong>{attempt.overallScore}</strong>
+                          {/* The split, so a blended figure is never a bare
+                              number the recruiter cannot account for. */}
+                          <div className="muted small">
+                            {attempt.abilityScore !== null &&
+                              `ability ${attempt.abilityScore}`}
+                            {attempt.abilityScore !== null &&
+                              attempt.behavioralScore !== null &&
+                              ' · '}
+                            {attempt.behavioralScore !== null &&
+                              `behavioural ${attempt.behavioralScore}`}
+                          </div>
+                        </>
                       )}
                     </td>
                     <td>

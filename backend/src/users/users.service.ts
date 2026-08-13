@@ -17,6 +17,14 @@ export interface UserProfile {
   email: string;
   fullName: string;
   role: UserRole;
+  /**
+   * The company this account works for; null for every candidate.
+   *
+   * Included because the client's `UserProfile` derives from its `AuthUser`,
+   * which carries it — leaving it out of the payload made the type claim a field
+   * that was always `undefined` at runtime.
+   */
+  organisationId: string | null;
   isActive: boolean;
   createdAt: Date;
 }
@@ -94,8 +102,31 @@ export class UsersService {
     );
   }
 
-  /** Directory listing for the recruiter's People page. */
-  async list(query: UserListQuery): Promise<{
+  /**
+   * Directory listing for the recruiter's People page, scoped to one
+   * organisation.
+   *
+   * Two different rules, because "belongs to this company" means two different
+   * things:
+   *
+   *   - A **recruiter** is a member of the organisation, so `organisationId`
+   *     answers it directly.
+   *   - A **candidate** belongs to no organisation at all — the same person sits
+   *     assessments for whoever invites them. So they appear here only if this
+   *     organisation has actually invited them to one of its assessments.
+   *
+   * Without this the page listed every account on the platform: a brand-new
+   * organisation that had invited nobody could read every other customer's
+   * candidates by name and email, and their recruiters' accounts too.
+   *
+   * The candidate match allows either `candidateId` or the email, because
+   * invitations are keyed on email and `candidateId` is only backfilled once the
+   * person registers — matching on one alone would drop real invitees.
+   */
+  async list(
+    query: UserListQuery,
+    organisationId: string,
+  ): Promise<{
     items: UserProfile[];
     total: number;
     page: number;
@@ -104,7 +135,20 @@ export class UsersService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 25;
 
-    const qb = this.users.createQueryBuilder('u');
+    const qb = this.users.createQueryBuilder('u').where(
+      `(
+         (u.role = 'recruiter_admin' AND u."organisationId" = :organisationId)
+         OR (u.role = 'candidate' AND EXISTS (
+               SELECT 1
+                 FROM invitations i
+                 JOIN assessments a ON a.id = i."assessmentId"
+                WHERE a."organisationId" = :organisationId
+                  AND (i."candidateId" = u.id OR lower(i.email) = lower(u.email))
+             ))
+       )`,
+      { organisationId },
+    );
+
     if (query.role) qb.andWhere('u.role = :role', { role: query.role });
     if (query.search?.trim()) {
       qb.andWhere('(u.email ILIKE :s OR u.fullName ILIKE :s)', {
@@ -133,6 +177,8 @@ export class UsersService {
     email: string;
     fullName: string;
     role: UserRole;
+    /** The creating recruiter's organisation — see below. */
+    organisationId: string;
   }): Promise<CreatedUser> {
     const email = data.email.trim().toLowerCase();
     if (await this.findByEmail(email)) {
@@ -148,6 +194,12 @@ export class UsersService {
       fullName: data.fullName.trim(),
       role: data.role,
       passwordHash: await argon2.hash(temporaryPassword),
+      // A colleague joins the organisation of whoever created them; a candidate
+      // belongs to none. Without this a provisioned recruiter had no
+      // organisation, so `@CurrentOrg()` refused them on every endpoint and
+      // they could sign in and do precisely nothing.
+      organisationId:
+        data.role === UserRole.RECRUITER_ADMIN ? data.organisationId : null,
     });
 
     return { user: this.toProfile(user), temporaryPassword };
@@ -159,6 +211,7 @@ export class UsersService {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
+      organisationId: user.organisationId,
       isActive: user.isActive,
       createdAt: user.createdAt,
     };
@@ -203,6 +256,12 @@ export class UsersService {
     passwordHash: string;
     fullName: string;
     role: UserRole;
+    /**
+     * The company this account works for. Null for a candidate — permanently, by
+     * design: a candidate is a person rather than a customer's record, and the
+     * same account sits assessments for whoever invites them.
+     */
+    organisationId?: string | null;
   }): Promise<User> {
     const user = this.users.create({
       ...data,

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   ValidateNested,
 } from 'class-validator';
@@ -25,4 +26,15 @@ export class CreateAssessmentDto {
   @ValidateNested({ each: true })
   @Type(() => AssessmentModuleConfigDto)
   modules!: AssessmentModuleConfigDto[];
+
+  /**
+   * Which questions the engine may draw from. Omit or send an empty list for no
+   * restriction, which is the default — the engine then uses everything visible
+   * to the organisation. A curated pool narrows the choices without replacing
+   * them: the test still adapts question by question within it.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  questionIds?: string[];
 }

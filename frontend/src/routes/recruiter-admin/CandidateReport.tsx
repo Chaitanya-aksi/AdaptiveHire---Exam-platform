@@ -3,7 +3,13 @@ import { Link, useParams } from 'react-router-dom';
 import { reportsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
 import type {
+  AnswerDetail,
+  BehavioralPattern,
+  ProbeAnswerLink,
+  ProbeSummary,
   ProctoringEventType,
+  ProfileBand,
+  ProfileScore,
   ReportDetail,
   ReportModuleSummary,
   ReportSummary,
@@ -12,6 +18,32 @@ import {
   RECOMMENDATION_BADGE,
   RECOMMENDATION_LABEL,
 } from './AssessmentReports';
+
+const PATTERN_LABEL: Record<BehavioralPattern, string> = {
+  situational: 'situational',
+  forced_choice: 'forced choice',
+  trade_off: 'trade-off',
+  ranking: 'ranking',
+};
+
+/**
+ * Agreement at or above which a repeat probe counts as having held. Mirrors the
+ * backend's `CONSISTENT_AT`, which words the same call in the narrative.
+ */
+const PROBE_HELD_AT = 0.7;
+
+const BAND_LABEL: Record<ProfileBand, string> = {
+  strong: 'Strong',
+  moderate: 'Moderate',
+  developing: 'Developing',
+};
+
+/** Reuses the recommendation badge palette so bands read consistently. */
+const BAND_BADGE: Record<ProfileBand, string> = {
+  strong: 'active',
+  moderate: '',
+  developing: 'archived',
+};
 
 const EVENT_LABEL: Record<ProctoringEventType, string> = {
   tab_switch: 'Switched away from the test',
@@ -37,6 +69,94 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
+/**
+ * The repeat probes for one section: how many pairs were checked, and what each
+ * one showed.
+ *
+ * The mechanism is spelled out rather than reduced to a percentage. "The same
+ * question came back reworded eight questions later" is something a recruiter
+ * can reason about; "agreement 50%" on its own is not, and would invite them to
+ * read it as a truthfulness score, which it is not.
+ */
+function ProbeBlock({ probes }: { probes: ProbeSummary }) {
+  const checked = probes.pairs.filter((pair) => pair.agreement !== null);
+  const held = checked.filter((pair) => (pair.agreement ?? 0) >= PROBE_HELD_AT);
+
+  return (
+    <div className="report-probes">
+      <div className="spread">
+        <span className="small">
+          <strong>Repeat check</strong>
+          <span className="muted">
+            {' '}
+            · the same question again later, reworded, with reordered options
+          </span>
+        </span>
+        {checked.length > 0 && (
+          <span className="muted small">
+            {held.length} of {checked.length} held
+          </span>
+        )}
+      </div>
+
+      {checked.length === 0 ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          A repeat was set up but the section ended before it came round, so
+          there is nothing to compare.
+        </p>
+      ) : (
+        <ul className="report-probe-list">
+          {checked.map((pair) => {
+            const agreement = pair.agreement ?? 0;
+            const consistent = agreement >= PROBE_HELD_AT;
+
+            return (
+              <li key={pair.firstSequence}>
+                <span className="muted small mono">
+                  Q{pair.firstSequence} → Q{pair.secondSequence}
+                </span>{' '}
+                <span
+                  className={`badge ${consistent ? 'active' : 'archived'}`}
+                >
+                  {consistent ? 'Same answer' : 'Answered differently'}
+                </span>
+                {pair.flipped === true && (
+                  <span className="muted small">
+                    {' '}
+                    · right one time, wrong the other
+                  </span>
+                )}
+                {pair.divergentTraits.length > 0 && (
+                  <span className="muted small">
+                    {' '}
+                    ·{' '}
+                    {pair.divergentTraits
+                      .slice(0, 3)
+                      .map((t) => `${t.label} ${signed(t.first)} then ${signed(t.second)}`)
+                      .join(', ')}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* Stated every time, because this is the figure most likely to be
+          mistaken for a lie-detector reading. */}
+      <p className="muted small" style={{ margin: 0 }}>
+        Answering differently is not proof of anything on its own — both answers
+        are in the detail view below.
+      </p>
+    </div>
+  );
+}
+
+/** `+3` / `-3`, so the direction of a trait weight is unmistakable. */
+function signed(weight: number): string {
+  return weight > 0 ? `+${weight}` : String(weight);
+}
+
 function ModuleCard({ module }: { module: ReportModuleSummary }) {
   return (
     <div className="report-module">
@@ -59,6 +179,33 @@ function ModuleCard({ module }: { module: ReportModuleSummary }) {
 
       {module.score !== null && <ScoreBar score={module.score} />}
 
+      {/* Scored before the trait vocabulary changed. The numbers are real, but
+          they measure different things than today's traits, so they are shown
+          under their original names with the mismatch stated. */}
+      {module.legacyTraitModel && (
+        <p className="muted small" style={{ margin: 0 }}>
+          Measured against a previous trait model — these names and scores
+          aren&rsquo;t comparable with more recent attempts.
+        </p>
+      )}
+
+      {module.consistency !== null && (
+        <div className="spread report-consistency">
+          <span className="muted small">
+            Consistency across situations
+            <span className="muted small">
+              {' '}
+              · how steadily each trait showed up, not a truthfulness check
+            </span>
+          </span>
+          <span className="muted small">
+            {Math.round(module.consistency * 100)}%
+          </span>
+        </div>
+      )}
+
+      {module.probes && <ProbeBlock probes={module.probes} />}
+
       {module.traits.length > 0 && (
         <ul className="report-traits">
           {module.traits.map((trait) => (
@@ -70,6 +217,9 @@ function ModuleCard({ module }: { module: ReportModuleSummary }) {
                   {/* Low confidence is shown, never silently hidden — a thin
                       trait must not read like a firm finding. */}
                   {trait.confidence < 0.5 && ' · low confidence'}
+                  {trait.consistency !== null &&
+                    trait.consistency < 0.5 &&
+                    ' · varied by situation'}
                 </span>
               </div>
               <ScoreBar score={trait.score} />
@@ -77,6 +227,98 @@ function ModuleCard({ module }: { module: ReportModuleSummary }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * One behavioural composite: the capability, its score, and the traits it was
+ * built from.
+ *
+ * The contributions are always on show rather than hidden behind a toggle —
+ * a composite is a claim about someone's fit for a kind of work, and a
+ * recruiter should be able to see it is just five trait scores and five
+ * authored weights, then disagree with the blend if they read it differently.
+ */
+function ProfileCard({ profile }: { profile: ProfileScore }) {
+  return (
+    <div className="report-module">
+      <div className="spread">
+        <div>
+          <strong>{profile.label}</strong>
+          <div className="muted small">{profile.description}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <strong className="report-score">{profile.score}</strong>
+          <div>
+            <span className={`badge ${BAND_BADGE[profile.band]}`}>
+              {BAND_LABEL[profile.band]}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <ScoreBar score={profile.score} />
+
+      <div className="muted small">
+        {/* Low confidence is stated, never hidden: a composite resting on two
+            answers must not read like a firm finding. */}
+        {profile.confidence < 0.5
+          ? 'Low confidence — too few answers behind the traits in this blend. '
+          : ''}
+        Built from{' '}
+        {profile.contributions
+          .map((c) => `${c.label} ${c.score} (${Math.round(c.weight * 100)}%)`)
+          .join(' · ')}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Marks a row as one half of a repeat probe and points at the other half.
+ *
+ * Both halves carry the tag so a recruiter scanning the list can find the pair
+ * from either end — the first question gives no hint that it will be revisited.
+ */
+function ProbeTag({ probe }: { probe: ProbeAnswerLink }) {
+  if (probe.partnerSequence === null) {
+    return <span className="badge">repeat never asked</span>;
+  }
+
+  const consistent = (probe.agreement ?? 0) >= PROBE_HELD_AT;
+  const direction = probe.role === 'first' ? 'asked again as' : 'repeat of';
+
+  return (
+    <span
+      className={`badge ${probe.agreement === null ? '' : consistent ? 'active' : 'archived'}`}
+      title={
+        probe.gap === null
+          ? undefined
+          : `${probe.gap} questions apart, reworded with reordered options`
+      }
+    >
+      {direction} Q{probe.partnerSequence}
+      {probe.agreement !== null && (consistent ? ' · same' : ' · differed')}
+    </span>
+  );
+}
+
+/** The weights one answer contributed, strongest first. */
+function Evidence({ answer }: { answer: AnswerDetail }) {
+  if (answer.traitContributions.length === 0) return null;
+
+  return (
+    <div className="report-evidence">
+      {answer.traitContributions.map((c) => (
+        <span
+          key={c.key}
+          className={`report-weight${c.weight < 0 ? ' negative' : ''}`}
+        >
+          {c.label} {c.weight > 0 ? '+' : ''}
+          {c.weight}
+        </span>
+      ))}
     </div>
   );
 }
@@ -156,6 +398,23 @@ export function CandidateReport() {
             </span>
           </div>
 
+          {/* Where the headline came from. Shown only when both halves exist —
+              with one section type the blend is just that section's score, and
+              spelling out a 70/30 split would imply a weighting that did not
+              happen. */}
+          {report.abilityScore !== null && report.behavioralScore !== null && (
+            <div className="report-blend muted small">
+              Ability {report.abilityScore} (70%) · Behavioural profile{' '}
+              {report.behavioralScore} (30%)
+            </div>
+          )}
+          {report.abilityScore === null && report.behavioralScore !== null && (
+            <div className="report-blend muted small">
+              Behavioural profile only — this assessment has no scored section,
+              so the profile carries the whole score.
+            </div>
+          )}
+
           <p className="report-summary">{report.summary}</p>
 
           <p className="muted small" style={{ margin: 0 }}>
@@ -191,6 +450,23 @@ export function CandidateReport() {
             )}
           </div>
         </div>
+
+        {summary.profiles.length > 0 && (
+          <div className="card card-pad stack">
+            <div>
+              <h2>Behavioural profile</h2>
+              <p className="muted small" style={{ margin: 0 }}>
+                What the trait scores add up to for five kinds of work. These
+                describe fit, not quality — a candidate who leans to
+                Collaboration over Leadership Readiness is not a worse
+                candidate, just a different one.
+              </p>
+            </div>
+            {summary.profiles.map((profile) => (
+              <ProfileCard key={profile.key} profile={profile} />
+            ))}
+          </div>
+        )}
 
         <div className="card card-pad stack">
           <h2>Section breakdown</h2>
@@ -233,13 +509,45 @@ export function CandidateReport() {
                         <tr key={answer.sequenceNumber}>
                           <td className="muted">{answer.sequenceNumber}</td>
                           <td className="muted small">{answer.moduleName}</td>
-                          <td>{answer.questionText}</td>
+                          <td>
+                            {answer.questionText}
+                            {(answer.pattern || answer.probe) && (
+                              <div style={{ marginTop: 4 }}>
+                                {answer.pattern && (
+                                  <span className="badge">
+                                    {PATTERN_LABEL[answer.pattern]}
+                                  </span>
+                                )}
+                                {answer.probe && (
+                                  <ProbeTag probe={answer.probe} />
+                                )}
+                              </div>
+                            )}
+                            {/* §8: show the working, so a recruiter can weigh
+                                the answer themselves rather than trust a score. */}
+                            <Evidence answer={answer} />
+                          </td>
                           <td className="small">
-                            {answer.selectedOption ? (
+                            {answer.ranking ? (
+                              <ol className="report-ranking">
+                                {answer.ranking.map((choice) => (
+                                  <li key={choice.key}>
+                                    {choice.behavior ?? choice.text}
+                                  </li>
+                                ))}
+                              </ol>
+                            ) : answer.selectedOption ? (
                               <>
                                 <strong>{answer.selectedOption}</strong>
                                 {answer.selectedOptionText &&
                                   ` — ${answer.selectedOptionText}`}
+                                {answer.behavior && (
+                                  <div style={{ marginTop: 4 }}>
+                                    <span className="badge">
+                                      {answer.behavior}
+                                    </span>
+                                  </div>
+                                )}
                               </>
                             ) : (
                               <span className="muted">

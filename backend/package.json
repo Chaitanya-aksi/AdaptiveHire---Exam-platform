@@ -30,7 +30,7 @@
     "seed:modules": "ts-node src/database/seeds/seed-modules.ts",
     "seed:questions": "ts-node src/database/seeds/seed-questions.ts",
     "seed:assessments": "ts-node src/database/seeds/seed-assessments.ts",
-    "seed": "npm run seed:users && npm run seed:modules && npm run seed:questions && npm run seed:assessments"
+    "seed": "npm run seed:users && npm run seed:modules && npm run seed:assessments && npm run seed:questions"
   },
   "overrides": {
     "uuid": "^11.1.1"

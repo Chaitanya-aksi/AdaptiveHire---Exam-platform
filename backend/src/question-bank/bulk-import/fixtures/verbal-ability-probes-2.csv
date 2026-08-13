@@ -1,0 +1,7 @@
+module_slug,question_text,option_a,option_b,option_c,option_d,correct_option,difficulty_score,probe_group,tags
+verbal-ability,"'To let the cat out of the bag' means to:",reveal a secret,cause trouble deliberately,escape a difficulty,waste time on nothing,A,900,pgv-idiom-disclose,fixture;probe;idioms
+verbal-ability,"'To spill the beans' means to:",make an untidy mess,disclose something that was private,change your mind abruptly,argue about trivialities,B,900,pgv-idiom-disclose,fixture;probe;idioms
+verbal-ability,"Choose the correct form: The award was shared between Rahul and ___.",I,me,myself,mine,B,1000,pgv-pronoun-case,fixture;probe;grammar
+verbal-ability,"Complete correctly: There is no disagreement between you and ___.",me,I,myself,mine,A,1000,pgv-pronoun-case,fixture;probe;grammar
+verbal-ability,"'The proposal is bold, imaginative, and almost entirely unworkable.' The writer's tone is best described as:",wholly enthusiastic,dismissive after qualified praise,neutral and purely factual,openly hostile throughout,B,1150,pgv-tone-qualified,fixture;probe;comprehension
+verbal-ability,"'Her argument is careful, well sourced, and beside the point.' The writer's tone is best described as:",respectful but ultimately critical,unreservedly admiring,wholly indifferent,sarcastic and cruel,A,1150,pgv-tone-qualified,fixture;probe;comprehension

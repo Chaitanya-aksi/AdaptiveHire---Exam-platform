@@ -1,0 +1,7 @@
+module_slug,question_text,option_a,option_b,option_c,option_d,correct_option,difficulty_score,probe_group,tags
+logical-reasoning,"What comes next: 3, 6, 8, 16, 18, ?",20,36,34,32,B,1050,pgl-alternating,fixture;probe;sequences
+logical-reasoning,"Complete the series: 5, 10, 12, 24, 26, ?",52,28,50,48,A,1050,pgl-alternating,fixture;probe;sequences
+logical-reasoning,"You are facing north. You turn 90 degrees clockwise, then a further 180 degrees clockwise. Which direction are you facing?",East,South,West,North,C,950,pgl-direction,fixture;probe;direction-sense
+logical-reasoning,"Facing south, you turn 90 degrees anticlockwise and then a further 180 degrees. Which direction are you facing?",West,North,East,South,A,950,pgl-direction,fixture;probe;direction-sense
+logical-reasoning,"In a group of 40 people, 25 play cricket and 20 play football. Everyone plays at least one. How many play both?",5,10,15,45,A,1000,pgl-set-overlap,fixture;probe;sets
+logical-reasoning,"Of 60 students, 35 study French and 40 study German. Every student studies at least one. How many study both?",10,20,15,25,C,1000,pgl-set-overlap,fixture;probe;sets

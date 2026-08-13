@@ -47,9 +47,23 @@ export class Response {
   @JoinColumn({ name: 'questionId' })
   question!: Question;
 
-  /** Option key the candidate picked; null if the module timed out unanswered. */
+  /**
+   * Option key the candidate picked. Null when the module timed out with the
+   * question unanswered, and null for ranking questions — those record their
+   * whole ordering in `selectedOptions` instead.
+   */
   @Column({ type: 'varchar', length: 16, nullable: true })
   selectedOption!: string | null;
+
+  /**
+   * Ordered option keys for a ranking question, strongest preference first.
+   * Order is the answer here, so it is stored verbatim and never sorted.
+   *
+   * Exactly one of `selectedOption` / `selectedOptions` is set on an answered
+   * question; both are null when the clock ran out on it.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  selectedOptions!: string[] | null;
 
   /** Null for `trait` modules — there is no right answer there. */
   @Column({ type: 'boolean', nullable: true })

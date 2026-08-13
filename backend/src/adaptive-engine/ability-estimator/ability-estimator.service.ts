@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   ABILITY_PRIOR_SPREAD,
+  CONSISTENCY_MIN_SAMPLES,
+  CONSISTENCY_ZERO_AT_STDEV,
   ELO_D,
   K_EARLY,
   K_LATE,
@@ -26,7 +28,16 @@ export interface AbilityUpdate {
 /** A finished trait, on the 0-100 reporting scale. */
 export interface TraitScore {
   score: number;
+  /** How much evidence there is, 0..1 — answers against the target count. */
   confidence: number;
+  /**
+   * How consistently the candidate expressed this trait across contexts,
+   * 0..1, or null when fewer than two answers touched it.
+   *
+   * Optional on read: results stored before consistency existed have no value
+   * for it, and a missing signal must not read as a measured one.
+   */
+  consistency?: number | null;
 }
 
 /**
@@ -140,10 +151,57 @@ export class AbilityEstimatorService {
     weights: Record<string, number>,
   ): void {
     for (const [trait, weight] of Object.entries(weights)) {
-      const tally = (tallies[trait] ??= { sum: 0, count: 0 });
+      const tally = (tallies[trait] ??= { sum: 0, count: 0, sumSquares: 0 });
       tally.sum += weight;
       tally.count += 1;
+      // `?? 0` because a session state serialised before consistency existed
+      // has no sumSquares; treating it as zero degrades the signal rather
+      // than producing NaN.
+      tally.sumSquares = (tally.sumSquares ?? 0) + weight * weight;
     }
+  }
+
+  /**
+   * How consistently a candidate answered on one trait, 0..1, or null when
+   * there is not enough evidence to say.
+   *
+   * This is the behavioural engine's answer to "did they tell us the same
+   * thing in different contexts?". Someone who chooses the collaborative
+   * option when a teammate is struggling but the solitary one when they are
+   * struggling themselves has contributed two very different weights to
+   * Teamwork, and this is what notices.
+   *
+   * It is emphatically NOT a lie detector. Low consistency means the trait was
+   * expressed differently across situations — which is ordinary human
+   * behaviour, and is reported as a caveat on the score, never as dishonesty.
+   */
+  traitConsistency(tally: TraitTally | undefined): number | null {
+    if (!tally || tally.count < CONSISTENCY_MIN_SAMPLES) return null;
+
+    const mean = tally.sum / tally.count;
+    // Clamped at zero: floating-point error can make this fractionally
+    // negative when every contribution was identical.
+    const variance = Math.max(
+      0,
+      (tally.sumSquares ?? 0) / tally.count - mean * mean,
+    );
+
+    return round2(clamp01(1 - Math.sqrt(variance) / CONSISTENCY_ZERO_AT_STDEV));
+  }
+
+  /**
+   * Consistency across the whole profile — the mean of the traits that have
+   * enough evidence to be measured, or null when none do.
+   */
+  overallConsistency(state: ModuleRunState): number | null {
+    const measured = Object.values(state.traitTallies)
+      .map((tally) => this.traitConsistency(tally))
+      .filter((value): value is number => value !== null);
+
+    if (measured.length === 0) return null;
+
+    const total = measured.reduce((sum, value) => sum + value, 0);
+    return round2(total / measured.length);
   }
 
   /** How well covered one trait is: answers so far against the target. */
@@ -170,8 +228,11 @@ export class AbilityEstimatorService {
       const tally = state.traitTallies[key];
       const mean = tally && tally.count > 0 ? tally.sum / tally.count : 0;
       scores[key] = {
-        score: round1(((mean - TRAIT_WEIGHT_MIN) / range) * 100),
+        // Clamped: a weight authored outside the declared range would
+        // otherwise report as e.g. 125/100, which reads as a real score.
+        score: round1(clamp01((mean - TRAIT_WEIGHT_MIN) / range) * 100),
         confidence: round2(this.traitConfidence(tally)),
+        consistency: this.traitConsistency(tally),
       };
     }
 

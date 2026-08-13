@@ -5,14 +5,23 @@ import {
   SessionStatus,
 } from '../common/enums';
 import {
+  buildBehavioralProfiles,
+  type BehavioralAssessment,
+  type ProfileScore,
+} from './behavioral-profiles';
+import {
   ABILITY_CEILING,
   ABILITY_FLOOR,
+  ABILITY_WEIGHT,
+  BEHAVIORAL_WEIGHT,
   BORDERLINE_AT,
+  CONSISTENT_AT,
   MIN_COVERAGE_RATIO,
   MIN_TRAIT_CONFIDENCE,
   RECOMMENDED_AT,
   STRONGLY_RECOMMENDED_AT,
   STRONG_SCORE,
+  VARIED_AT,
   WEAK_SCORE,
 } from './report.constants';
 
@@ -24,6 +33,51 @@ export interface ReportedTrait {
   /** 0-100 on the reporting scale. */
   score: number;
   confidence: number;
+  /**
+   * How consistently the candidate expressed this trait across different
+   * situations, 0..1. Null when fewer than two answers touched it, and on
+   * results stored before consistency was measured.
+   */
+  consistency: number | null;
+}
+
+/** One twinned pair as the recruiter sees it. */
+export interface ReportedProbePair {
+  /** Position of the first question in the session's answer list. */
+  firstSequence: number;
+  /** Null when the twin never came round before the module ended. */
+  secondSequence: number | null;
+  /**
+   * 0..1. Null means the pair could not be compared — the twin was never
+   * served, or timed out unanswered. Never rendered as zero: not checking is
+   * not the same as disagreeing.
+   */
+  agreement: number | null;
+  /** Objective pairs: the right/wrong outcome changed between the twins. */
+  flipped: boolean | null;
+  /** Trait pairs: the traits the two answers disagreed on, worst first. */
+  divergentTraits: {
+    key: string;
+    label: string;
+    first: number;
+    second: number;
+  }[];
+}
+
+/**
+ * A module's repeat-probe outcome.
+ *
+ * Distinct from `ModuleSummary.consistency`, and the two answer different
+ * questions. That one asks "how steadily did each trait show up across all the
+ * situations we put?"; this one asks "when we put the same situation twice in
+ * different words, did the answer hold?". A candidate can score well on one and
+ * badly on the other.
+ */
+export interface ProbeSummary {
+  agreement: number | null;
+  resolved: number;
+  unresolved: number;
+  pairs: ReportedProbePair[];
 }
 
 export interface ModuleSummary {
@@ -40,6 +94,17 @@ export interface ModuleSummary {
   /** What the assessment asked for, so under-answering is visible. */
   minQuestions: number;
   traits: ReportedTrait[];
+  /** Mean consistency across the traits with enough evidence to measure. */
+  consistency: number | null;
+  /** Repeat-probe outcome, or null when this module opened no pair. */
+  probes: ProbeSummary | null;
+  /**
+   * True when this result's stored scores use a trait vocabulary the module no
+   * longer declares — an attempt sat before the vocabulary changed. Its numbers
+   * are real but not comparable with current ones, and the UI says so rather
+   * than rendering today's traits at a fabricated neutral 50.
+   */
+  legacyTraitModel: boolean;
 }
 
 export interface ViolationCount {
@@ -60,7 +125,18 @@ export interface BuiltReport {
   strengths: string[];
   weaknesses: string[];
   hiringRecommendation: HiringRecommendation;
+  /**
+   * The headline figure the recommendation is banded on: ability and the
+   * behavioural index blended, or whichever of the two the assessment produced.
+   * Null only when the candidate answered nothing scoreable at all.
+   */
   overallScore: number | null;
+  /** Mean of the objective modules' 0-100 scores. Null when none were sat. */
+  abilityScore: number | null;
+  /** The behavioural index, 0-100. Null when no composite had enough evidence. */
+  behavioralScore: number | null;
+  /** The role-relevant composites behind that index. */
+  profiles: ProfileScore[];
 }
 
 const VIOLATION_LABEL: Record<ProctoringEventType, [string, string]> = {
@@ -105,7 +181,7 @@ export function buildReport(input: ReportInput): BuiltReport {
   );
   const attempted = objective.filter((module) => module.questionsAnswered > 0);
 
-  const overallScore =
+  const abilityScore =
     attempted.length > 0
       ? round1(
           attempted.reduce((total, module) => total + (module.score ?? 0), 0) /
@@ -113,24 +189,67 @@ export function buildReport(input: ReportInput): BuiltReport {
         )
       : null;
 
-  const strengths = collectStrengths(input.modules);
-  const weaknesses = collectWeaknesses(input.modules);
+  // Composites are built across every trait the session measured, not per
+  // module: they are statements about the candidate, and a second trait module
+  // would be more evidence for the same composites rather than a second set.
+  const behavioral = buildBehavioralProfiles(
+    input.modules.flatMap((module) => module.traits),
+  );
+
+  const overallScore = blendScores(abilityScore, behavioral.index);
   const coverage = coverageRatio(input.modules);
 
   return {
-    summary: buildNarrative(input, overallScore, coverage),
-    strengths,
-    weaknesses,
+    summary: buildNarrative(input, abilityScore, behavioral, coverage),
+    strengths: collectStrengths(input.modules, behavioral),
+    weaknesses: collectWeaknesses(input.modules, behavioral),
     hiringRecommendation: recommend(overallScore, coverage),
     overallScore,
+    abilityScore,
+    behavioralScore: behavioral.index,
+    profiles: behavioral.profiles,
   };
 }
 
 /**
- * The rule, in full: bands on the overall objective score, capped at
- * `borderline` when the candidate answered too little for the score to mean
- * much. Nothing else feeds in — not traits (there is no "good" personality),
- * and not proctoring.
+ * Ability and behaviour into one number, `ABILITY_WEIGHT` to
+ * `BEHAVIORAL_WEIGHT`.
+ *
+ * Whichever half is missing drops out and the other takes the full weight —
+ * renormalising rather than treating an unmeasured half as a zero, which would
+ * halve the score of every candidate who only sat one kind of section.
+ */
+export function blendScores(
+  abilityScore: number | null,
+  behavioralScore: number | null,
+): number | null {
+  const parts: { score: number; weight: number }[] = [];
+  if (abilityScore !== null) {
+    parts.push({ score: abilityScore, weight: ABILITY_WEIGHT });
+  }
+  if (behavioralScore !== null) {
+    parts.push({ score: behavioralScore, weight: BEHAVIORAL_WEIGHT });
+  }
+  if (parts.length === 0) return null;
+
+  const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
+  return round1(
+    parts.reduce((sum, part) => sum + part.score * part.weight, 0) /
+      totalWeight,
+  );
+}
+
+/**
+ * The rule, in full: bands on the blended overall score, capped at `borderline`
+ * when the candidate answered too little for the score to mean much.
+ *
+ * That score is ability and the behavioural index at `ABILITY_WEIGHT` to
+ * `BEHAVIORAL_WEIGHT`. The behavioural half enters only through the composites
+ * — "would they lead this team", "will they follow through" — never as a rating
+ * of the personality itself, and no individual trait can move the outcome.
+ *
+ * Proctoring still feeds in nowhere. Signals are reported for the recruiter to
+ * weigh; nothing in this file can auto-disqualify anyone.
  */
 function recommend(
   overallScore: number | null,
@@ -173,7 +292,10 @@ function coverageRatio(modules: ModuleSummary[]): number {
   return Math.min(1, answered / expected);
 }
 
-function collectStrengths(modules: ModuleSummary[]): string[] {
+function collectStrengths(
+  modules: ModuleSummary[],
+  behavioral: BehavioralAssessment,
+): string[] {
   const strengths: string[] = [];
 
   for (const module of modules) {
@@ -187,10 +309,21 @@ function collectStrengths(modules: ModuleSummary[]): string[] {
     }
   }
 
+  // Composites come after the raw traits: a recruiter scanning the list reads
+  // the specific findings first and the capability they add up to second.
+  for (const profile of confidentProfiles(behavioral)) {
+    if (profile.band === 'strong') {
+      strengths.push(`${profile.label} — ${profile.score}/100`);
+    }
+  }
+
   return strengths;
 }
 
-function collectWeaknesses(modules: ModuleSummary[]): string[] {
+function collectWeaknesses(
+  modules: ModuleSummary[],
+  behavioral: BehavioralAssessment,
+): string[] {
   const weaknesses: string[] = [];
 
   for (const module of modules) {
@@ -212,7 +345,22 @@ function collectWeaknesses(modules: ModuleSummary[]): string[] {
     }
   }
 
+  for (const profile of confidentProfiles(behavioral)) {
+    if (profile.band === 'developing') {
+      weaknesses.push(
+        `${profile.label} — ${profile.score}/100, the weakest of the behavioural profiles`,
+      );
+    }
+  }
+
   return weaknesses;
+}
+
+/** Composites resting on enough evidence to be called either way. */
+function confidentProfiles(behavioral: BehavioralAssessment): ProfileScore[] {
+  return behavioral.profiles.filter(
+    (profile) => profile.confidence >= MIN_TRAIT_CONFIDENCE,
+  );
 }
 
 function confidentTraits(module: ModuleSummary): ReportedTrait[] {
@@ -223,7 +371,8 @@ function confidentTraits(module: ModuleSummary): ReportedTrait[] {
 
 function buildNarrative(
   input: ReportInput,
-  overallScore: number | null,
+  abilityScore: number | null,
+  behavioral: BehavioralAssessment,
   coverage: number,
 ): string {
   const name = input.candidateName || 'The candidate';
@@ -239,14 +388,22 @@ function buildNarrative(
     0,
   );
 
-  if (overallScore === null) {
+  if (abilityScore === null && behavioral.index === null) {
     parts.push(
-      `${name} did not complete any scored section of ${input.assessmentTitle}, so there is no ability score to report.`,
+      `${name} did not complete any scored section of ${input.assessmentTitle}, so there is no score to report.`,
+    );
+  } else if (abilityScore === null) {
+    // Behavioural-only: the profile is the result, so it leads.
+    parts.push(
+      `${name} sat ${input.assessmentTitle}, which measures behaviour rather ` +
+        `than ability, across ${countOf(answered, 'question')} answered. ` +
+        `Their behavioural profile scores ${behavioral.index}/100 overall.`,
     );
   } else {
     parts.push(
-      `${name} scored ${overallScore}/100 overall on ${input.assessmentTitle}, ` +
-        `across ${countOf(objective.length, 'scored section')} and ` +
+      `${name} scored ${abilityScore}/100 on the scored sections of ` +
+        `${input.assessmentTitle}, across ` +
+        `${countOf(objective.length, 'scored section')} and ` +
         `${countOf(answered, 'question')} answered.`,
     );
 
@@ -262,7 +419,10 @@ function buildNarrative(
     }
   }
 
+  parts.push(describeProfiles(behavioral, abilityScore !== null));
   parts.push(describeTraits(input.modules));
+  parts.push(describeConsistency(input.modules));
+  parts.push(describeProbes(input.modules));
 
   if (input.sessionStatus === SessionStatus.AUTO_SUBMITTED) {
     parts.push(
@@ -281,6 +441,46 @@ function buildNarrative(
   return parts.filter(Boolean).join(' ');
 }
 
+/**
+ * The composites in one sentence: the capability the traits add up to, best and
+ * weakest.
+ *
+ * Framed as fit for a kind of work, never as a rating of the person. "Their
+ * profile is strongest on Leadership Readiness" says which work the answers
+ * point toward; it does not say they are a better person than someone whose
+ * profile leans to Collaboration.
+ */
+function describeProfiles(
+  behavioral: BehavioralAssessment,
+  hasAbilityScore: boolean,
+): string {
+  const profiles = behavioral.profiles.filter(
+    (profile) => profile.confidence >= MIN_TRAIT_CONFIDENCE,
+  );
+  if (profiles.length === 0 || behavioral.index === null) return '';
+
+  const ranked = [...profiles].sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  const worst = ranked.at(-1);
+
+  // The behavioural share of the blend is only worth stating where there is an
+  // ability score for it to be a share of.
+  const weighting = hasAbilityScore
+    ? ` The behavioural profile scores ${behavioral.index}/100 and carries ` +
+      `${Math.round(BEHAVIORAL_WEIGHT * 100)}% of the overall score.`
+    : '';
+
+  if (!best || !worst || best.key === worst.key) {
+    return `Their behavioural profile is strongest on ${best.label} (${best.score}/100).${weighting}`;
+  }
+
+  return (
+    `Their behavioural profile points strongest to ${best.label} ` +
+    `(${best.score}/100) and weakest to ${worst.label} (${worst.score}/100).` +
+    weighting
+  );
+}
+
 function describeTraits(modules: ModuleSummary[]): string {
   const traits = modules
     .flatMap((module) => module.traits)
@@ -297,6 +497,88 @@ function describeTraits(modules: ModuleSummary[]): string {
   return (
     `Behaviourally, they scored highest on ${highest.label} (${highest.score}/100) ` +
     `and lowest on ${lowest.label} (${lowest.score}/100).`
+  );
+}
+
+/**
+ * How steady the behavioural answers were across situations.
+ *
+ * Phrased as a pointer to the evidence, never as a verdict. A candidate who
+ * helps a struggling teammate but works alone under their own deadline is not
+ * lying — they are behaving differently in two different situations, which is
+ * exactly the thing scenario-based questions exist to surface. The recruiter
+ * reads the answers and decides what it means.
+ */
+function describeConsistency(modules: ModuleSummary[]): string {
+  const measured = modules
+    .map((module) => module.consistency)
+    .filter((value): value is number => value !== null);
+  if (measured.length === 0) return '';
+
+  const mean = measured.reduce((sum, v) => sum + v, 0) / measured.length;
+
+  if (mean >= CONSISTENT_AT) {
+    return 'Their behavioural answers pointed the same way across different situations.';
+  }
+  if (mean <= VARIED_AT) {
+    return (
+      'Their behavioural answers varied noticeably from one situation to the ' +
+      'next. That is a prompt to read the question-by-question evidence rather ' +
+      'than a judgement — people do act differently in different contexts, and ' +
+      'it does not affect the recommendation.'
+    );
+  }
+  return 'Their behavioural answers were broadly consistent across situations, with some variation.';
+}
+
+/**
+ * The repeat probes, stated as what was done and what came back.
+ *
+ * The mechanism is named explicitly — the candidate met the same question twice,
+ * reworded, several questions apart — because a recruiter cannot weigh an
+ * agreement figure without knowing how it was obtained. What it means is left to
+ * them: a flip on a reasoning pair points at a lucky guess, a flip on a
+ * behavioural pair at a preference that is less settled than one answer made it
+ * look, and neither is proof of anything on its own.
+ */
+function describeProbes(modules: ModuleSummary[]): string {
+  const pairs = modules
+    .flatMap((module) => module.probes?.pairs ?? [])
+    .filter((pair) => pair.agreement !== null);
+  if (pairs.length === 0) return '';
+
+  const consistent = pairs.filter(
+    (pair) => (pair.agreement ?? 0) >= CONSISTENT_AT,
+  ).length;
+
+  const preamble =
+    `${countOf(pairs.length, 'question')} the candidate answered came back ` +
+    'later in the same section, reworded and with reordered options, several ' +
+    'questions apart. ';
+
+  if (consistent === pairs.length) {
+    return (
+      preamble +
+      (pairs.length === 1
+        ? 'The two answers matched.'
+        : 'Every pair of answers matched.')
+    );
+  }
+
+  if (consistent === 0) {
+    return (
+      preamble +
+      `The second answer differed ${
+        pairs.length === 1 ? 'from the first' : 'in every case'
+      }. Both answers of each pair are in the detail view — worth reading before ` +
+      'drawing a conclusion, since neither of them is necessarily the wrong one.'
+    );
+  }
+
+  return (
+    preamble +
+    `${consistent} of ${pairs.length} matched; the rest are flagged in the ` +
+    'detail view alongside both answers.'
   );
 }
 

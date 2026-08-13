@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ConfirmDialog } from '../../components/Modal';
+import { QuestionEditor } from '../../components/questions/QuestionEditor';
 import { useToast } from '../../components/Toast';
 import { modulesApi, questionsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
 import type {
+  BehavioralPattern,
   ModuleCatalogEntry,
   Paginated,
   Question,
@@ -12,6 +14,14 @@ import type {
 } from '../../lib/types';
 
 const PAGE_SIZE = 15;
+
+/** Short badge text; the full description lives in the editor's picker. */
+const PATTERN_BADGE: Record<BehavioralPattern, string> = {
+  situational: 'situational',
+  forced_choice: 'forced choice',
+  trade_off: 'trade-off',
+  ranking: 'ranking',
+};
 
 export function Questions() {
   const toast = useToast();
@@ -24,6 +34,11 @@ export function Questions() {
   // in flight — drives the confirmation modal.
   const [pendingDelete, setPendingDelete] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // null = closed. { question: null } = creating; { question } = editing.
+  const [editor, setEditor] = useState<{ question: Question | null } | null>(
+    null,
+  );
 
   /*
    * Subject and status live in the query string rather than in local state, so
@@ -153,6 +168,49 @@ export function Questions() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
+  const onSaved = (saved: Question, created: boolean, editedId?: string) => {
+    setEditor(null);
+
+    // Editing a platform question does not change it — it creates this
+    // organisation's own copy, which comes back with a different id. Splicing by
+    // the saved id alone would match nothing and the row would look unchanged
+    // until a refresh, so the row is matched on the id that was *edited*.
+    const forked = editedId !== undefined && editedId !== saved.id;
+    toast.success(
+      created
+        ? 'Question created.'
+        : forked
+          ? 'Saved as your own copy. Other organisations keep the original.'
+          : 'Question saved.',
+    );
+
+    // Refetch rather than splice the row in: a new question may not belong on
+    // the current page or match the active filters.
+    if (created) setPage(1);
+    else
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((q) =>
+                q.id === (editedId ?? saved.id) ? saved : q,
+              ),
+            }
+          : current,
+      );
+  };
+
+  if (editor) {
+    return (
+      <QuestionEditor
+        modules={modules}
+        question={editor.question}
+        onSaved={onSaved}
+        onCancel={() => setEditor(null)}
+      />
+    );
+  }
+
   return (
     <>
       <div className="page-head">
@@ -160,6 +218,13 @@ export function Questions() {
           <h1>Question bank</h1>
           <p>Every question the adaptive engine can draw from.</p>
         </div>
+        <button
+          className="primary"
+          disabled={modules.length === 0}
+          onClick={() => setEditor({ question: null })}
+        >
+          New question
+        </button>
       </div>
 
       {error && <div className="alert error">{error}</div>}
@@ -271,6 +336,9 @@ export function Questions() {
                             {q.personalityDetails.options.map((o) => (
                               <li key={o.key}>
                                 {o.key}. {o.text}{' '}
+                                {o.behavior && (
+                                  <span className="badge">{o.behavior}</span>
+                                )}{' '}
                                 <span className="muted mono">
                                   {Object.entries(o.traitWeights)
                                     .map(([t, w]) => `${t}: ${w > 0 ? '+' : ''}${w}`)
@@ -293,7 +361,20 @@ export function Questions() {
                       </div>
                     )}
                   </td>
-                  <td>{q.module?.name ?? '—'}</td>
+                  <td>
+                    {q.module?.name ?? '—'}
+                    {/* Which behavioural shape this is — legacy Likert items
+                        predate the patterns and are served only rarely. */}
+                    {q.personalityDetails && (
+                      <div style={{ marginTop: 4 }}>
+                        <span className="badge">
+                          {q.personalityDetails.pattern
+                            ? PATTERN_BADGE[q.personalityDetails.pattern]
+                            : 'legacy'}
+                        </span>
+                      </div>
+                    )}
+                  </td>
                   <td className="mono">
                     {q.mcqDetails ? q.mcqDetails.difficultyScore : '—'}
                   </td>
@@ -302,6 +383,9 @@ export function Questions() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      <button className="link" onClick={() => setEditor({ question: q })}>
+                        Edit
+                      </button>
                       {q.status !== 'active' && (
                         <button
                           className="link"

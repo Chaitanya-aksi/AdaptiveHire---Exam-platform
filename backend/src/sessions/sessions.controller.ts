@@ -55,11 +55,6 @@ export class SessionsController {
     @Body() dto: SubmitAnswerDto,
     @CurrentUser('id') userId: string,
   ) {
-    return this.sessions.submitAnswer(
-      userId,
-      id,
-      dto.questionId,
-      dto.selectedOption,
-    );
+    return this.sessions.submitAnswer(userId, id, dto);
   }
 }

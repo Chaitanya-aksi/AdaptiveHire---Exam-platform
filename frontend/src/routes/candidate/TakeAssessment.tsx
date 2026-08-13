@@ -245,7 +245,7 @@ export function TakeAssessment() {
         question={step.question}
         sequenceNumber={step.sequenceNumber}
         busy={busy}
-        onSubmit={(option) => void answer(step.question.id, option)}
+        onSubmit={(payload) => void answer(step.question.id, payload)}
       />
     </div>
   );

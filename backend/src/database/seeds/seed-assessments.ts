@@ -1,6 +1,8 @@
 import { AssessmentModule } from '../../assessments/entities/assessment-module.entity';
 import { Assessment } from '../../assessments/entities/assessment.entity';
 import { ModuleCatalogEntry } from '../../modules-catalog/entities/module.entity';
+import { UserRole } from '../../common/enums';
+import { User } from '../../users/entities/user.entity';
 import dataSource from '../data-source';
 
 /**
@@ -27,6 +29,20 @@ async function run(): Promise<void> {
   await dataSource.initialize();
   const assessments = dataSource.getRepository(Assessment);
   const modules = dataSource.getRepository(ModuleCatalogEntry);
+
+  // Assessments are owned by a company, so the seed needs one to hang this on.
+  // The seeded recruiter's workspace is the right home for it.
+  const recruiter = await dataSource.getRepository(User).findOne({
+    where: { role: UserRole.RECRUITER_ADMIN },
+    order: { createdAt: 'ASC' },
+  });
+  if (!recruiter?.organisationId) {
+    console.error(
+      'No recruiter with an organisation found — run `npm run seed:users` first.',
+    );
+    await dataSource.destroy();
+    process.exit(1);
+  }
 
   const existing = await assessments.findOne({ where: { title: SEED_TITLE } });
   if (existing) {
@@ -62,6 +78,8 @@ async function run(): Promise<void> {
 
   const assessment = assessments.create({
     title: SEED_TITLE,
+    organisationId: recruiter.organisationId,
+    createdById: recruiter.id,
     description:
       'Sample assessment for development and testing — aptitude, logical reasoning and a personality profile.',
     modules: assessmentModules,

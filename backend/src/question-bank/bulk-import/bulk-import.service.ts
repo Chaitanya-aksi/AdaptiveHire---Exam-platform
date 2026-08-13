@@ -23,6 +23,21 @@ export interface BulkImportResult {
   failures: RowFailure[];
 }
 
+/**
+ * Who the imported questions belong to.
+ *
+ * Spelled out as an object so `organisationId: null` has to be written
+ * deliberately. Null means platform content — visible to every organisation and
+ * editable by none — which is correct for the seed script and wrong for anything
+ * reached from a request. Passing a plain nullable variable would let a request
+ * path publish a customer's questions to the whole platform by accident; having
+ * to type the null makes that a decision rather than a slip.
+ */
+export interface ImportOwner {
+  organisationId: string | null;
+  createdById: string;
+}
+
 @Injectable()
 export class BulkImportService {
   private readonly logger = new Logger(BulkImportService.name);
@@ -36,12 +51,9 @@ export class BulkImportService {
   async importFile(
     buffer: Buffer,
     filename: string,
-    createdById: string,
+    owner: ImportOwner,
   ): Promise<BulkImportResult> {
-    return this.importRows(
-      await parseSpreadsheet(buffer, filename),
-      createdById,
-    );
+    return this.importRows(await parseSpreadsheet(buffer, filename), owner);
   }
 
   /**
@@ -51,7 +63,7 @@ export class BulkImportService {
    */
   async importRows(
     rows: RawRow[],
-    createdById: string,
+    owner: ImportOwner,
   ): Promise<BulkImportResult> {
     const moduleCache = new Map<string, ModuleCatalogEntry>();
     const failures: RowFailure[] = [];
@@ -80,7 +92,11 @@ export class BulkImportService {
         const dto = rowToCreateDto(row, module);
         dto.status = QuestionStatus.DRAFT;
 
-        await this.questionBank.create(dto, createdById);
+        await this.questionBank.create(
+          dto,
+          owner.organisationId,
+          owner.createdById,
+        );
         imported += 1;
       } catch (error) {
         failures.push({

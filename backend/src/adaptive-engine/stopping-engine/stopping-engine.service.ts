@@ -5,6 +5,7 @@ import {
   TRAIT_CONFIDENCE_THRESHOLD,
 } from '../adaptive-engine.constants';
 import { AbilityEstimatorService } from '../ability-estimator/ability-estimator.service';
+import { ConsistencyProbeService } from '../consistency-probe/consistency-probe.service';
 import type { ModuleRunState } from '../engine.types';
 
 export interface StopDecision {
@@ -25,7 +26,10 @@ const CONTINUE: StopDecision = { stop: false, reason: null };
  */
 @Injectable()
 export class StoppingEngineService {
-  constructor(private readonly estimator: AbilityEstimatorService) {}
+  constructor(
+    private readonly estimator: AbilityEstimatorService,
+    private readonly probes: ConsistencyProbeService,
+  ) {}
 
   shouldStop(state: ModuleRunState, now = Date.now()): StopDecision {
     // The clock is server-authoritative and outranks everything else.
@@ -39,9 +43,32 @@ export class StoppingEngineService {
 
     if (state.answered < state.minQuestions) return CONTINUE;
 
-    return this.confidence(state) >= this.threshold(state)
-      ? { stop: true, reason: ModuleStopReason.CONFIDENCE_REACHED }
-      : CONTINUE;
+    if (!this.thresholdMet(state)) return CONTINUE;
+
+    // Confidence is met, but a repeat probe is still waiting on its twin.
+    // Finishing here would discard a question already spent and report nothing
+    // for it, so the module stays open just long enough to close the check.
+    //
+    // This is the one place a probe touches the stopping decision, and it can
+    // only ever extend a module by a question or two: the clock and
+    // `maxQuestions` are both checked above and neither can be deferred, and no
+    // probe *answer* is consulted — only the fact that a check is outstanding.
+    if (this.probes.awaitingTwin(state)) return CONTINUE;
+
+    return { stop: true, reason: ModuleStopReason.CONFIDENCE_REACHED };
+  }
+
+  /**
+   * Whether the module has earned its confidence stop — enough answers, and a
+   * settled enough result.
+   *
+   * Public because the orchestrator needs it when the question pool runs dry: a
+   * module that was already settled and only being held open to close a probe
+   * ended because it was finished, not because the bank ran out.
+   */
+  thresholdMet(state: ModuleRunState): boolean {
+    if (state.answered < state.minQuestions) return false;
+    return this.confidence(state) >= this.threshold(state);
   }
 
   /**

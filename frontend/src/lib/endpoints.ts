@@ -1,5 +1,6 @@
 import { api } from './api';
 import type {
+  AnswerPayload,
   Assessment,
   AssessmentInvitation,
   AttemptListItem,
@@ -12,7 +13,10 @@ import type {
   ModuleQuestionStats,
   Paginated,
   Question,
+  QuestionDraft,
+  LoginPortal,
   QuestionStatus,
+  RegisterPayload,
   ReportDetail,
   ReportSummary,
   SessionStep,
@@ -26,9 +30,13 @@ interface AuthResponse {
 }
 
 export const authApi = {
-  login: (email: string, password: string) =>
+  /**
+   * `portal` names which sign-in page this came from, so the server can refuse a
+   * recruiter on the candidate form and vice versa.
+   */
+  login: (email: string, password: string, portal: LoginPortal) =>
     api
-      .post<AuthResponse>('/auth/login', { email, password })
+      .post<AuthResponse>('/auth/login', { email, password, portal })
       .then((r) => r.data),
 
   /**
@@ -36,10 +44,8 @@ export const authApi = {
    * always creates a `candidate`, so this endpoint can't be used to mint a
    * recruiter. Signs the new account straight in.
    */
-  register: (fullName: string, email: string, password: string) =>
-    api
-      .post<AuthResponse>('/auth/register', { fullName, email, password })
-      .then((r) => r.data),
+  register: (payload: RegisterPayload) =>
+    api.post<AuthResponse>('/auth/register', payload).then((r) => r.data),
 
   /** Exchanges the httpOnly cookie for a fresh access token on page load. */
   refresh: () => api.post<AuthResponse>('/auth/refresh').then((r) => r.data),
@@ -123,6 +129,22 @@ export const questionsApi = {
       })
       .then((r) => r.data),
 
+  get: (id: string) =>
+    api.get<Question>(`/questions/${id}`).then((r) => r.data),
+
+  create: (moduleId: string, draft: QuestionDraft) =>
+    api
+      .post<Question>('/questions', { moduleId, ...draft })
+      .then((r) => r.data),
+
+  /**
+   * Partial by design. Omitting `personality.pattern` leaves the stored one
+   * alone, so fixing a legacy question's wording can't relabel it as
+   * situational.
+   */
+  update: (id: string, draft: QuestionDraft) =>
+    api.patch<Question>(`/questions/${id}`, draft).then((r) => r.data),
+
   activate: (id: string) =>
     api.patch<Question>(`/questions/${id}/activate`).then((r) => r.data),
 
@@ -192,6 +214,11 @@ export interface CreateAssessmentPayload {
   title: string;
   description?: string;
   modules: AssessmentModulePayload[];
+  /**
+   * The questions the engine may draw from. Omit for no restriction, which is
+   * the default — the engine then uses everything the organisation can see.
+   */
+  questionIds?: string[];
 }
 
 export const assessmentsApi = {
@@ -202,6 +229,15 @@ export const assessmentsApi = {
 
   create: (payload: CreateAssessmentPayload) =>
     api.post<Assessment>('/assessments', payload).then((r) => r.data),
+
+  /**
+   * Replaces which questions the engine may draw from. An empty array clears the
+   * pool, returning the assessment to the whole visible bank.
+   */
+  setQuestionPool: (id: string, questionIds: string[]) =>
+    api
+      .put<Assessment>(`/assessments/${id}/questions`, { questionIds })
+      .then((r) => r.data),
 };
 
 export const invitationsApi = {
@@ -277,11 +313,15 @@ export const sessionsApi = {
       .post<SessionStep>(`/sessions/${sessionId}/module/start`)
       .then((r) => r.data),
 
-  answer: (sessionId: string, questionId: string, selectedOption: string) =>
+  /**
+   * `payload` carries either a single choice or a ranking's ordering. Order is
+   * the answer for a ranking, so it is sent exactly as the candidate built it.
+   */
+  answer: (sessionId: string, questionId: string, payload: AnswerPayload) =>
     api
       .post<SessionStep>(`/sessions/${sessionId}/answer`, {
         questionId,
-        selectedOption,
+        ...payload,
       })
       .then((r) => r.data),
 };

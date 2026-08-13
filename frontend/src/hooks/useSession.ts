@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sessionsApi } from '../lib/endpoints';
 import { describeError } from '../lib/errors';
-import type { SessionStep } from '../lib/types';
+import type { AnswerPayload, SessionStep } from '../lib/types';
 
 interface UseSession {
   step: SessionStep | null;
@@ -10,7 +10,7 @@ interface UseSession {
   loading: boolean;
   /** True while an answer or a module start is in flight. */
   busy: boolean;
-  answer: (questionId: string, option: string) => Promise<void>;
+  answer: (questionId: string, payload: AnswerPayload) => Promise<void>;
   startModule: () => Promise<void>;
   /** Re-asks the server where we are. Used when a clock runs out. */
   refresh: () => Promise<void>;
@@ -31,6 +31,12 @@ export function useSession(invitationId: string | undefined): UseSession {
   // Survives re-renders so refresh() works after the first step arrives.
   const sessionId = useRef<string | null>(null);
 
+  // Which invitation we have already asked the server to start. React's
+  // development double-mount runs this effect twice, and two starts for one
+  // invitation race each other server-side; the backend now resolves that race,
+  // but there is no reason to make the request twice.
+  const startedFor = useRef<string | null>(null);
+
   const apply = useCallback((next: SessionStep) => {
     sessionId.current = next.session.sessionId;
     setStep(next);
@@ -39,25 +45,21 @@ export function useSession(invitationId: string | undefined): UseSession {
 
   useEffect(() => {
     if (!invitationId) return;
-    let cancelled = false;
+    // No cleanup flag to ignore the reply: the guard already means this request
+    // is made exactly once, so there is no second reply to discard — and
+    // discarding this one would leave the screen loading forever.
+    if (startedFor.current === invitationId) return;
+    startedFor.current = invitationId;
 
     sessionsApi
       .start(invitationId)
-      .then((next) => {
-        if (!cancelled) apply(next);
-      })
+      .then(apply)
       .catch((err) => {
-        if (!cancelled) {
-          setError(describeError(err, 'Could not start this assessment.'));
-        }
+        // Let the candidate try again rather than stranding them on the error.
+        startedFor.current = null;
+        setError(describeError(err, 'Could not start this assessment.'));
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => setLoading(false));
   }, [invitationId, apply]);
 
   /** Shared wrapper: one in-flight call at a time, errors surfaced not thrown. */
@@ -82,9 +84,9 @@ export function useSession(invitationId: string | undefined): UseSession {
   );
 
   const answer = useCallback(
-    (questionId: string, option: string) =>
+    (questionId: string, payload: AnswerPayload) =>
       run(
-        (id) => sessionsApi.answer(id, questionId, option),
+        (id) => sessionsApi.answer(id, questionId, payload),
         'Could not save that answer.',
       ),
     [run],

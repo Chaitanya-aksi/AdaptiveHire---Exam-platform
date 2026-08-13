@@ -1,7 +1,17 @@
 import * as argon2 from 'argon2';
 import { UserRole } from '../../common/enums';
+import { Organisation } from '../../organisations/entities/organisation.entity';
 import { User } from '../../users/entities/user.entity';
 import dataSource from '../data-source';
+
+/**
+ * The workspace the seeded recruiter works in.
+ *
+ * Recruiters need one: every recruiter-facing endpoint reads its scope from the
+ * account's organisation and refuses an account without one, so a seeded
+ * recruiter with no organisation could log in and do nothing at all.
+ */
+const SEED_ORGANISATION = { name: 'AdaptiveHire', slug: 'adaptivehire' };
 
 /**
  * Seeds the accounts needed to exercise role-based access. Self-service
@@ -28,6 +38,14 @@ async function run(): Promise<void> {
 
   await dataSource.initialize();
   const users = dataSource.getRepository(User);
+  const organisations = dataSource.getRepository(Organisation);
+
+  // Reuse the organisation the tenancy migration created, if it is still there,
+  // so re-seeding does not leave two workspaces with the same name.
+  const organisation =
+    (await organisations.findOne({
+      where: { slug: SEED_ORGANISATION.slug },
+    })) ?? (await organisations.save(organisations.create(SEED_ORGANISATION)));
 
   for (const seed of SEED_USERS) {
     const existing = await users.findOne({ where: { email: seed.email } });
@@ -36,7 +54,13 @@ async function run(): Promise<void> {
       continue;
     }
     await users.save(
-      users.create({ ...seed, passwordHash: await argon2.hash(password) }),
+      users.create({
+        ...seed,
+        passwordHash: await argon2.hash(password),
+        // Candidates belong to no company; only the recruiter gets the workspace.
+        organisationId:
+          seed.role === UserRole.RECRUITER_ADMIN ? organisation.id : null,
+      }),
     );
     console.log(`✓ created ${seed.role.padEnd(15)} ${seed.email}`);
   }

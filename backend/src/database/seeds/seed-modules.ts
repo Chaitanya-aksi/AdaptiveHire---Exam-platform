@@ -39,20 +39,23 @@ export const SEED_MODULES = [
     name: 'Personality',
     slug: 'personality',
     description:
-      'Big Five behavioural profile, reported against workplace-facing labels.',
+      'Workplace behavioural profile measured through situational, forced-choice, trade-off and ranking questions.',
     scoringType: ScoringType.TRAIT,
+    // Workplace-facing traits rather than Big Five factors: the report has to
+    // speak about Leadership, Ownership and Integrity, none of which the Big
+    // Five expresses. Every one is stated positively, so no trait needs
+    // inverting for the report.
     traits: [
-      { key: 'openness', label: 'Adaptability & Learning' },
-      { key: 'conscientiousness', label: 'Reliability & Follow-Through' },
-      { key: 'extraversion', label: 'Communication & Initiative' },
-      { key: 'agreeableness', label: 'Teamwork & Cooperation' },
-      // Reported as the opposite pole: a high neuroticism score must surface
-      // as LOW resilience, so the report layer inverts it.
-      {
-        key: 'neuroticism',
-        label: 'Resilience Under Pressure',
-        invertForReport: true,
-      },
+      { key: 'leadership', label: 'Leadership' },
+      { key: 'ownership', label: 'Ownership' },
+      { key: 'accountability', label: 'Accountability' },
+      { key: 'teamwork', label: 'Teamwork' },
+      { key: 'communication', label: 'Communication' },
+      { key: 'empathy', label: 'Empathy' },
+      { key: 'integrity', label: 'Integrity' },
+      { key: 'adaptability', label: 'Adaptability' },
+      { key: 'resilience', label: 'Resilience' },
+      { key: 'risk_tolerance', label: 'Risk Tolerance' },
     ],
   },
 ];

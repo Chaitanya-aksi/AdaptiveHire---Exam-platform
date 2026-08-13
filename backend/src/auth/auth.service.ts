@@ -1,19 +1,23 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
+import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { UserRole } from '../common/enums';
 import { InvitationsService } from '../invitations/invitations.service';
 import { User, type RecentRefreshToken } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { OrganisationsService } from '../organisations/organisations.service';
+import { LoginDto, LoginPortal } from './dto/login.dto';
+import { RegisterDto, RegistrationType } from './dto/register.dto';
 import type { JwtPayload } from './strategies/jwt.strategy';
 
 /**
@@ -29,16 +33,27 @@ export interface TokenPair {
 }
 
 export interface AuthResult extends TokenPair {
-  user: { id: string; email: string; fullName: string; role: UserRole };
+  user: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: UserRole;
+    /** The company this account works for; null for candidates. */
+    organisationId: string | null;
+  };
 }
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly invitations: InvitationsService,
+    private readonly organisations: OrganisationsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -49,8 +64,22 @@ export class AuthService {
       throw new ConflictException('An account with that email already exists');
     }
 
-    // Registration is invite-only: an account can only be created for an email
-    // a recruiter has already invited to at least one assessment.
+    return dto.accountType === RegistrationType.RECRUITER
+      ? this.registerRecruiter(dto, email)
+      : this.registerCandidate(dto, email);
+  }
+
+  /**
+   * Candidate signup, unchanged: invite-only.
+   *
+   * An account can only be created for an email a recruiter has already invited
+   * to at least one assessment, which keeps the candidate side from filling with
+   * accounts that have nothing to sit.
+   */
+  private async registerCandidate(
+    dto: RegisterDto,
+    email: string,
+  ): Promise<AuthResult> {
     if (!(await this.invitations.hasInvitation(email))) {
       throw new ForbiddenException(
         'This email has not been invited. Ask the recruiter who contacted you to add it.',
@@ -71,6 +100,60 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
+  /**
+   * Recruiter signup: open to anyone hiring, and it creates their company
+   * workspace.
+   *
+   * The organisation and its first recruiter are written in one transaction
+   * because neither is usable without the other — a recruiter with no
+   * organisation is refused by `@CurrentOrg()` on every endpoint, and an
+   * organisation with no members is a row nobody can reach. A half-finished
+   * signup has to leave nothing behind.
+   *
+   * That workspace is not a convenience: it is the tenancy boundary. Every
+   * recruiter-facing query filters on it, which is what stops a stranger who
+   * registers from reading other companies' assessments and candidates.
+   */
+  private async registerRecruiter(
+    dto: RegisterDto,
+    email: string,
+  ): Promise<AuthResult> {
+    // Belt and braces over the DTO's conditional validation: this is the value
+    // the whole tenancy boundary is built from, so it is checked where it is
+    // used rather than only where it arrived.
+    const organisationName = dto.organisationName?.trim();
+    if (!organisationName) {
+      throw new BadRequestException(
+        'A recruiter account needs a company or organisation name.',
+      );
+    }
+
+    const passwordHash = await argon2.hash(dto.password);
+
+    const user = await this.dataSource.transaction(async (manager) => {
+      const organisation = await this.organisations.createForSignup(
+        organisationName,
+        manager,
+      );
+
+      return manager.save(
+        manager.create(User, {
+          email,
+          passwordHash,
+          fullName: dto.fullName,
+          role: UserRole.RECRUITER_ADMIN,
+          organisationId: organisation.id,
+        }),
+      );
+    });
+
+    this.logger.log(
+      `Recruiter ${email} registered and created organisation ${user.organisationId}`,
+    );
+
+    return this.issueTokens(user);
+  }
+
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.users.findByEmailWithSecrets(dto.email);
 
@@ -86,8 +169,43 @@ export class AuthService {
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
     }
+    this.assertPortalMatchesRole(dto.portal, user.role);
 
     return this.issueTokens(user);
+  }
+
+  /**
+   * Keeps each sign-in page to its own audience: the candidate form is for
+   * candidates and the recruiter form for recruiters.
+   *
+   * Checked here rather than in the UI because the client cannot undo a
+   * successful login — by the time it could inspect the role, an access token
+   * has been issued and the httpOnly refresh cookie set, so the next page load
+   * would silently restore the session and redirect to the area we just tried to
+   * keep them out of. Throwing before `issueTokens` means nothing is minted.
+   *
+   * A 403 rather than a 401 so the client can tell "wrong door" from "wrong
+   * password" and point at the right page. It only ever fires after the password
+   * has already verified, so naming the account type reveals nothing to someone
+   * who does not have it.
+   */
+  private assertPortalMatchesRole(
+    portal: LoginPortal | undefined,
+    role: UserRole,
+  ): void {
+    if (!portal) return;
+
+    const expected =
+      portal === LoginPortal.RECRUITER
+        ? UserRole.RECRUITER_ADMIN
+        : UserRole.CANDIDATE;
+    if (role === expected) return;
+
+    throw new ForbiddenException(
+      role === UserRole.RECRUITER_ADMIN
+        ? 'That is a recruiter account. Sign in on the recruiter page instead.'
+        : 'That is a candidate account. Sign in on the candidate page instead.',
+    );
   }
 
   async refresh(userId: string, presentedToken: string): Promise<AuthResult> {
@@ -198,6 +316,10 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        // Returned so the frontend can tell a recruiter's workspace apart in
+        // caches and query keys. It is not a capability: every request's scope
+        // is read from the database, never from what the client holds.
+        organisationId: user.organisationId,
       },
     };
   }

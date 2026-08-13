@@ -1,10 +1,15 @@
-import { ScoringType } from '../../common/enums';
+import { BehavioralPattern, ScoringType } from '../../common/enums';
 import { CreateQuestionDto } from '../dto/create-question.dto';
 import type {
   McqOptionDto,
   PersonalityOptionDto,
 } from '../dto/question-details.dto';
-import { MIN_OPTIONS } from '../question-bank.constants';
+import {
+  LEGACY_OPTION_BOUNDS,
+  MIN_OPTIONS,
+  PATTERN_OPTION_BOUNDS,
+  PROBE_GROUP_MAX_LENGTH,
+} from '../question-bank.constants';
 import type { RawRow } from './spreadsheet-parser';
 
 /** Up to six options per question, matching the DTO's ArrayMaxSize. */
@@ -55,11 +60,51 @@ export const parseTraitWeights = (
   return weights;
 };
 
+/**
+ * Reads the optional `pattern` column. Absent means a legacy Likert question —
+ * the importer does not guess, because labelling an agree/disagree item as
+ * situational would misrepresent it in the report.
+ */
+const parsePattern = (row: RawRow): BehavioralPattern | undefined => {
+  const raw = row.pattern?.trim().toLowerCase();
+  if (!raw) return undefined;
+
+  const known: string[] = Object.values(BehavioralPattern);
+  if (!known.includes(raw)) {
+    throw new RowError(
+      `"pattern" is "${raw}" — expected one of ${known.join(', ')}`,
+    );
+  }
+  return raw as BehavioralPattern;
+};
+
 const parseTags = (row: RawRow): string[] =>
   (row.tags ?? '')
     .split(/[;,]/)
     .map((t) => t.trim())
     .filter(Boolean);
+
+/**
+ * Reads the optional `probe_group` column, which twins this row with the other
+ * rows carrying the same value.
+ *
+ * Whether the twins are actually written differently enough is an authoring
+ * judgement the importer cannot make — it can only check that a group name is
+ * usable. What it does catch is the mistake that would break the engine: a group
+ * shared by rows in different modules, which the service rejects because a probe
+ * pair has to be servable within one module's run.
+ */
+const parseProbeGroup = (row: RawRow): string | undefined => {
+  const raw = row.probe_group?.trim();
+  if (!raw) return undefined;
+
+  if (raw.length > PROBE_GROUP_MAX_LENGTH) {
+    throw new RowError(
+      `"probe_group" is ${raw.length} characters; the limit is ${PROBE_GROUP_MAX_LENGTH}`,
+    );
+  }
+  return raw;
+};
 
 /**
  * Maps one spreadsheet row to the same DTO shape the REST endpoint accepts, so
@@ -79,6 +124,7 @@ export function rowToCreateDto(
   const moduleId = module.id;
   const questionText = required(row, 'question_text');
   const tags = parseTags(row);
+  const probeGroup = parseProbeGroup(row);
 
   if (module.scoringType === ScoringType.OBJECTIVE) {
     const options: McqOptionDto[] = [];
@@ -110,9 +156,12 @@ export function rowToCreateDto(
       moduleId,
       questionText,
       tags,
+      ...(probeGroup && { probeGroup }),
       mcq: { options, correctOption, difficultyScore },
     };
   }
+
+  const pattern = parsePattern(row);
 
   const options: PersonalityOptionDto[] = [];
   for (const letter of OPTION_LETTERS) {
@@ -126,19 +175,36 @@ export function rowToCreateDto(
         `option_${letter} has text but no "${weightColumn}" — every option must weight at least one trait`,
       );
     }
+    const behavior = row[`option_${letter}_behavior`]?.trim();
     options.push({
       key: letter.toUpperCase(),
       text,
       traitWeights: parseTraitWeights(rawWeights, weightColumn),
+      ...(behavior && { behavior }),
     });
   }
 
-  if (options.length < MIN_OPTIONS) {
+  // Bounds depend on the pattern: a forced-choice row legitimately has two
+  // options, which the old flat minimum of four would have rejected.
+  const bounds = pattern
+    ? PATTERN_OPTION_BOUNDS[pattern]
+    : LEGACY_OPTION_BOUNDS;
+  if (options.length < bounds.min || options.length > bounds.max) {
+    const expected =
+      bounds.min === bounds.max
+        ? `exactly ${bounds.min}`
+        : `${bounds.min}-${bounds.max}`;
     throw new RowError(
-      `needs at least ${MIN_OPTIONS} options but has ${options.length} ` +
-        '(columns option_a + option_a_weights, option_b + option_b_weights, ...)',
+      `a "${pattern ?? 'legacy'}" question takes ${expected} options but has ` +
+        `${options.length} (columns option_a + option_a_weights, ...)`,
     );
   }
 
-  return { moduleId, questionText, tags, personality: { options } };
+  return {
+    moduleId,
+    questionText,
+    tags,
+    ...(probeGroup && { probeGroup }),
+    personality: { options, pattern },
+  };
 }

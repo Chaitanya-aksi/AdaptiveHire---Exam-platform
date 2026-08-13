@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { CurrentOrg } from '../common/decorators/current-org.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums';
@@ -48,10 +49,16 @@ export class InvitationsController {
         .build({ fileIsRequired: true }),
     )
     file: Express.Multer.File,
+    @CurrentOrg() organisationId: string,
     @CurrentUser('id') userId: string,
   ) {
     const rows = await parseSpreadsheet(file.buffer, file.originalname);
-    return this.invitations.bulkInvite(assessmentId, rows, userId);
+    return this.invitations.bulkInvite(
+      assessmentId,
+      rows,
+      organisationId,
+      userId,
+    );
   }
 
   /** Add one candidate without building a spreadsheet for them. */
@@ -60,17 +67,24 @@ export class InvitationsController {
   inviteOne(
     @Param('assessmentId', ParseUUIDPipe) assessmentId: string,
     @Body() dto: CreateInvitationDto,
+    @CurrentOrg() organisationId: string,
     @CurrentUser('id') userId: string,
   ) {
-    return this.invitations.inviteSingle(assessmentId, dto, userId);
+    return this.invitations.inviteSingle(
+      assessmentId,
+      dto,
+      organisationId,
+      userId,
+    );
   }
 
   @Roles(UserRole.RECRUITER_ADMIN)
   @Get('assessments/:assessmentId/invitations')
   listForAssessment(
     @Param('assessmentId', ParseUUIDPipe) assessmentId: string,
+    @CurrentOrg() organisationId: string,
   ) {
-    return this.invitations.listForAssessment(assessmentId);
+    return this.invitations.listForAssessment(assessmentId, organisationId);
   }
 
   /**
@@ -79,15 +93,21 @@ export class InvitationsController {
    */
   @Roles(UserRole.RECRUITER_ADMIN)
   @Delete('invitations/:id')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.invitations.remove(id);
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.invitations.remove(id, organisationId);
   }
 
   /** Withdraws access while keeping the record and any completed attempt. */
   @Roles(UserRole.RECRUITER_ADMIN)
   @Patch('invitations/:id/revoke')
-  revoke(@Param('id', ParseUUIDPipe) id: string) {
-    return this.invitations.revoke(id);
+  revoke(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.invitations.revoke(id, organisationId);
   }
 
   /** Downloadable starter sheet so recruiters get the columns right. */

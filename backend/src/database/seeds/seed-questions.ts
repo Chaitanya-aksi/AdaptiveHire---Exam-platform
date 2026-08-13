@@ -48,6 +48,16 @@ async function run(): Promise<void> {
       );
     }
 
+    // Adding one new fixture file to a bank that already has content. Skips
+    // both the reload guard and the delete, because the intent is to append
+    // rather than replace — SEED_FORCE cannot do this, since it would try to
+    // delete questions candidates have already answered.
+    //
+    //   SEED_ONLY=personality-behavioral.csv npm run seed:questions
+    const only = process.env.SEED_ONLY?.split(',')
+      .map((name) => name.trim())
+      .filter(Boolean);
+
     // Unlike the user and module seeds there is no natural unique key to skip
     // on, so re-running would silently double the bank. Guard on the tag.
     const questions = dataSource.getRepository(Question);
@@ -56,7 +66,7 @@ async function run(): Promise<void> {
       .where("'fixture' = ANY(q.tags)")
       .getCount();
 
-    if (existing > 0 && process.env.SEED_FORCE !== 'true') {
+    if (!only && existing > 0 && process.env.SEED_FORCE !== 'true') {
       console.log(
         `${existing} fixture questions already loaded — nothing to do.\n` +
           'To reload them, either:\n' +
@@ -66,7 +76,7 @@ async function run(): Promise<void> {
       return;
     }
 
-    if (existing > 0) {
+    if (!only && existing > 0) {
       // Fails loudly if a candidate has already answered one of these —
       // `responses` references questions with ON DELETE RESTRICT.
       const removed = await questions
@@ -79,13 +89,30 @@ async function run(): Promise<void> {
       );
     }
 
-    const files = readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.csv'));
+    const files = readdirSync(FIXTURE_DIR)
+      .filter((f) => f.endsWith('.csv'))
+      .filter((f) => !only || only.includes(f));
+
+    if (only && files.length === 0) {
+      throw new Error(
+        `SEED_ONLY matched no fixture files. Available: ${readdirSync(
+          FIXTURE_DIR,
+        )
+          .filter((f) => f.endsWith('.csv'))
+          .join(', ')}`,
+      );
+    }
     let totalImported = 0;
     let totalFailed = 0;
 
     for (const file of files) {
       const buffer = readFileSync(join(FIXTURE_DIR, file));
-      const result = await bulkImport.importFile(buffer, file, author.id);
+      // organisationId null: the fixtures are the platform's starter bank, so
+      // every organisation can use them and none can edit them.
+      const result = await bulkImport.importFile(buffer, file, {
+        organisationId: null,
+        createdById: author.id,
+      });
 
       totalImported += result.imported;
       totalFailed += result.failed;

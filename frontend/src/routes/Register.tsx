@@ -38,7 +38,12 @@ export function Register() {
     setError(null);
 
     try {
-      const user = await register(fullName.trim(), email.trim(), password);
+      const user = await register({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        password,
+        accountType: 'candidate',
+      });
       toast.success(`Welcome, ${user.fullName.split(' ')[0]}.`);
       void navigate(homeFor(user.role), { replace: true });
     } catch (err) {
@@ -67,7 +72,13 @@ export function Register() {
       subtitle="Register as a candidate to take your invited assessments."
       footer={
         <>
-          Already have an account? <Link to="/login">Sign in</Link>
+          <div>
+            Already have an account? <Link to="/login">Sign in</Link>
+          </div>
+          <div className="auth-alt-secondary">
+            Hiring instead?{' '}
+            <Link to="/recruiter/register">Register to host assessments</Link>
+          </div>
         </>
       }
     >
@@ -136,8 +147,9 @@ export function Register() {
       </form>
 
       <div className="hint">
-        Sign-up creates a <strong>candidate</strong> account. Recruiter access is
-        arranged separately and can&rsquo;t be self-assigned here.
+        Candidate accounts are created for <strong>invited emails only</strong>.
+        If yours isn&rsquo;t recognised, ask the recruiter who contacted you to
+        add it.
       </div>
     </AuthShell>
   );

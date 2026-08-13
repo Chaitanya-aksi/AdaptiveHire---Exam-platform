@@ -3,9 +3,11 @@ import { AuthShell } from '../components/AuthShell';
 import { SignInForm } from '../components/SignInForm';
 
 /**
- * The recruiter entry point. Same endpoint, same form — only the framing
- * differs, and there is no sign-up link: recruiter accounts are provisioned
- * from the People page by someone who already has one.
+ * The recruiter entry point. Same endpoint and same form as the candidate side —
+ * only the framing differs, plus the way in for a company that has not signed up
+ * yet. Recruiter accounts used to be provisioned from the People page by someone
+ * who already had one; they are now self-service, and registering creates the
+ * company's own workspace.
  */
 export function RecruiterLogin() {
   return (
@@ -15,15 +17,16 @@ export function RecruiterLogin() {
       footer={
         <>
           <div>
-            Taking an assessment? <Link to="/login">Candidate sign in</Link>
+            New here?{' '}
+            <Link to="/recruiter/register">Register to host assessments</Link>
           </div>
           <div className="auth-alt-secondary">
-            Need a recruiter account? Ask an existing recruiter to create one.
+            Taking an assessment? <Link to="/login">Candidate sign in</Link>
           </div>
         </>
       }
     >
-      <SignInForm />
+      <SignInForm portal="recruiter" />
 
       {import.meta.env.DEV && (
         <div className="hint">

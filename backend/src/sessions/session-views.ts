@@ -1,7 +1,15 @@
-import type { ScoringType, SessionStatus } from '../common/enums';
+import type {
+  BehavioralPattern,
+  ScoringType,
+  SessionStatus,
+} from '../common/enums';
 import type { ModuleRunStatus } from '../adaptive-engine/engine.types';
 
-/** One option as the candidate sees it — never carries the correct answer. */
+/**
+ * One option as the candidate sees it — never carries the correct answer, and
+ * never the trait weights, which would tell them exactly what each choice
+ * scores.
+ */
 export interface QuestionOptionView {
   key: string;
   text: string;
@@ -11,6 +19,14 @@ export interface QuestionView {
   id: string;
   text: string;
   options: QuestionOptionView[];
+  /**
+   * Which interaction to render. Null means a plain single-choice question:
+   * every objective question, and legacy Likert personality items.
+   *
+   * `ranking` is the only value that changes what the client must send back —
+   * an ordering rather than one key.
+   */
+  pattern: BehavioralPattern | null;
 }
 
 export interface ModuleView {

@@ -77,22 +77,27 @@ Change them in `.env`; compose reads the same file.
 
 ## Getting started
 
+**Setting up on a new machine? Follow [`docs/setup.md`](docs/setup.md)** — the
+full walkthrough, with the migration list to check against and a troubleshooting
+section. The short version:
+
 ```bash
 cp .env.example .env          # then set real JWT secrets:
                               # node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+cp frontend/.env.example frontend/.env
 
 docker compose up -d postgres redis
 
 cd backend
-npm install
-npm run migration:run
-npm run seed                  # users + modules + 130 fixture questions
+npm ci
+npm run migration:run         # 11 migrations on an empty database
+npm run seed                  # organisation, users, modules, sample assessment, 185 fixture questions
+                              # (25 rejections from the legacy personality.csv are expected — see docs/setup.md)
 npm run start:dev
 
 cd ../frontend
-cp .env.example .env
-npm install
-npm run dev
+npm ci
+npm run dev                   # must be on port 5174 — CORS_ORIGIN is pinned to it
 ```
 
 Health check: <http://localhost:3001/api/health> — reports Postgres and Redis
@@ -102,15 +107,21 @@ To run the API in Docker too: `docker compose up -d --build`.
 
 ## Seeding
 
-`npm run seed` runs all three in order; each is also runnable alone.
+`npm run seed` runs all four **in order, and the order matters** — the later
+scripts need the organisation and author the earlier ones create. Each is also
+runnable alone.
 
 | Script | Creates |
 | --- | --- |
-| `seed:users` | one `recruiter_admin`, one `candidate` |
+| `seed:users` | the `AdaptiveHire` organisation, one `recruiter_admin` in it, one `candidate` |
 | `seed:modules` | Aptitude, Logical Reasoning, Verbal Ability (objective) + Personality (trait) |
-| `seed:questions` | 130 fixture questions, imported through the real bulk importer and activated |
+| `seed:questions` | 185 fixture questions, imported through the real bulk importer and activated. The 25 rows of the legacy `personality.csv` are rejected by design — they predate the behavioural patterns and the importer will not guess one |
+| `seed:assessments` | one sample assessment, owned by the seeded organisation |
 
-All three skip work that's already done. `seed:questions` refuses to run twice
+Seeded questions are **platform questions** — `organisationId` null, so every
+organisation can use them in an assessment and none can edit them in place.
+
+All four skip work that's already done. `seed:questions` refuses to run twice
 (it would double the bank); use `SEED_FORCE=true npm run seed:questions` to
 delete and reload.
 
@@ -123,8 +134,12 @@ Password `ChangeMe!2345`, override with `SEED_PASSWORD`:
 | `recruiter@adaptivehire.local` | `recruiter_admin` |
 | `candidate@adaptivehire.local` | `candidate` |
 
-Self-service registration (`POST /api/auth/register`) always creates a
-`candidate`; recruiter accounts come from the seed.
+Registration is self-service for both sides, on **separate pages**:
+`/register` creates a candidate and is invite-only (the email must already have
+been invited), while `/recruiter/register` registers a company — creating an
+`organisations` row that scopes everything that account can see. Each sign-in
+page accepts only its own audience: a recruiter on `/login` gets a 403 naming the
+recruiter page.
 
 ## Auth
 

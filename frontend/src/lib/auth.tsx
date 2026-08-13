@@ -9,19 +9,19 @@ import {
 } from 'react';
 import { setAccessToken } from './api';
 import { authApi } from './endpoints';
-import type { AuthUser } from './types';
+import type { AuthUser, LoginPortal, RegisterPayload } from './types';
 
 interface AuthState {
   user: AuthUser | null;
   /** True until the initial silent refresh settles, so routes don't flash. */
   loading: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
-  /** Self-service sign-up; the created account is always a candidate. */
-  register: (
-    fullName: string,
+  login: (
     email: string,
     password: string,
+    portal: LoginPortal,
   ) => Promise<AuthUser>;
+  /** Self-service sign-up, for a candidate or a company. */
+  register: (payload: RegisterPayload) => Promise<AuthUser>;
   logout: () => Promise<void>;
   /** Merge fresh fields (e.g. a renamed profile) into the cached user. */
   updateUser: (patch: Partial<AuthUser>) => void;
@@ -59,20 +59,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { accessToken, user: signedIn } = await authApi.login(email, password);
-    setAccessToken(accessToken);
-    setUser(signedIn);
-    return signedIn;
-  }, []);
-
-  const register = useCallback(
-    async (fullName: string, email: string, password: string) => {
-      const { accessToken, user: created } = await authApi.register(
-        fullName,
+  const login = useCallback(
+    async (email: string, password: string, portal: LoginPortal) => {
+      const { accessToken, user: signedIn } = await authApi.login(
         email,
         password,
+        portal,
       );
+      setAccessToken(accessToken);
+      setUser(signedIn);
+      return signedIn;
+    },
+    [],
+  );
+
+  const register = useCallback(
+    async (payload: RegisterPayload) => {
+      const { accessToken, user: created } = await authApi.register(payload);
       // Registration returns the same token pair as login, so there is no
       // reason to make someone sign in again straight after signing up.
       setAccessToken(accessToken);

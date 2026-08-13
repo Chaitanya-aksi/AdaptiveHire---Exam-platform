@@ -5,6 +5,7 @@ import { PersonalityQuestionDetails } from '../question-bank/entities/personalit
 import { Question } from '../question-bank/entities/question.entity';
 import { AbilityEstimatorService } from './ability-estimator/ability-estimator.service';
 import { AdaptiveEngineService } from './adaptive-engine.service';
+import { ConsistencyProbeService } from './consistency-probe/consistency-probe.service';
 import { EvaluationService } from './evaluation/evaluation.service';
 import { QuestionSelectorService } from './question-selector/question-selector.service';
 import { StoppingEngineService } from './stopping-engine/stopping-engine.service';
@@ -26,8 +27,14 @@ import { StoppingEngineService } from './stopping-engine/stopping-engine.service
     AbilityEstimatorService,
     QuestionSelectorService,
     StoppingEngineService,
+    // Not a sixth cooperating service so much as bookkeeping the selector and
+    // the orchestrator share: it decides when a twin is due and what a pair of
+    // answers amounted to, and owns no scoring of its own.
+    ConsistencyProbeService,
     AdaptiveEngineService,
   ],
-  exports: [AdaptiveEngineService, AbilityEstimatorService],
+  // EvaluationService is exported so the sessions module can replay a stored
+  // answer's trait weights when rebuilding lost session state.
+  exports: [AdaptiveEngineService, AbilityEstimatorService, EvaluationService],
 })
 export class AdaptiveEngineModule {}

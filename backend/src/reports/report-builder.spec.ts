@@ -27,12 +27,22 @@ function objectiveModule(
     questionsCorrect: 6,
     minQuestions: 8,
     traits: [],
+    consistency: null,
+    probes: null,
+    legacyTraitModel: false,
     ...overrides,
   };
 }
 
 function traitModule(
-  traits: { key: string; label: string; score: number; confidence: number }[],
+  traits: {
+    key: string;
+    label: string;
+    score: number;
+    confidence: number;
+    consistency?: number | null;
+  }[],
+  overrides: Partial<ModuleSummary> = {},
 ): ModuleSummary {
   return {
     moduleId: 'm-personality',
@@ -44,7 +54,11 @@ function traitModule(
     questionsAnswered: 12,
     questionsCorrect: 0,
     minQuestions: 8,
-    traits,
+    traits: traits.map((t) => ({ consistency: null, ...t })),
+    consistency: null,
+    probes: null,
+    legacyTraitModel: false,
+    ...overrides,
   };
 }
 
@@ -128,7 +142,115 @@ describe('buildReport — overall score', () => {
     );
 
     expect(report.overallScore).toBeNull();
-    expect(report.summary).toContain('no ability score to report');
+    expect(report.abilityScore).toBeNull();
+    expect(report.behavioralScore).toBeNull();
+    expect(report.summary).toContain('no score to report');
+  });
+});
+
+/**
+ * The composites are what a personality module produces for a recruiter. Before
+ * they existed, a behaviour-only assessment reported a null score and a
+ * permanent "borderline", which read as "no result" for a candidate whose ten
+ * traits had all been measured.
+ */
+describe('buildReport — behavioural composites', () => {
+  /** Every workplace trait at one level, so a composite's value is predictable. */
+  const flatProfile = (score: number, confidence = 1) =>
+    traitModule(
+      [
+        'leadership',
+        'ownership',
+        'accountability',
+        'teamwork',
+        'communication',
+        'empathy',
+        'integrity',
+        'adaptability',
+        'resilience',
+        'risk_tolerance',
+      ].map((key) => ({ key, label: key, score, confidence })),
+    );
+
+  it('scores a behaviour-only assessment instead of reporting nothing', () => {
+    const report = buildReport(input({ modules: [flatProfile(80)] }));
+
+    expect(report.abilityScore).toBeNull();
+    expect(report.behavioralScore).toBe(80);
+    // The behavioural half takes the full weight when there is no other half.
+    expect(report.overallScore).toBe(80);
+    expect(report.hiringRecommendation).toBe(
+      HiringRecommendation.STRONGLY_RECOMMENDED,
+    );
+    expect(report.profiles).toHaveLength(5);
+  });
+
+  it('blends ability and behaviour 70/30', () => {
+    const report = buildReport(
+      input({ modules: [objectiveModule(50), flatProfile(100)] }),
+    );
+
+    expect(report.abilityScore).toBe(50);
+    expect(report.behavioralScore).toBe(100);
+    expect(report.overallScore).toBe(65);
+  });
+
+  it('leaves an objective-only assessment exactly as it was', () => {
+    const report = buildReport(input({ modules: [objectiveModule(64)] }));
+
+    expect(report.behavioralScore).toBeNull();
+    expect(report.overallScore).toBe(64);
+    expect(report.profiles).toEqual([]);
+  });
+
+  it('renormalises over the traits that were actually measured', () => {
+    // Collaboration is teamwork .35, empathy .3, communication .25,
+    // integrity .1. With only teamwork and empathy present the two carry
+    // .35/.65 and .3/.65 — a weighted mean of 90 and 20, not of 90, 20 and two
+    // neutral 50s.
+    const report = buildReport(
+      input({
+        modules: [
+          traitModule([
+            { key: 'teamwork', label: 'Teamwork', score: 90, confidence: 1 },
+            { key: 'empathy', label: 'Empathy', score: 20, confidence: 1 },
+          ]),
+        ],
+      }),
+    );
+
+    const collaboration = report.profiles.find(
+      (p) => p.key === 'collaboration',
+    );
+    expect(collaboration?.score).toBe(57.7);
+    expect(collaboration?.contributions.map((c) => c.weight)).toEqual([
+      0.54, 0.46,
+    ]);
+  });
+
+  it('excludes a thinly-evidenced composite from the index', () => {
+    const report = buildReport(input({ modules: [flatProfile(80, 0.2)] }));
+
+    // The composites are still reported — with their low confidence on show —
+    // but none of them is firm enough to carry a headline number.
+    expect(report.profiles).toHaveLength(5);
+    expect(report.profiles.every((p) => p.confidence === 0.2)).toBe(true);
+    expect(report.behavioralScore).toBeNull();
+    expect(report.overallScore).toBeNull();
+  });
+
+  it('never lets one trait decide the recommendation', () => {
+    const strongLeader = traitModule([
+      { key: 'leadership', label: 'Leadership', score: 100, confidence: 1 },
+    ]);
+    const report = buildReport(input({ modules: [strongLeader] }));
+
+    // Leadership is .35 of Leadership Readiness and nothing else. On its own it
+    // renormalises to the whole of that one composite, which is the only one
+    // built — so the index is that composite, not a profile-wide verdict.
+    expect(report.profiles).toHaveLength(1);
+    expect(report.profiles[0].key).toBe('leadership_readiness');
+    expect(report.behavioralScore).toBe(100);
   });
 });
 
@@ -299,5 +421,55 @@ describe('buildReport — narrative', () => {
 
     expect(report.summary).toContain('Strongest section was Aptitude (85/100)');
     expect(report.summary).toContain('weakest was Logical (40/100)');
+  });
+
+  describe('behavioural consistency', () => {
+    const behavioural = (consistency: number | null) =>
+      traitModule(
+        [{ key: 'teamwork', label: 'Teamwork', score: 70, confidence: 1 }],
+        { consistency },
+      );
+
+    it('says nothing when no trait had enough evidence to measure', () => {
+      const report = buildReport(
+        input({ modules: [objectiveModule(70), behavioural(null)] }),
+      );
+
+      expect(report.summary).not.toMatch(/consisten|varied/i);
+    });
+
+    it('notes steady answers across situations', () => {
+      const report = buildReport(
+        input({ modules: [objectiveModule(70), behavioural(0.9)] }),
+      );
+
+      expect(report.summary).toContain('pointed the same way');
+    });
+
+    it('frames variation as evidence to read, never as dishonesty', () => {
+      const report = buildReport(
+        input({ modules: [objectiveModule(70), behavioural(0.2)] }),
+      );
+
+      expect(report.summary).toContain('varied noticeably');
+      expect(report.summary).toContain(
+        'read the question-by-question evidence',
+      );
+      // The wording must never imply the candidate was untruthful.
+      expect(report.summary).not.toMatch(/dishonest|lying|untruthful|faking/i);
+    });
+
+    it('never lets consistency move the recommendation', () => {
+      // Same objective score, opposite extremes of consistency.
+      const steady = buildReport(
+        input({ modules: [objectiveModule(80), behavioural(1)] }),
+      );
+      const varied = buildReport(
+        input({ modules: [objectiveModule(80), behavioural(0)] }),
+      );
+
+      expect(varied.hiringRecommendation).toBe(steady.hiringRecommendation);
+      expect(varied.overallScore).toBe(steady.overallScore);
+    });
   });
 });

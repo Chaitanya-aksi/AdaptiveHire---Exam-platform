@@ -1,4 +1,5 @@
 import { ScoringType } from '../../common/enums';
+import { PROBE_GROUP_MAX_LENGTH } from '../question-bank.constants';
 import { RowError, parseTraitWeights, rowToCreateDto } from './row-mapper';
 import type { RawRow } from './spreadsheet-parser';
 
@@ -155,8 +156,50 @@ describe('rowToCreateDto — trait modules', () => {
     void option_d_weights;
 
     expect(() => rowToCreateDto(threePoint, traitModule)).toThrow(
-      /at least 4 options but has 3/,
+      /"legacy" question takes 4-6 options but has 3/,
     );
+  });
+
+  it('accepts a two-option forced-choice row', () => {
+    // The old flat four-option floor would have rejected this; a forced choice
+    // pits exactly two alternatives against each other.
+    const { option_c, option_c_weights, option_d, option_d_weights, ...pair } =
+      traitRow;
+    void option_c;
+    void option_c_weights;
+    void option_d;
+    void option_d_weights;
+
+    const dto = rowToCreateDto(
+      { ...pair, pattern: 'forced_choice' },
+      traitModule,
+    );
+
+    expect(dto.personality?.pattern).toBe('forced_choice');
+    expect(dto.personality?.options).toHaveLength(2);
+  });
+
+  it('rejects a forced-choice row with more than two options', () => {
+    expect(() =>
+      rowToCreateDto({ ...traitRow, pattern: 'forced_choice' }, traitModule),
+    ).toThrow(/takes exactly 2 options but has 4/);
+  });
+
+  it('rejects an unknown pattern', () => {
+    expect(() =>
+      rowToCreateDto({ ...traitRow, pattern: 'multiple_choice' }, traitModule),
+    ).toThrow(/"pattern" is "multiple_choice"/);
+  });
+
+  it('carries an option behaviour label through', () => {
+    const dto = rowToCreateDto(
+      { ...traitRow, option_a_behavior: 'Collaborative' },
+      traitModule,
+    );
+
+    expect(dto.personality?.options[0].behavior).toBe('Collaborative');
+    // Absent on the others rather than an empty string.
+    expect(dto.personality?.options[1].behavior).toBeUndefined();
   });
 
   it('rejects an option that has text but no weights', () => {
@@ -175,5 +218,52 @@ describe('rowToCreateDto — trait modules', () => {
       traitModule,
     );
     expect(dto.personality?.options).toHaveLength(4);
+  });
+});
+
+describe('rowToCreateDto — probe groups', () => {
+  const behavioralRow: RawRow = {
+    question_text:
+      'A teammate is about to miss their deadline. What do you do?',
+    pattern: 'forced_choice',
+    option_a: 'Take some of the work on.',
+    option_a_weights: 'teamwork:3',
+    option_b: 'Let your lead know the date is at risk.',
+    option_b_weights: 'accountability:2',
+  };
+
+  it('carries a probe group through on both question shapes', () => {
+    expect(
+      rowToCreateDto(mcqRow({ probe_group: 'seq-doubling' }), objectiveModule)
+        .probeGroup,
+    ).toBe('seq-doubling');
+
+    expect(
+      rowToCreateDto(
+        { ...behavioralRow, probe_group: 'pg-teammate' },
+        traitModule,
+      ).probeGroup,
+    ).toBe('pg-teammate');
+  });
+
+  it('leaves an untwinned row without one rather than empty', () => {
+    // Undefined and not '', so the service stores NULL — an empty string would
+    // be a group name that every untwinned question shared.
+    expect(
+      rowToCreateDto(mcqRow(), objectiveModule).probeGroup,
+    ).toBeUndefined();
+    expect(
+      rowToCreateDto(mcqRow({ probe_group: '   ' }), objectiveModule)
+        .probeGroup,
+    ).toBeUndefined();
+  });
+
+  it('rejects a group name too long for the column', () => {
+    expect(() =>
+      rowToCreateDto(
+        mcqRow({ probe_group: 'g'.repeat(PROBE_GROUP_MAX_LENGTH + 1) }),
+        objectiveModule,
+      ),
+    ).toThrow(/probe_group/);
   });
 });

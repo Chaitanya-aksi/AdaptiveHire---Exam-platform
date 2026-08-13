@@ -1,25 +1,43 @@
-import { ModuleStopReason, ScoringType } from '../common/enums';
+import {
+  BehavioralPattern,
+  ModuleStopReason,
+  ScoringType,
+} from '../common/enums';
 import { AbilityEstimatorService } from './ability-estimator/ability-estimator.service';
 import {
   ABILITY_CONFIDENCE_THRESHOLD,
+  PROBE_GAP_QUESTIONS,
+  PROBE_MAX_PAIRS,
   STARTING_ABILITY,
   TRAIT_TARGET_QUESTIONS,
 } from './adaptive-engine.constants';
+import { ConsistencyProbeService } from './consistency-probe/consistency-probe.service';
 import type { ModuleRunState } from './engine.types';
 import { EvaluationService } from './evaluation/evaluation.service';
 import { StoppingEngineService } from './stopping-engine/stopping-engine.service';
 import type { McqQuestionDetails } from '../question-bank/entities/mcq-question-details.entity';
-import type { PersonalityQuestionDetails } from '../question-bank/entities/personality-question-details.entity';
+import type {
+  PersonalityOption,
+  PersonalityQuestionDetails,
+} from '../question-bank/entities/personality-question-details.entity';
+import type { Question } from '../question-bank/entities/question.entity';
 
 const estimator = new AbilityEstimatorService();
-const stopping = new StoppingEngineService(estimator);
+const probes = new ConsistencyProbeService();
+const stopping = new StoppingEngineService(estimator, probes);
 const evaluation = new EvaluationService();
+
+/** What `shouldStop` returns when the module carries on. */
+const CONTINUE_DECISION = { stop: false, reason: null };
 
 function objectiveState(
   overrides: Partial<ModuleRunState> = {},
 ): ModuleRunState {
   return {
     moduleId: 'm1',
+    organisationId: 'org-1',
+    assessmentId: 'assessment-1',
+    poolRestricted: false,
     slug: 'aptitude',
     name: 'Aptitude',
     description: null,
@@ -40,6 +58,9 @@ function objectiveState(
     information: 0,
     recentAbilities: [],
     traitTallies: {},
+    patternCounts: {},
+    probes: [],
+    servedProbeGroups: [],
     ...overrides,
   };
 }
@@ -57,6 +78,29 @@ function traitState(overrides: Partial<ModuleRunState> = {}): ModuleRunState {
     ],
     ...overrides,
   });
+}
+
+/**
+ * A personality question's stored details.
+ *
+ * The evaluation service reads only `pattern` and `options`; the rest of the
+ * row exists so the fixture is a real entity rather than a cast through
+ * `unknown`, which would let a genuine shape mismatch through unnoticed.
+ *
+ * Trait keys in these fixtures are arbitrary — evaluation never interprets a
+ * trait name, it only tallies whatever the options declare.
+ */
+function personalityDetails(
+  pattern: BehavioralPattern | null,
+  options: PersonalityOption[],
+): PersonalityQuestionDetails {
+  return {
+    questionId: 'q-fixture',
+    question: undefined as unknown as Question,
+    timesUsed: 0,
+    pattern,
+    options,
+  };
 }
 
 /** Answers `count` questions at the given difficulty, right or wrong. */
@@ -165,7 +209,7 @@ describe('AbilityEstimatorService', () => {
 
   it('rescales trait weights onto 0-100 with the midpoint at neutral', () => {
     const state = traitState();
-    estimator.applyTraitWeights(state.traitTallies, { openness: 2 });
+    estimator.applyTraitWeights(state.traitTallies, { openness: 3 });
     estimator.applyTraitWeights(state.traitTallies, { conscientiousness: 0 });
 
     const scores = estimator.traitScores(state);
@@ -173,10 +217,37 @@ describe('AbilityEstimatorService', () => {
     expect(scores.conscientiousness.score).toBe(50);
   });
 
+  it('leaves a legacy +-2 option short of the extremes', () => {
+    // Weights are authored on a -3..+3 scale now. A legacy Likert option maxes
+    // out at +2, so it can move a trait a long way but never all the way —
+    // an agree/disagree statement is weaker evidence than a behavioural choice.
+    const state = traitState();
+    estimator.applyTraitWeights(state.traitTallies, { openness: 2 });
+
+    expect(estimator.traitScores(state).openness.score).toBe(83.3);
+  });
+
+  it('clamps a weight authored outside the declared range', () => {
+    // Defence in depth against bad authoring: an out-of-range weight must not
+    // surface as a score above 100, which would read as a real result.
+    const state = traitState();
+    estimator.applyTraitWeights(state.traitTallies, { openness: 9 });
+    estimator.applyTraitWeights(state.traitTallies, { conscientiousness: -9 });
+
+    const scores = estimator.traitScores(state);
+    expect(scores.openness.score).toBe(100);
+    expect(scores.conscientiousness.score).toBe(0);
+  });
+
   it('reports an unmeasured trait at neutral with zero confidence', () => {
     const scores = estimator.traitScores(traitState());
 
-    expect(scores.openness).toEqual({ score: 50, confidence: 0 });
+    expect(scores.openness).toEqual({
+      score: 50,
+      confidence: 0,
+      // Never 1: no answers is not the same as perfectly consistent answers.
+      consistency: null,
+    });
   });
 });
 
@@ -272,6 +343,94 @@ describe('StoppingEngineService', () => {
       reason: ModuleStopReason.CONFIDENCE_REACHED,
     });
   });
+
+  /**
+   * A module that stops the question before a repeat probe's twin is due has
+   * spent one of the candidate's questions and reported nothing for it. This is
+   * the only place a probe reaches the stopping decision, so the bounds matter
+   * as much as the behaviour.
+   */
+  describe('holding a module open to close a repeat probe', () => {
+    /** A settled objective module with one probe pair open at `openedAt`. */
+    function settledWithOpenPair(openedAt: number, maxQuestions = 40) {
+      const state = objectiveState({ minQuestions: 5, maxQuestions });
+      answer(state, 1000, true, 30);
+      state.probes.push({
+        group: 'ratio-1',
+        firstQuestionId: 'q1',
+        firstSequence: openedAt,
+        first: { kind: 'objective', isCorrect: true },
+        askedAtAnswered: openedAt,
+        secondQuestionId: null,
+        secondSequence: null,
+        second: null,
+        agreement: null,
+        flipped: null,
+        divergentTraits: [],
+      });
+      return state;
+    }
+
+    it('defers a confidence stop while the twin is still to come', () => {
+      // Opened at 30, so the twin is due at 38 and the module is 30 in.
+      const state = settledWithOpenPair(30);
+
+      expect(stopping.thresholdMet(state)).toBe(true);
+      expect(stopping.shouldStop(state).stop).toBe(false);
+    });
+
+    it('stops as soon as the pair closes', () => {
+      const state = settledWithOpenPair(30);
+      state.probes[0].secondQuestionId = 'q2';
+      state.probes[0].second = { kind: 'objective', isCorrect: true };
+
+      expect(stopping.shouldStop(state)).toEqual({
+        stop: true,
+        reason: ModuleStopReason.CONFIDENCE_REACHED,
+      });
+    });
+
+    it('gives up on a twin that never arrives instead of holding forever', () => {
+      // Opened at 20, so the twin came due at 28 and this module is 30 in — the
+      // question was served and was not the twin, so it is not coming.
+      const state = settledWithOpenPair(20);
+
+      expect(stopping.shouldStop(state)).toEqual({
+        stop: true,
+        reason: ModuleStopReason.CONFIDENCE_REACHED,
+      });
+    });
+
+    it('never defers past the configured maximum', () => {
+      const state = settledWithOpenPair(30, 30);
+
+      expect(state.answered).toBe(30);
+      expect(stopping.shouldStop(state)).toEqual({
+        stop: true,
+        reason: ModuleStopReason.MAX_QUESTIONS,
+      });
+    });
+
+    it('never defers past the clock', () => {
+      const state = settledWithOpenPair(30);
+      state.deadlineAt = 1_000;
+
+      expect(stopping.shouldStop(state, 1_001)).toEqual({
+        stop: true,
+        reason: ModuleStopReason.TIME_EXPIRED,
+      });
+    });
+
+    it('does not let a probe drag a module past its minimum question count', () => {
+      // Below the minimum nothing has been earned yet, so the answer is the
+      // same "continue" it always was — not a probe-driven deferral.
+      const state = objectiveState({ minQuestions: 8 });
+      answer(state, 1000, true, 3);
+
+      expect(stopping.thresholdMet(state)).toBe(false);
+      expect(stopping.shouldStop(state)).toEqual(CONTINUE_DECISION);
+    });
+  });
 });
 
 describe('EvaluationService', () => {
@@ -283,12 +442,172 @@ describe('EvaluationService', () => {
     correctOption: 'B',
   } as McqQuestionDetails;
 
-  const personality = {
-    options: [
-      { key: 'A', text: 'Strongly agree', traitWeights: { openness: 2 } },
-      { key: 'B', text: 'Disagree', traitWeights: { openness: -1 } },
-    ],
-  } as PersonalityQuestionDetails;
+  const personality = personalityDetails(null, [
+    // Legacy Likert shape, hence a null pattern.
+    { key: 'A', text: 'Strongly agree', traitWeights: { openness: 2 } },
+    { key: 'B', text: 'Disagree', traitWeights: { openness: -1 } },
+  ]);
+
+  /** Four options whose weights make the position factors easy to read off. */
+  const ranking = personalityDetails(BehavioralPattern.RANKING, [
+    { key: 'A', text: 'Planning', traitWeights: { conscientiousness: 3 } },
+    { key: 'B', text: 'Leading', traitWeights: { openness: 3 } },
+    { key: 'C', text: 'Creating', traitWeights: { openness: 3 } },
+    {
+      key: 'D',
+      text: 'Risk-taking',
+      traitWeights: { openness: 3, conscientiousness: -3 },
+    },
+  ]);
+
+  describe('ranking', () => {
+    it('weights the first choice fully and the last choice inversely', () => {
+      const { traitWeights } = evaluation.evaluateRanking(ranking, [
+        'A',
+        'B',
+        'C',
+        'D',
+      ]);
+
+      // A first: conscientiousness 3 * +1. D last: conscientiousness -3 * -1,
+      // which also ADDS 3 — ranking "risk-taking" last is a statement in
+      // favour of conscientiousness, not the absence of one. Averaged over the
+      // two options that mention it: +3.
+      expect(traitWeights.conscientiousness).toBeCloseTo(3);
+      // B at +1/3 and C at -1/3 cancel each other out, leaving D last at
+      // 3 * -1; averaged over the three options that mention it: -1.
+      expect(traitWeights.openness).toBeCloseTo(-1);
+    });
+
+    it('keeps a ranking contribution inside the -3..+3 weight scale', () => {
+      // Otherwise one ranking would count for more than one situational
+      // answer, and the pattern mix a candidate happened to get would move
+      // their scores as much as their answers did.
+      for (const order of [
+        ['A', 'B', 'C', 'D'],
+        ['D', 'C', 'B', 'A'],
+        ['B', 'D', 'A', 'C'],
+      ]) {
+        const { traitWeights } = evaluation.evaluateRanking(ranking, order);
+        for (const weight of Object.values(traitWeights)) {
+          expect(Math.abs(weight)).toBeLessThanOrEqual(3);
+        }
+      }
+    });
+
+    it('produces a different profile when the order is reversed', () => {
+      const forward = evaluation.evaluateRanking(ranking, ['A', 'B', 'C', 'D']);
+      const reversed = evaluation.evaluateRanking(ranking, [
+        'D',
+        'C',
+        'B',
+        'A',
+      ]);
+
+      expect(reversed.traitWeights.conscientiousness).toBeCloseTo(
+        -forward.traitWeights.conscientiousness,
+      );
+      expect(reversed.traitWeights.openness).toBeCloseTo(
+        -forward.traitWeights.openness,
+      );
+    });
+
+    it('lets one answer move several traits at once', () => {
+      const { traitWeights } = evaluation.evaluateRanking(ranking, [
+        'D',
+        'A',
+        'B',
+        'C',
+      ]);
+
+      expect(Object.keys(traitWeights).sort()).toEqual([
+        'conscientiousness',
+        'openness',
+      ]);
+    });
+
+    it('rejects an incomplete ranking', () => {
+      expect(() => evaluation.evaluateRanking(ranking, ['A', 'B'])).toThrow(
+        /Rank all 4 options/,
+      );
+    });
+
+    it('rejects a duplicated option', () => {
+      expect(() =>
+        evaluation.evaluateRanking(ranking, ['A', 'B', 'B', 'C']),
+      ).toThrow(/"B" appears more than once/);
+    });
+
+    it('rejects an option that is not on the question', () => {
+      expect(() =>
+        evaluation.evaluateRanking(ranking, ['A', 'B', 'C', 'Z']),
+      ).toThrow(/not one of this question's options/);
+    });
+  });
+
+  describe('consistency', () => {
+    /** Applies a run of weights to one trait, as separate answers. */
+    const answerWith = (state: ModuleRunState, weights: number[]) => {
+      for (const weight of weights) {
+        estimator.applyTraitWeights(state.traitTallies, { openness: weight });
+      }
+    };
+
+    it('reports nothing until a trait has two contributions', () => {
+      const state = traitState();
+      answerWith(state, [3]);
+
+      expect(
+        estimator.traitConsistency(state.traitTallies.openness),
+      ).toBeNull();
+    });
+
+    it('rates identical contributions as fully consistent', () => {
+      const state = traitState();
+      answerWith(state, [2, 2, 2]);
+
+      expect(estimator.traitConsistency(state.traitTallies.openness)).toBe(1);
+    });
+
+    it('drops when the same trait is expressed differently across contexts', () => {
+      // The proposal's own example: collaborative in one scenario, solitary in
+      // another. Not dishonesty — the trait simply did not hold across
+      // situations, and the score carries that caveat.
+      const consistent = traitState();
+      answerWith(consistent, [3, 3]);
+
+      const varied = traitState();
+      answerWith(varied, [3, -1]);
+
+      const high = estimator.traitConsistency(consistent.traitTallies.openness);
+      const low = estimator.traitConsistency(varied.traitTallies.openness);
+
+      expect(low).toBeLessThan(high!);
+      expect(low).toBeGreaterThan(0);
+    });
+
+    it('bottoms out at zero for opposite extremes', () => {
+      const state = traitState();
+      answerWith(state, [3, -3]);
+
+      expect(estimator.traitConsistency(state.traitTallies.openness)).toBe(0);
+    });
+
+    it('averages only the traits with enough evidence', () => {
+      const state = traitState();
+      answerWith(state, [2, 2]);
+      // One lonely contribution: measured for score, ignored for consistency.
+      estimator.applyTraitWeights(state.traitTallies, {
+        conscientiousness: 1,
+      });
+
+      expect(estimator.overallConsistency(state)).toBe(1);
+    });
+
+    it('has no overall figure before any trait qualifies', () => {
+      expect(estimator.overallConsistency(traitState())).toBeNull();
+    });
+  });
 
   it('scores an MCQ against the stored correct option', () => {
     expect(evaluation.evaluateMcq(mcq, 'B').isCorrect).toBe(true);
@@ -314,6 +633,281 @@ describe('EvaluationService', () => {
     expect(evaluation.evaluateUnanswered(ScoringType.TRAIT)).toEqual({
       isCorrect: null,
       traitWeights: {},
+    });
+  });
+});
+
+/**
+ * Repeat probes. The mechanism is entirely about the gap: a twin served too
+ * soon is recognised, and a recognised twin measures memory rather than
+ * consistency. These tests pin the gap, the hold-back, and what a pair of
+ * answers is taken to mean.
+ */
+describe('ConsistencyProbeService', () => {
+  /** Answers a probe question, driving `answered` the way a real run would. */
+  function probeAnswer(
+    state: ModuleRunState,
+    group: string,
+    questionId: string,
+    signature: Parameters<typeof probes.record>[4],
+  ): void {
+    state.answered += 1;
+    probes.markServed(state, group);
+    probes.record(state, group, questionId, state.answered, signature);
+  }
+
+  const correct = { kind: 'objective', isCorrect: true } as const;
+  const wrong = { kind: 'objective', isCorrect: false } as const;
+
+  describe('the gap', () => {
+    it('holds a twin back until the gap has passed', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+
+      // One short of the gap: still nothing owed.
+      state.answered = PROBE_GAP_QUESTIONS;
+      expect(probes.dueTwin(state)).toBeNull();
+      expect(probes.blockedGroups(state)).toEqual(['ratio-1']);
+    });
+
+    it('owes the twin once the gap has passed, and unblocks its group', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+
+      state.answered = PROBE_GAP_QUESTIONS + 1;
+      expect(probes.dueTwin(state)).toEqual({ group: 'ratio-1' });
+      // Unblocked so the selector's base query can reach the twin.
+      expect(probes.blockedGroups(state)).toEqual([]);
+    });
+
+    it('keeps a closed group blocked, so no third question repeats it', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+      state.answered = PROBE_GAP_QUESTIONS + 1;
+      probeAnswer(state, 'ratio-1', 'q2', correct);
+
+      expect(probes.dueTwin(state)).toBeNull();
+      expect(probes.blockedGroups(state)).toEqual(['ratio-1']);
+    });
+
+    it('serves the longest-waiting twin first', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'first', 'q1', correct);
+      probeAnswer(state, 'second', 'q2', correct);
+
+      state.answered = PROBE_GAP_QUESTIONS + 2;
+      expect(probes.dueTwin(state)).toEqual({ group: 'first' });
+    });
+  });
+
+  describe('opening a pair', () => {
+    it('stops at the pair quota', () => {
+      const state = objectiveState();
+      for (let i = 0; i < PROBE_MAX_PAIRS; i += 1) {
+        probeAnswer(state, `group-${i}`, `q${i}`, correct);
+      }
+
+      expect(probes.canOpenPair(state)).toBe(false);
+    });
+
+    it('still blocks a group served past the quota', () => {
+      const state = objectiveState();
+      for (let i = 0; i < PROBE_MAX_PAIRS; i += 1) {
+        probeAnswer(state, `group-${i}`, `q${i}`, correct);
+      }
+      // Served as an ordinary question — no pair opened for it.
+      probeAnswer(state, 'extra', 'q-extra', correct);
+
+      expect(state.probes).toHaveLength(PROBE_MAX_PAIRS);
+      // ...but its twin must still stay out of the paper, or the candidate
+      // meets an obvious repeat that measures nothing.
+      expect(probes.blockedGroups(state)).toContain('extra');
+    });
+
+    it('declines a pair that could not close before the module ends', () => {
+      const state = objectiveState({
+        maxQuestions: 10,
+        answered: 10 - PROBE_GAP_QUESTIONS,
+      });
+
+      expect(probes.canOpenPair(state)).toBe(false);
+    });
+
+    it('opens nothing for a question that timed out unanswered', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', { kind: 'unanswered' });
+
+      expect(state.probes).toEqual([]);
+    });
+  });
+
+  /**
+   * The selector asks for a probe question rather than waiting for one to turn
+   * up. The window is only as wide as `maxQuestions - PROBE_GAP_QUESTIONS`, so
+   * left to chance most runs never opened a pair at all.
+   */
+  describe('asking for an opener', () => {
+    it('wants one straight away, while there is room to close it', () => {
+      expect(probes.wantsNewPair(objectiveState({ maxQuestions: 12 }))).toBe(
+        true,
+      );
+    });
+
+    it('stops wanting one while a pair is already open', () => {
+      const state = objectiveState({ maxQuestions: 12 });
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+
+      // A second pair is welcome if it appears naturally, but chasing one would
+      // crowd out the coverage the probes exist to check.
+      expect(probes.wantsNewPair(state)).toBe(false);
+    });
+
+    it('wants another once the open pair has closed', () => {
+      const state = objectiveState({ maxQuestions: 30 });
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+      state.answered = PROBE_GAP_QUESTIONS + 1;
+      probeAnswer(state, 'ratio-1', 'q2', correct);
+
+      expect(probes.wantsNewPair(state)).toBe(true);
+    });
+
+    it('stops asking once the module is too far along to close one', () => {
+      const state = objectiveState({
+        maxQuestions: 12,
+        answered: 12 - PROBE_GAP_QUESTIONS,
+      });
+
+      expect(probes.wantsNewPair(state)).toBe(false);
+    });
+
+    it('stops asking at the pair quota', () => {
+      const state = objectiveState({ maxQuestions: 40 });
+      for (let i = 0; i < PROBE_MAX_PAIRS; i += 1) {
+        probeAnswer(state, `group-${i}`, `q${i}a`, correct);
+        state.answered += PROBE_GAP_QUESTIONS;
+        probeAnswer(state, `group-${i}`, `q${i}b`, correct);
+      }
+
+      expect(state.probes).toHaveLength(PROBE_MAX_PAIRS);
+      expect(probes.wantsNewPair(state)).toBe(false);
+    });
+  });
+
+  describe('objective agreement', () => {
+    it('reads a flip as the right answer having been a guess', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+      state.answered = PROBE_GAP_QUESTIONS + 1;
+      probeAnswer(state, 'ratio-1', 'q2', wrong);
+
+      const results = probes.results(state);
+      expect(results?.pairs[0].agreement).toBe(0);
+      expect(results?.pairs[0].flipped).toBe(true);
+      expect(results?.agreement).toBe(0);
+      expect(results?.resolved).toBe(1);
+    });
+
+    it('reads two wrong answers as consistent, not as a second failure', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', wrong);
+      state.answered = PROBE_GAP_QUESTIONS + 1;
+      probeAnswer(state, 'ratio-1', 'q2', wrong);
+
+      expect(probes.results(state)?.pairs[0].agreement).toBe(1);
+      expect(probes.results(state)?.pairs[0].flipped).toBe(false);
+    });
+  });
+
+  describe('trait agreement', () => {
+    const traitSignature = (weights: Record<string, number>) =>
+      ({ kind: 'trait', weights }) as const;
+
+    it('scores an identical choice as full agreement', () => {
+      expect(
+        probes.compare(
+          traitSignature({ teamwork: 3 }),
+          traitSignature({ teamwork: 3 }),
+        ).agreement,
+      ).toBe(1);
+    });
+
+    it('scores opposite extremes as none', () => {
+      const { agreement, divergentTraits } = probes.compare(
+        traitSignature({ teamwork: 3 }),
+        traitSignature({ teamwork: -3 }),
+      );
+
+      expect(agreement).toBe(0);
+      expect(divergentTraits).toEqual([
+        { key: 'teamwork', first: 3, second: -3 },
+      ]);
+    });
+
+    it('averages across the traits both answers touched', () => {
+      // teamwork identical (1.0), empathy 3 apart on a 6-point span (0.5).
+      const { agreement, divergentTraits } = probes.compare(
+        traitSignature({ teamwork: 2, empathy: 3 }),
+        traitSignature({ teamwork: 2, empathy: 0 }),
+      );
+
+      expect(agreement).toBe(0.75);
+      // Only the trait that actually moved is called out.
+      expect(divergentTraits).toEqual([
+        { key: 'empathy', first: 3, second: 0 },
+      ]);
+    });
+
+    it('ignores a trait only one of the twins weights', () => {
+      // Authoring drift, not candidate inconsistency: averaging in a phantom
+      // zero for `integrity` would report the author's mistake as the
+      // candidate's contradiction.
+      expect(
+        probes.compare(
+          traitSignature({ teamwork: 3, integrity: 3 }),
+          traitSignature({ teamwork: 3 }),
+        ).agreement,
+      ).toBe(1);
+    });
+
+    it('has no figure when the twins share no trait at all', () => {
+      expect(
+        probes.compare(
+          traitSignature({ teamwork: 3 }),
+          traitSignature({ integrity: 3 }),
+        ).agreement,
+      ).toBeNull();
+    });
+  });
+
+  describe('uncomparable pairs', () => {
+    it('does not score a timed-out twin as a disagreement', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+      state.answered = PROBE_GAP_QUESTIONS + 1;
+      probeAnswer(state, 'ratio-1', 'q2', { kind: 'unanswered' });
+
+      const results = probes.results(state);
+      // Null, never zero: running out of time is not inconsistency.
+      expect(results?.pairs[0].agreement).toBeNull();
+      expect(results?.agreement).toBeNull();
+      expect(results?.resolved).toBe(0);
+      expect(results?.unresolved).toBe(1);
+    });
+
+    it('reports a pair whose twin never came round as unresolved', () => {
+      const state = objectiveState();
+      probeAnswer(state, 'ratio-1', 'q1', correct);
+
+      expect(probes.results(state)).toEqual({
+        pairs: state.probes,
+        agreement: null,
+        resolved: 0,
+        unresolved: 1,
+      });
+    });
+
+    it('has no results at all when no pair was opened', () => {
+      expect(probes.results(objectiveState())).toBeNull();
     });
   });
 });

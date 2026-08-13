@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { Login } from './routes/Login';
 import { Profile } from './routes/Profile';
 import { RecruiterLogin } from './routes/RecruiterLogin';
+import { RecruiterRegister } from './routes/RecruiterRegister';
 import { Register } from './routes/Register';
 import { Assessments } from './routes/candidate/Assessments';
 import { TakeAssessment } from './routes/candidate/TakeAssessment';
@@ -39,6 +40,11 @@ const People = lazy(() =>
 const AdminAssessments = lazy(() =>
   import('./routes/recruiter-admin/Assessments').then((m) => ({
     default: m.Assessments,
+  })),
+);
+const AssessmentQuestions = lazy(() =>
+  import('./routes/recruiter-admin/AssessmentQuestions').then((m) => ({
+    default: m.AssessmentQuestions,
   })),
 );
 const InviteCandidates = lazy(() =>
@@ -108,6 +114,14 @@ export default function App() {
                   </GuestOnly>
                 }
               />
+              <Route
+                path="/recruiter/register"
+                element={
+                  <GuestOnly>
+                    <RecruiterRegister />
+                  </GuestOnly>
+                }
+              />
 
               <Route
                 path="/admin"
@@ -123,6 +137,10 @@ export default function App() {
                 <Route path="modules" element={<Modules />} />
                 <Route path="people" element={<People />} />
                 <Route path="assessments" element={<AdminAssessments />} />
+                <Route
+                  path="assessments/:id/questions"
+                  element={<AssessmentQuestions />}
+                />
                 <Route
                   path="assessments/:id/invite"
                   element={<InviteCandidates />}

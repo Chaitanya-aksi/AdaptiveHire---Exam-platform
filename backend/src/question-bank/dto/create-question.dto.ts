@@ -7,6 +7,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { QuestionStatus } from '../../common/enums';
@@ -36,6 +37,23 @@ export class CreateQuestionDto {
   @IsString({ each: true })
   @Length(1, 40, { each: true })
   tags?: string[];
+
+  /**
+   * Twins this question with the others carrying the same group, so the engine
+   * can serve one of them well after the other and compare the two answers.
+   *
+   * Both twins must be in the same module and must be written as genuinely
+   * different questions — a reworded stem is not enough on its own if the
+   * options still read the same, because a candidate who recognises the repeat
+   * will simply reproduce their first answer.
+   *
+   * An empty string is allowed and means "not twinned" — that is how an update
+   * clears an existing pairing.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  probeGroup?: string;
 
   @IsOptional()
   @ValidateNested()

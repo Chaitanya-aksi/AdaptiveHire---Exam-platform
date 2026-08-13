@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { CurrentOrg } from '../../common/decorators/current-org.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums';
@@ -35,9 +36,13 @@ export class BulkImportController {
         .build({ fileIsRequired: true }),
     )
     file: Express.Multer.File,
+    @CurrentOrg() organisationId: string,
     @CurrentUser('id') userId: string,
   ) {
-    return this.bulkImport.importFile(file.buffer, file.originalname, userId);
+    return this.bulkImport.importFile(file.buffer, file.originalname, {
+      organisationId,
+      createdById: userId,
+    });
   }
 
   /** Downloadable starter sheet so recruiters get the columns right. */

@@ -39,9 +39,23 @@ export class Report {
   @Column({ type: 'enum', enum: HiringRecommendation })
   hiringRecommendation!: HiringRecommendation;
 
-  /** Normalised 0-100 roll-up across objective modules, for list sorting. */
+  /**
+   * The headline 0-100 figure the recommendation was banded on: `abilityScore`
+   * and `behavioralScore` blended. Kept for list sorting.
+   */
   @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
   overallScore!: string | null;
+
+  /**
+   * The two halves behind `overallScore`, stored separately so the attempts
+   * list can show where a blended figure came from without rebuilding the whole
+   * report. Either is null when the assessment had no section of that kind.
+   */
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  abilityScore!: string | null;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  behavioralScore!: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   generatedAt!: Date | null;
