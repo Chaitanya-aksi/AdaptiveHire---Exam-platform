@@ -736,6 +736,32 @@ button.link.danger-link { color: var(--danger); }
   line-height: 1.58;
 }
 
+/* ── Forms, app-wide ──────────────────────────────────────────────────────
+ *
+ * `.field` is shared by every form in the product — assessments, the question
+ * editor, profile, people, both register pages — so its label/input layout has to
+ * be defined globally. The auth pages restyle it for their dark panel below;
+ * those rules are scoped under `.auth-left`, so they are both more specific and
+ * later in the file and continue to win.
+ *
+ * Without these, a label and its input sit side by side on one line and the input
+ * shrinks to its content, because that is simply what a block label and an inline
+ * input do unaided.
+ */
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.field input { width: 100%; padding: 10px 12px; }
+
+/* The auth panel spaces label from input with a flex `gap` on `.field` instead,
+ * and does not reset this margin — so without the override the two would add up
+ * there and only on the labels that aren't inside a `.field-header`. Keep the
+ * sign-in page rendering exactly as its own rules intend. */
+.auth-left .field label { margin-bottom: 0; }
+
 /* -- Form (dark-context overrides) -------------------------------------------- */
 .auth-left .auth-form {
   display: flex;
