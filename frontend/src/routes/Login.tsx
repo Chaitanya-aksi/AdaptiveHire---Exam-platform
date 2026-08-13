@@ -12,7 +12,7 @@ export function Login() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to see the assessments you've been invited to take."
+      subtitle="Sign in to access your assessment account."
       footer={
         <>
           <div>
@@ -27,17 +27,31 @@ export function Login() {
       <SignInForm portal="candidate" />
 
       {/*
-        Dev convenience only. Gated on import.meta.env.DEV so the bundler drops
-        it from a production build entirely — working credentials printed on a
-        public sign-in page is not something to rely on remembering to remove.
+        Dev-only: gated on import.meta.env.DEV so the bundler drops it from a
+        production build entirely — working credentials printed on a public
+        sign-in page is not something to rely on remembering to remove.
+
+        The recruiter account is deliberately not listed. This form is candidate-
+        only now and refuses a recruiter with a 403, so offering that credential
+        here would hand out one that cannot work.
       */}
-      {/* Only the candidate account: this form refuses a recruiter now, so
-          listing one here would just hand out a credential that fails. */}
       {import.meta.env.DEV && (
-        <div className="hint">
-          Seeded account — password <code>ChangeMe!2345</code>
-          <br />
-          <code>candidate@adaptivehire.local</code> · candidate
+        <div className="auth-demo">
+          <p className="auth-demo-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={12} height={12} aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            Demo access
+          </p>
+          <div className="auth-demo-row">
+            <span className="auth-demo-key">Password</span>
+            <code>ChangeMe!2345</code>
+          </div>
+          <div className="auth-demo-row">
+            <span className="auth-demo-key">Candidate</span>
+            <code>candidate@adaptivehire.local</code>
+          </div>
         </div>
       )}
     </AuthShell>
