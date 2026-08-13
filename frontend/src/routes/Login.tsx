@@ -10,7 +10,7 @@ export function Login() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to see the assessments you've been invited to take."
+      subtitle="Sign in to access your assessment account."
       footer={
         <>
           <div>
@@ -30,7 +30,7 @@ export function Login() {
         public sign-in page is not something to rely on remembering to remove.
       */}
       {import.meta.env.DEV && (
-        <div className="hint">
+        <div className="auth-demo">
           Seeded accounts — password <code>ChangeMe!2345</code>
           <br />
           <code>candidate@adaptivehire.local</code> · candidate
