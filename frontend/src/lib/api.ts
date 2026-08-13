@@ -4,7 +4,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api';
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3002/api';
 
 /**
  * The access token is deliberately kept in memory only. The refresh token

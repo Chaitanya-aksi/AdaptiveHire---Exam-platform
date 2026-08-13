@@ -2,15 +2,15 @@ import { config as loadEnv } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { entities } from './entities';
 
-// The repo-root .env is the single source of truth for both the host and the
-// compose stack; fall back to a backend-local one if someone prefers that.
-loadEnv({ path: '../.env' });
-loadEnv();
+loadEnv({ path: '../.env', override: true });
+loadEnv({ path: '.env', override: true });
 
-/**
- * Used by the TypeORM CLI only (migration:generate / migration:run).
- * The running app builds its own DataSource from ConfigService.
- */
+console.log('DATABASE CONFIG:');
+console.log('POSTGRES_HOST:', process.env.POSTGRES_HOST);
+console.log('POSTGRES_PORT:', process.env.POSTGRES_PORT);
+console.log('POSTGRES_USER:', process.env.POSTGRES_USER);
+console.log('POSTGRES_DB:', process.env.POSTGRES_DB);
+
 export default new DataSource({
   type: 'postgres',
   host: process.env.POSTGRES_HOST ?? 'localhost',
