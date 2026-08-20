@@ -36,8 +36,16 @@ export class Report {
   @Column({ type: 'jsonb', default: () => "'[]'" })
   weaknesses!: string[];
 
-  @Column({ type: 'enum', enum: HiringRecommendation })
-  hiringRecommendation!: HiringRecommendation;
+  /**
+   * Null when the attempt produced no score to band.
+   *
+   * Nullable rather than defaulting to `borderline`: that band is a finding —
+   * "the evidence puts this candidate in the middle" — and an attempt with no
+   * evidence has not produced one. Storing it anyway made an unanswered test
+   * indistinguishable, in a list, from one somebody genuinely scraped through.
+   */
+  @Column({ type: 'enum', enum: HiringRecommendation, nullable: true })
+  hiringRecommendation!: HiringRecommendation | null;
 
   /**
    * The headline 0-100 figure the recommendation was banded on: `abilityScore`

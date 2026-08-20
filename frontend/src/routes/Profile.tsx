@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { SubNav } from '../components/SubNav';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../lib/auth';
 import { usersApi } from '../lib/endpoints';
@@ -29,6 +30,12 @@ function memberSince(iso: string): string {
   });
 }
 
+/** Same two tabs as `Settings.tsx`, which mounts the other one. */
+const SETTINGS_TABS = [
+  { to: '/admin/settings', label: 'Workspace', end: true },
+  { to: '/admin/settings/account', label: 'My account' },
+];
+
 /** Shared "My account" screen — mounted for both recruiter and candidate. */
 export function Profile() {
   const { user, updateUser } = useAuth();
@@ -57,7 +64,8 @@ export function Profile() {
         setName(me.fullName);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setLoadError(describeError(err, 'Could not load your profile.'));
+        if (!cancelled)
+          setLoadError(describeError(err, 'Could not load your profile.'));
       });
     return () => {
       cancelled = true;
@@ -113,13 +121,18 @@ export function Profile() {
   };
 
   const display = profile ?? user;
+  const recruiter = display?.role === 'recruiter_admin';
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>My account</h1>
+          <h1>{recruiter ? 'Settings' : 'My account'}</h1>
           <p>Manage your profile and sign-in details.</p>
+          {/* Tabs only for a recruiter. A candidate has no workspace to
+              configure, so this is their whole account page and a strip with
+              one usable tab on it would be furniture. */}
+          {recruiter && <SubNav items={SETTINGS_TABS} />}
         </div>
       </div>
 
@@ -225,11 +238,15 @@ export function Profile() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 style={{ width: '100%', maxWidth: 360 }}
               />
-              {confirmPassword.length > 0 && confirmPassword !== newPassword && (
-                <p className="small" style={{ margin: '6px 0 0', color: 'var(--danger)' }}>
-                  Passwords don&rsquo;t match.
-                </p>
-              )}
+              {confirmPassword.length > 0 &&
+                confirmPassword !== newPassword && (
+                  <p
+                    className="small"
+                    style={{ margin: '6px 0 0', color: 'var(--danger)' }}
+                  >
+                    Passwords don&rsquo;t match.
+                  </p>
+                )}
             </div>
           </div>
           <div className="card-foot">

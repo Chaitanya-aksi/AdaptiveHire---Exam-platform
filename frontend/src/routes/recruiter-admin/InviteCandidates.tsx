@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Modal } from '../../components/Modal';
 import { assessmentsApi, invitationsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
+import {
+  WINDOW_TONE,
+  describeWindow,
+  fromLocalInput,
+  toLocalInput,
+} from '../../lib/schedule';
 import type {
   Assessment,
   AssessmentInvitation,
@@ -27,6 +34,20 @@ export function InviteCandidates() {
   const [added, setAdded] = useState<string | null>(null);
   /** Which invitation is mid-remove, so only its own buttons disable. */
   const [pendingId, setPendingId] = useState<string | null>(null);
+
+  /**
+   * The invitation whose window is being edited, and the two boxes.
+   *
+   * Held as `datetime-local` strings — local wall clock, no zone — and
+   * converted on save. `lib/schedule.ts` explains why that conversion is not
+   * written inline.
+   */
+  const [rescheduling, setRescheduling] = useState<AssessmentInvitation | null>(
+    null,
+  );
+  const [windowOpens, setWindowOpens] = useState('');
+  const [windowCloses, setWindowCloses] = useState('');
+  const [savingWindow, setSavingWindow] = useState(false);
 
   const refreshInvites = async () => {
     setInvites(await invitationsApi.forAssessment(id));
@@ -54,7 +75,9 @@ export function InviteCandidates() {
       setResult(outcome);
       await refreshInvites();
     } catch (err) {
-      setError(describeError(err, 'The upload failed. Check the file and try again.'));
+      setError(
+        describeError(err, 'The upload failed. Check the file and try again.'),
+      );
     } finally {
       setBusy(false);
     }
@@ -116,6 +139,51 @@ export function InviteCandidates() {
       setError(describeError(err, 'Could not revoke that invitation.'));
     } finally {
       setPendingId(null);
+    }
+  };
+
+  /**
+   * Opens the dialog seeded with the *override*, not the effective window.
+   *
+   * Showing the round's inherited dates in the boxes would be worse than
+   * empty: saving without touching them would silently copy the round's
+   * schedule onto this one candidate as a private override, and the next
+   * change to the round would then skip them.
+   */
+  const openReschedule = (invite: AssessmentInvitation) => {
+    setRescheduling(invite);
+    setWindowOpens(toLocalInput(invite.window?.overrideOpensAt ?? null));
+    setWindowCloses(toLocalInput(invite.window?.overrideExpiresAt ?? null));
+    setError(null);
+    setAdded(null);
+  };
+
+  const saveWindow = async () => {
+    if (!rescheduling) return;
+
+    const opensAt = fromLocalInput(windowOpens);
+    const expiresAt = fromLocalInput(windowCloses);
+
+    setSavingWindow(true);
+    setError(null);
+
+    try {
+      // Both ends every time, nulls included: an emptied box means "clear this
+      // override", and omitting the field would leave the old value in place.
+      await invitationsApi.reschedule(rescheduling.id, { opensAt, expiresAt });
+      await refreshInvites();
+      setAdded(
+        opensAt || expiresAt
+          ? `${rescheduling.email} now has their own window.`
+          : `${rescheduling.email} is back on the round's own dates.`,
+      );
+      setRescheduling(null);
+    } catch (err) {
+      // The API names the specific problem — a window that closes before it
+      // opens — so pass its message through rather than a generic one.
+      setError(describeError(err, 'Could not change that window.'));
+    } finally {
+      setSavingWindow(false);
     }
   };
 
@@ -209,7 +277,9 @@ export function InviteCandidates() {
               e.target.value = '';
             }}
           />
-          <strong>{busy ? 'Sending invitations…' : 'Drop a candidate sheet here'}</strong>
+          <strong>
+            {busy ? 'Sending invitations…' : 'Drop a candidate sheet here'}
+          </strong>
           <span className="muted small">
             or click to browse — columns: name, email · .csv or .xlsx
           </span>
@@ -233,7 +303,9 @@ export function InviteCandidates() {
           <div className="card">
             <div className="card-head">
               <h2>Upload result</h2>
-              <span className={`badge ${result.failed === 0 ? 'active' : 'draft'}`}>
+              <span
+                className={`badge ${result.failed === 0 ? 'active' : 'draft'}`}
+              >
                 {result.invited} invited
               </span>
             </div>
@@ -259,7 +331,9 @@ export function InviteCandidates() {
                   <div className="label">Failed</div>
                   <div
                     className="value"
-                    style={{ color: result.failed ? 'var(--danger)' : undefined }}
+                    style={{
+                      color: result.failed ? 'var(--danger)' : undefined,
+                    }}
                   >
                     {result.failed}
                   </div>
@@ -310,7 +384,8 @@ export function InviteCandidates() {
                     <th>Email</th>
                     <th style={{ width: 160 }}>Registered</th>
                     <th style={{ width: 130 }}>Status</th>
-                    <th style={{ width: 110 }} />
+                    <th style={{ width: 200 }}>Can sit</th>
+                    <th style={{ width: 190 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -337,6 +412,55 @@ export function InviteCandidates() {
                           <span className="badge">{invite.status}</span>
                         </td>
                         <td>
+                          {invite.window ? (
+                            <div className="inv-window">
+                              <span
+                                className={`ci-pill ci-pill--${WINDOW_TONE[invite.window.state]}`}
+                              >
+                                {invite.window.state === 'open'
+                                  ? 'Open'
+                                  : invite.window.state === 'not_yet'
+                                    ? 'Not yet'
+                                    : 'Closed'}
+                              </span>
+                              {/* Null when the window is open and unbounded —
+                                  "no deadline" is not worth a line. */}
+                              {describeWindow(invite.window, 'recruiter') && (
+                                <span className="muted small">
+                                  {describeWindow(invite.window, 'recruiter')}
+                                </span>
+                              )}
+                              {(invite.window.overrideOpensAt ||
+                                invite.window.overrideExpiresAt) && (
+                                <span
+                                  className="badge accent"
+                                  title="This candidate has their own dates, separate from the round"
+                                >
+                                  Rescheduled
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="muted small">—</span>
+                          )}
+                        </td>
+                        <td className="inv-actions">
+                          {/* Offered even after they have started: the window
+                              is only checked on the way in, so moving it can
+                              never interrupt an attempt already running. It is
+                              also exactly when it is needed — the candidate
+                              whose power went is by definition one who
+                              started. */}
+                          {invite.status !== 'revoked' && (
+                            <button
+                              type="button"
+                              className="link"
+                              disabled={busyRow}
+                              onClick={() => openReschedule(invite)}
+                            >
+                              Reschedule
+                            </button>
+                          )}
                           {invite.status === 'revoked' ? (
                             <span className="muted small">Withdrawn</span>
                           ) : started ? (
@@ -368,6 +492,70 @@ export function InviteCandidates() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={rescheduling !== null}
+        title="Reschedule this candidate"
+        onClose={savingWindow ? () => undefined : () => setRescheduling(null)}
+        footer={
+          <>
+            <button
+              onClick={() => setRescheduling(null)}
+              disabled={savingWindow}
+            >
+              Cancel
+            </button>
+            <button
+              className="primary"
+              onClick={() => void saveWindow()}
+              disabled={savingWindow}
+            >
+              {savingWindow ? 'Saving…' : 'Save window'}
+            </button>
+          </>
+        }
+      >
+        <p className="muted small" style={{ marginTop: 0 }}>
+          {rescheduling?.email} only. Everyone else stays on the round's own
+          dates.
+        </p>
+
+        <div className="field">
+          <label htmlFor="resched-opens">Opens</label>
+          <input
+            id="resched-opens"
+            type="datetime-local"
+            value={windowOpens}
+            disabled={savingWindow}
+            onChange={(e) => setWindowOpens(e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="resched-closes">Closes</label>
+          <input
+            id="resched-closes"
+            type="datetime-local"
+            value={windowCloses}
+            disabled={savingWindow}
+            onChange={(e) => setWindowCloses(e.target.value)}
+          />
+        </div>
+
+        <p className="field-note">
+          Empty means inherit that end from the round — clearing both puts them
+          back on its schedule. Times are in your own timezone.
+        </p>
+
+        {/* Said plainly because it is the question a recruiter reaching for
+            this button is actually asking. The window governs whether they can
+            start, and one invitation allows one attempt: moving the dates for
+            somebody who already submitted will not let them sit it again. */}
+        <p className="field-note">
+          This controls when they can <em>start</em>. Someone who has already
+          submitted an attempt cannot re-sit it by moving these dates.
+        </p>
+      </Modal>
     </>
   );
 }

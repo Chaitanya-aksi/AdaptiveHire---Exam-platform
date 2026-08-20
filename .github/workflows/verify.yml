@@ -1,0 +1,113 @@
+name: verify
+
+# Runs the backend's own gate — build, lint, unit tests, e2e — against a fresh
+# database on every change that can reach main.
+#
+# `npm run verify` is the same command you run locally, deliberately: CI should
+# not have its own private definition of "passing" that can drift from yours.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend verify
+    runs-on: ubuntu-latest
+
+    # Same images as docker-compose.yml, so a failure here is a real failure
+    # rather than a version difference between CI and a developer's machine.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adaptivehire
+          POSTGRES_PASSWORD: adaptivehire
+          POSTGRES_DB: adaptivehire
+        ports:
+          - 5432:5432
+        # Without this the first migration can start before Postgres accepts
+        # connections, which fails as a confusing ECONNREFUSED.
+        options: >-
+          --health-cmd "pg_isready -U adaptivehire -d adaptivehire"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      NODE_ENV: test
+
+      # The runner reaches the service container on the standard port. This is
+      # deliberately not the 5434 in .env.example — that number only exists to
+      # keep local Postgres off the default port.
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: adaptivehire
+      POSTGRES_PASSWORD: adaptivehire
+      POSTGRES_DB: adaptivehire
+
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+
+      # Throwaway values for a database that is destroyed with the runner.
+      # Not secrets, and deliberately not read from repository secrets — a
+      # public workflow that needs no real credentials should visibly need none.
+      JWT_ACCESS_SECRET: ci-access-secret-not-a-real-key
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-a-real-key
+
+      # Left empty so no real inbox is ever reachable from CI. Note this does
+      # not currently mean "log only": with no MAIL_HOST, MailService creates an
+      # Ethereal test account over the network and only falls back to logging if
+      # that fails. Nothing is delivered either way, but it is a network call CI
+      # does not need — see the note in the handover about a MAIL_TRANSPORT flag.
+      MAIL_HOST: ''
+
+      # The e2e suites sign in as the seeded accounts created below.
+      SEED_PASSWORD: ChangeMe!2345
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Node you develop on. `engines` is unset in package.json,
+          # so this workflow is currently the only place the version is pinned —
+          # if you add `engines`, make the two agree.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The e2e suites verify a seeded database — they sign in as the seeded
+      # recruiter and candidate rather than creating them, so both steps below
+      # have to run before verify, and in this order.
+      - name: Run migrations
+        run: npm run migration:run
+
+      - name: Seed reference data and test accounts
+        run: npm run seed
+
+      - name: Verify (build, lint, unit, e2e)
+        run: npm run verify

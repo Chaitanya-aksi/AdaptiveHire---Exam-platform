@@ -405,6 +405,221 @@ tr.row-link:hover .go { color: var(--accent); }
   border-bottom: 1px solid var(--border);
 }
 
+/* ── Forced password change ───────────────────────────────────────────────
+ * Its own centred screen with no navigation: the account is signed in but
+ * cannot go anywhere else until this is done. */
+.gate-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.gate-card { width: 100%; max-width: 460px; }
+.gate-card h1 { font-size: 19px; margin: 0; }
+
+/* ── Assessment list ──────────────────────────────────────────────────────
+ *
+ * Replaces a three-column table whose fixed 260px action column forced four
+ * controls onto two lines while the middle of the row sat empty. A flex row
+ * gives the actions whatever width they need and hands the slack back to the
+ * content, which now carries the subjects, question range and time limit.
+ */
+.a-list { list-style: none; margin: 0; padding: 0; }
+
+.a-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--border);
+  /* Anchor for the stretched title link below. */
+  position: relative;
+  /* The inset shadow draws an accent bar on hover without a layout shift —
+     a left border would nudge the whole row sideways by 3px. */
+  transition: background 0.14s ease, box-shadow 0.14s ease;
+}
+.a-row:last-child { border-bottom: 0; }
+/* `:focus-within` so a keyboard user gets exactly what the mouse gets — the row
+ * is the target either way. */
+.a-row:hover,
+.a-row:focus-within {
+  background: var(--bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* `min-width: 0` is what lets the description ellipsis inside a flex child;
+   without it the text forces the row wider instead of truncating. */
+.a-main { min-width: 0; }
+
+.a-title-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.a-title-line strong { font-size: 15px; }
+
+/* The title is the link into the assessment's overview, and its `::after`
+ * stretches that single anchor across the entire row — so anywhere you hover is
+ * somewhere you can click, without the row becoming a div with a click handler.
+ *
+ * Styled as text until hovered: a list of 14 blue titles reads as a wall of
+ * links, and the row's own hover state is what advertises it. */
+.a-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.a-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.a-row:hover .a-title,
+.a-row:focus-within .a-title {
+  color: var(--accent);
+}
+.a-title:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* Slides in on hover, mirroring `.tile-go` on the dashboard. Out of the flow's
+ * way via a fixed gap, so the title text never shifts. */
+.a-go {
+  color: var(--accent);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+.a-row:hover .a-go,
+.a-row:focus-within .a-go {
+  opacity: 1;
+  transform: translateX(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .a-go { transition: none; }
+}
+
+/* Headline figures for one assessment. `.grid` exists but is tuned for the
+ * dashboard's wider tiles; these carry a label, a number and a line of detail. */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.stat-tile {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.stat-tile dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+.stat-tile dd {
+  margin: 5px 0 0;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.15;
+}
+.stat-tile p { margin: 5px 0 0; }
+
+.a-desc {
+  margin: 3px 0 0;
+  font-size: 13px;
+  max-width: 68ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.a-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 16px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.a-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.a-meta svg { flex-shrink: 0; opacity: 0.75; }
+
+/* Above the title's stretched `::after`, or these would all navigate to the
+ * overview instead of doing their own job. */
+.a-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* A square, text-free control. Quiet until hovered, so a destructive action
+ * doesn't shout from every row of the list. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+/* Named `destructive`, not `danger`, on purpose: `.danger` already means "filled
+ * red button" here, and `button.danger:hover:not(:disabled)` outranks any
+ * two-class rule, so reusing the name painted this square solid red. A separate
+ * name states the intent and sidesteps a specificity fight that the next person
+ * to touch either rule would have to re-solve. */
+
+.icon-button:hover { background: var(--bg); color: var(--text); }
+.icon-button.destructive:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger-soft);
+  color: var(--danger);
+}
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+}
+
+/* Narrow screens: actions drop under the content rather than squeezing it. */
+@media (max-width: 860px) {
+  .a-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .a-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .a-desc { white-space: normal; }
+}
+
+/* Right-aligned action cell — the row's controls sit away from its content. */
+td.right { text-align: right; }
+
 input, select, textarea {
   font: inherit;
   color: inherit;
@@ -458,8 +673,10 @@ button.primary:hover:not(:disabled) { background: var(--accent-hover); }
   background: var(--surface);
   color: var(--text);
   text-decoration: none;
+  /* A button that wraps mid-label stops looking like a button. */
+  white-space: nowrap;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 .button:hover { background: var(--bg); }
 
@@ -469,6 +686,41 @@ button.primary:hover:not(:disabled) { background: var(--accent-hover); }
   color: #fff;
 }
 .button.primary:hover { background: var(--accent-hover); }
+
+/* Soft-accent variant: tinted at rest, filled on hover.
+ *
+ * For the one action that matters in a table row. A solid `.primary` here would
+ * stack twenty saturated blue blocks down a single column and drown out the data
+ * the table exists to show; a tint carries the same "this is the way in" signal
+ * at a fraction of the weight, and committing to the full accent on hover makes
+ * the target unmistakable once you are on it.
+ *
+ * `border-color` matches the background at every step — a grey border around a
+ * coloured fill is what makes a button look unfinished. */
+.button.soft {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.button.soft:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  /* Pure white, not an off-white: anything tinted reads as muddy on a
+     saturated fill. */
+  color: #fff;
+}
+.button.soft:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Nudges on hover, so the button feels like it goes somewhere. */
+.button-go { transition: transform 0.14s ease; }
+.button:hover .button-go { transform: translateX(2px); }
+@media (prefers-reduced-motion: reduce) {
+  .button-go { transition: none; }
+}
 
 button.link {
   border: 0;
@@ -937,6 +1189,22 @@ button.link.danger-link { color: var(--danger); }
   line-height: 1.5;
 }
 .auth-error-icon { flex-shrink: 0; margin-top: 1px; color: #f87171; }
+
+/* The same shape in green, for the one thing the auth panel confirms rather
+   than refuses: a password that has just been reset. */
+.auth-ok-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 14px;
+  background: rgb(34 197 94 / 11%);
+  border: 1px solid rgb(34 197 94 / 28%);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #9ee7b8;
+  line-height: 1.5;
+}
+.auth-ok-alert svg { flex-shrink: 0; margin-top: 1px; color: #4ade80; }
 
 /* Account links */
 .al-links {
@@ -2576,7 +2844,14 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   flex-direction: column;
   gap: 14px;
   align-items: flex-start;
-  padding: 26px;
+  padding: 28px;
+  /* Same elevation and radius as the warm-up card that follows it — these are
+     two screens of one flow, and a step change in finish between them reads as
+     two different products. */
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(16 24 40 / 6%),
+    0 12px 32px -12px rgb(16 24 40 / 18%);
 }
 .assess-intro p, .assess-done p { margin: 0; }
 .assess-intro .alert { margin: 0; }
@@ -2714,4 +2989,2471 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   display: flex;
   flex-direction: column;
   gap: 9px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CANDIDATE PORTAL
+   ─────────────────────────────────────────────────────────────────────────
+   The candidate shell mirrors the sign-in pages on purpose: the same gradient
+   panel, orbs and brand lockup, so signing in does not land you in what looks
+   like a different product. It is a separate shell from `.shell` / `.topbar`,
+   which the recruiter side keeps — a candidate has two destinations, and a nav
+   bar built to carry six of them left the page looking half-finished.
+
+   Layout: the page scrolls normally and the panel sticks beside it, so the
+   greeting and the counts stay put while a long list moves past them.
+
+   It used to pin `.cand-shell` to `100vh` and scroll `.cand-content` inside
+   that, which looked identical and behaved worse: the wheel only worked with
+   the pointer over the right-hand column, the browser's own scrollbar was gone,
+   and anything taller than the viewport in the panel was simply unreachable.
+   Normal document scroll plus `position: sticky` gets the same picture with
+   none of that.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.cand-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1000px) {
+  .cand-shell { grid-template-columns: minmax(320px, 34%) 1fr; }
+}
+
+/* ── Left: brand panel ─────────────────────────────────────────────────── */
+
+/* Stretches to the full page height — on a long page the gradient has to reach
+   the bottom, or the column ends in a band of page background. Deliberately no
+   `overflow` here: that would make it a scroll ancestor and the sticky box
+   inside would stop sticking. `.cand-panel-bg` does its own clipping. */
+.cand-panel {
+  position: relative;
+  background: linear-gradient(145deg,
+    #1A0F6E 0%,
+    #3420A8 28%,
+    #6235D5 62%,
+    #9255F0 100%);
+  color: #fff;
+}
+
+.cand-panel-sticky {
+  position: relative;
+  overflow: hidden;
+}
+
+@media (min-width: 1000px) {
+  .cand-panel-sticky {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+}
+
+.cand-panel-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cand-orb { position: absolute; border-radius: 50%; }
+.cand-orb--1 {
+  width: 640px;
+  height: 640px;
+  top: -260px;
+  right: -220px;
+  background: radial-gradient(circle, rgba(155,100,255,0.18) 0%, transparent 62%);
+}
+.cand-orb--2 {
+  width: 520px;
+  height: 520px;
+  bottom: -220px;
+  left: -180px;
+  background: radial-gradient(circle, rgba(38,20,120,0.55) 0%, transparent 62%);
+}
+.cand-orb--3 {
+  width: 320px;
+  height: 320px;
+  top: 44%;
+  right: -60px;
+  background: radial-gradient(circle, rgba(146,85,240,0.14) 0%, transparent 60%);
+  animation: ar-breathe 12s ease-in-out infinite alternate;
+}
+
+.cand-arc {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 5%);
+}
+.cand-arc--1 { width: 780px; height: 780px; top: -280px; left: -260px; }
+.cand-arc--2 { width: 560px; height: 560px; bottom: -240px; right: -200px; }
+
+.cand-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 1.8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 1.8%) 1px, transparent 1px);
+  background-size: 52px 52px;
+}
+
+.cand-panel-inner {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 38px 34px 32px 40px;
+  /* Only bites on a short viewport, where the nav would otherwise sit below
+     the fold of a panel that cannot scroll with the page. */
+  overflow-y: auto;
+}
+
+/* -- Brand lockup ------------------------------------------------------- */
+
+.cand-brand { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.cand-brand-row { display: flex; align-items: center; gap: 11px; }
+
+.cand-mark {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #5E44FF 0%, #9B5CFF 100%);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  box-shadow: 0 4px 14px rgb(94 68 255 / 45%);
+}
+.cand-mark--sm { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
+
+.cand-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cand-tagline {
+  margin: 0;
+  padding-left: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 32%);
+}
+
+/* -- Greeting ----------------------------------------------------------- */
+
+/* Takes the slack, so the greeting sits optically centred on a tall panel and
+   the nav stays pinned to the bottom. */
+.cand-greeting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  animation: auth-fade-up 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cand-greeting h1 {
+  margin: 0;
+  font-size: clamp(34px, 3.4vw, 50px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+.cand-hello { display: block; color: rgb(255 255 255 / 50%); }
+.cand-name {
+  display: block;
+  background: linear-gradient(96deg, #ffffff 0%, #D4BAFF 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* A long single-token name would otherwise push the panel wider than its
+     column and clip against the content edge. */
+  overflow-wrap: anywhere;
+}
+
+.cand-summary {
+  margin: 0;
+  max-width: 340px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: rgb(255 255 255 / 62%);
+}
+
+.cand-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.cand-stat {
+  min-width: 104px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 7%);
+  backdrop-filter: blur(6px);
+}
+.cand-stat strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.cand-stat span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 55%);
+}
+
+/* -- Panel nav ---------------------------------------------------------- */
+
+.cand-nav { flex: none; display: flex; flex-direction: column; gap: 2px; }
+
+.cand-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  color: rgb(255 255 255 / 62%);
+  font-weight: 550;
+  text-decoration: none;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.cand-nav a:hover { background: rgb(255 255 255 / 7%); color: #fff; }
+.cand-nav a.active { background: rgb(255 255 255 / 12%); color: #fff; }
+
+.cand-nav-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentcolor;
+  opacity: 0.4;
+  transition: opacity 0.14s ease;
+}
+.cand-nav a.active .cand-nav-dot { opacity: 1; }
+
+/* ── Right: working column ─────────────────────────────────────────────── */
+
+.cand-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+}
+
+.cand-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 62px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--border);
+  background: rgb(255 255 255 / 86%);
+  backdrop-filter: saturate(180%) blur(10px);
+  /*
+   * Sticky for the same reason the recruiter's top bar is: the account button
+   * and sign-out have to stay reachable from anywhere on a long page.
+   *
+   * The z-index is doing separate work — a card lifting on hover is
+   * transformed, which paints it in the same layer as this bar and would
+   * otherwise let it slide over the open account menu.
+   */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Redundant beside the panel; the only brand mark once the panel has become a
+   header the page can scroll past. */
+.cand-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 650;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 1000px) { .cand-topbar-brand { display: none; } }
+
+.cand-content {
+  flex: 1;
+  min-height: 0;
+  padding: 28px 26px 60px;
+}
+.cand-content > * { max-width: 760px; }
+
+/* ── Invitation cards ──────────────────────────────────────────────────── */
+
+.ci-list { display: flex; flex-direction: column; gap: 14px; }
+
+.ci-section {
+  margin: 30px 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ci-card {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.ci-card:hover {
+  transform: translateY(-1px);
+  border-color: #cfd6e4;
+  box-shadow: 0 10px 26px rgb(16 24 40 / 8%), 0 2px 6px rgb(16 24 40 / 5%);
+}
+
+/* The stripe is the status at a glance, before any text is read. */
+.ci-stripe { flex: none; width: 4px; background: var(--border); }
+.ci-card--pending .ci-stripe {
+  background: linear-gradient(180deg, #5E44FF 0%, #9B5CFF 100%);
+}
+.ci-card--in_progress .ci-stripe {
+  background: linear-gradient(180deg, #d99100 0%, #f0b429 100%);
+}
+.ci-card--completed .ci-stripe { background: var(--success); }
+
+/* Nothing can be done with these, so they recede rather than compete with the
+   invitation the candidate is meant to act on. */
+.ci-card--expired,
+.ci-card--revoked,
+.ci-card--completed { background: var(--bg); box-shadow: none; }
+.ci-card--expired:hover,
+.ci-card--revoked:hover,
+.ci-card--completed:hover { transform: none; }
+
+.ci-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.ci-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ci-head h2 { margin: 0; font-size: 16px; letter-spacing: -0.015em; }
+
+.ci-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.ci-pill {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.ci-pill--pending {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.ci-pill--in_progress {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+.ci-pill--completed {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: transparent;
+}
+/* A window that has passed. Muted rather than red — a closed round is the
+   normal end of one, not a failure. */
+.ci-pill--closed {
+  color: var(--text-muted);
+  background: var(--surface-2, var(--surface));
+  text-decoration: line-through;
+}
+
+.ci-modules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ci-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.ci-card--completed .ci-chip,
+.ci-card--expired .ci-chip,
+.ci-card--revoked .ci-chip { background: var(--surface); }
+
+.ci-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.ci-facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ci-facts > span { display: inline-flex; align-items: center; gap: 5px; }
+.ci-fact-sent { opacity: 0.85; }
+
+.ci-go { text-decoration: none; flex: none; }
+.ci-go button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.ci-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+
+.ci-closed-note { font-size: 12px; color: var(--text-muted); }
+
+/* -- Empty and loading -------------------------------------------------- */
+
+.ci-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 46px 28px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  text-align: center;
+}
+.ci-empty-ico {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 15px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ci-empty strong { font-size: 15px; }
+.ci-empty p {
+  margin: 0;
+  max-width: 380px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.ci-skeleton {
+  height: 128px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: linear-gradient(100deg,
+    var(--surface) 30%, var(--bg) 50%, var(--surface) 70%);
+  background-size: 260% 100%;
+  animation: ci-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes ci-shimmer {
+  from { background-position: 130% 0; }
+  to   { background-position: -30% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-skeleton { animation: none; }
+  .cand-orb--3 { animation: none; }
+  .cand-greeting { animation: none; }
+}
+
+/* -- Narrow: the panel becomes a header --------------------------------- */
+
+@media (max-width: 999px) {
+  .cand-panel-inner { padding: 26px 22px 22px; gap: 22px; }
+  .cand-greeting { justify-content: flex-start; }
+  .cand-nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .cand-nav a { padding: 8px 12px; background: rgb(255 255 255 / 7%); }
+  .cand-content { padding: 22px 16px 48px; }
+}
+
+/* ── Card as a link ────────────────────────────────────────────────────────
+ *
+ * The title carries a real anchor and its ::after is stretched over the whole
+ * card, so clicking anywhere opens the record while the markup stays a single
+ * describable link. The Start/Resume button is lifted above that layer so it
+ * still goes straight into the test.
+ */
+
+.ci-open {
+  color: inherit;
+  text-decoration: none;
+}
+.ci-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Under the button and the pill, over everything else. */
+  z-index: 0;
+}
+.ci-card:hover .ci-open { text-decoration: underline; }
+
+/* The ring reads better around the whole card than around three words of title.
+ * Additive on purpose: the link keeps its own default ring, so a browser
+ * without `:has()` still shows focus somewhere rather than nowhere. */
+.ci-card:has(.ci-open:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ci-card:has(.ci-open:focus-visible) .ci-open { outline: none; }
+
+.ci-go,
+.ci-view { position: relative; z-index: 1; }
+
+.ci-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color 0.14s ease, transform 0.14s ease;
+}
+.ci-card:hover .ci-view { color: var(--accent); transform: translateX(2px); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ATTEMPT DETAIL — the candidate's record of one assessment
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.at-back {
+  display: inline-block;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.at-back:hover { color: var(--accent); }
+
+.at-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.at-head p { margin: 5px 0 0; color: var(--text-muted); }
+
+.at-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.at-card { margin-bottom: 14px; }
+.at-card-title {
+  margin: 0 0 16px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Status track ──────────────────────────────────────────────────────────
+ *
+ * Horizontal where there is room, with the connecting rule drawn by each step's
+ * ::before so it can be coloured per segment. Below the breakpoint it turns
+ * vertical, which is the only way four labelled stages stay readable narrow.
+ */
+
+.at-track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.at-step { position: relative; padding-left: 30px; }
+
+/* The rule between this step and the one before it. */
+.at-step::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: -18px;
+  width: 2px;
+  height: 18px;
+  background: var(--border);
+}
+.at-step:first-child::before { display: none; }
+
+.at-step-marker {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.at-step-text { display: flex; flex-direction: column; gap: 2px; }
+.at-step-text strong { font-size: 13.5px; }
+.at-step-when {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.at-step-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+/* Reached and behind them. */
+.at-step--done .at-step-marker {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.at-step--done::before,
+.at-step--current::before { background: var(--accent); }
+
+/* Where they are now: the one stage the eye should land on. */
+.at-step--current .at-step-marker {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.at-step--current .at-step-text strong { color: var(--accent); }
+
+/* Still ahead — drawn, but plainly not yet. */
+.at-step--upcoming .at-step-text strong,
+.at-step--upcoming .at-step-when { color: var(--text-muted); }
+.at-step--upcoming .at-step-note { opacity: 0.75; }
+
+/* Unreachable: the invitation lapsed or was withdrawn before this point. */
+.at-step--stopped .at-step-marker {
+  border-style: dashed;
+  border-color: #c9cedb;
+}
+.at-step--stopped .at-step-text strong,
+.at-step--stopped .at-step-when,
+.at-step--stopped .at-step-note {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+@media (min-width: 660px) {
+  .at-track {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+  }
+  .at-step { padding: 26px 12px 0 0; }
+
+  /* Horizontal now: the rule runs from the previous step's marker to this
+     one, so each segment takes the colour of the step it arrives at. The 6px
+     is half the marker, putting both ends on marker centres. */
+  .at-step::before {
+    left: calc(-100% + 6px);
+    top: 8px;
+    width: 100%;
+    height: 2px;
+  }
+  .at-step-marker { left: 0; top: 3px; }
+  .at-step-text { gap: 3px; }
+}
+
+/* ── Headline figures ──────────────────────────────────────────────────── */
+
+.at-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.at-stat {
+  padding: 15px 17px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.at-stat strong {
+  display: block;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.at-stat span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+
+.at-sections { display: flex; flex-direction: column; gap: 10px; }
+
+.at-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.at-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.at-section-head strong { font-size: 14px; }
+
+.at-expect-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* ── Pace ──────────────────────────────────────────────────────────────── */
+
+.at-pace {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.at-pace-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.at-pace-n {
+  flex: none;
+  width: 30px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.at-pace-track {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.at-pace-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5E44FF 0%, #9B5CFF 100%);
+}
+/* A question the clock ran out on: it still took time, but there is no answer
+   behind the bar, so it must not read like one. */
+.at-pace-bar--skipped {
+  background: repeating-linear-gradient(
+    45deg,
+    #d3d8e3 0 4px,
+    #e6e9f0 4px 8px
+  );
+}
+
+.at-pace-mod {
+  flex: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.at-pace-time {
+  flex: none;
+  width: 66px;
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.at-footnote {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Where a candidate writes when the assessment went wrong for them.
+   Deliberately quiet — it sits at the foot of the page and is not competing
+   with the attempt itself, because the overwhelming majority of people who
+   read this page have nothing to report. */
+.sc-card {
+  margin-top: 18px;
+  border-style: dashed;
+}
+
+.sc-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.sc-body {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.sc-link {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  /* The address is part of the link text, so it wraps rather than overflowing
+     its card on a narrow screen — a truncated one cannot be copied by hand. */
+  overflow-wrap: anywhere;
+}
+
+.sc-inline {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* When the attempt ran, under the candidate's name on their report. Wraps
+   rather than truncating — it prints into the PDF a recruiter circulates. */
+.report-timing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.report-timing strong { color: var(--text); font-weight: 600; }
+
+/* "Emailed 19 Aug" — a settled fact, so it reads as text, not a control. */
+.cohort-sent {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* The one thing to know before the first Reject click: it sends. Given weight
+   because it replaces a confirmation dialog — it has to be read once. */
+.cohort-warn {
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 3px solid var(--warn, #d99100);
+  background: var(--warn-soft, #fff8e6);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* What has already been said to this candidate, inside the composer. */
+.cohort-history {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.cohort-history h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cohort-history-item + .cohort-history-item {
+  margin-top: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+/* `pre-wrap` because the body is stored and sent verbatim — the paragraph
+   breaks a recruiter typed are part of what the candidate reads. */
+.cohort-history-item p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* -- Readiness check and practice ----------------------------------------- */
+
+.sc-list {
+  list-style: none;
+  margin: 18px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sc-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  /* Each row settles in as its check finishes, top to bottom, so the list
+     reads as work happening rather than as a page that flickered. */
+  animation: sc-row-in 0.28s ease both;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+@keyframes sc-row-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+/* Only the states that mean something get a colour. A passing check is the
+   expected case and should not compete for attention with a failing one. */
+.sc-row--fail { border-color: var(--danger); background: var(--danger-soft, #fff5f5); }
+.sc-row--warn { border-color: var(--warn, #d99100); }
+
+.sc-dot {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--text-muted);
+}
+.sc-dot--ok { background: var(--success); }
+.sc-dot--warn { background: var(--warn, #d99100); }
+.sc-dot--fail { background: var(--danger); }
+.sc-dot--pending {
+  background: var(--border);
+  color: var(--text-muted);
+  /* The only row still working. A static ellipsis beside four settled rows
+     reads as a fifth result rather than as something in progress. */
+  animation: sc-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sc-pulse {
+  50% { opacity: 0.45; }
+}
+
+/* What to do about a failing check. Full-strength text, not muted like the
+   description above it: this is the only line on the page that is an
+   instruction, and muting it would hide the one thing worth reading. */
+.sc-fix {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+/* Practice question. Deliberately the same measurements as the real question
+   card, because a rehearsal on a differently-shaped control rehearses nothing. */
+/* ── Warm-up question ─────────────────────────────────────────────────────
+ *
+ * The screen a candidate meets immediately before their assessment, and the
+ * first impression the product makes under any kind of pressure. It is built
+ * to the same measurements as the real question card on purpose — a rehearsal
+ * on a differently-shaped control rehearses nothing — but finished more
+ * carefully, because this is the one card nobody is too busy to look at.
+ *
+ * Nothing here marks an answer. There is no correct state, no incorrect state
+ * and no verdict: the point is that the controls are familiar, and a
+ * right/wrong badge at this moment only teaches somebody to dread the next
+ * screen.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.pq-card {
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(16 24 40 / 6%),
+    0 12px 32px -12px rgb(16 24 40 / 18%);
+}
+
+.pq-head {
+  padding: 20px 26px 16px;
+  border-bottom: 1px solid var(--border);
+  /* A whisper of the accent, so the card has a top rather than just an edge. */
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface) 100%);
+}
+
+/* Segments rather than a single filling bar: the candidate is counting
+   questions, not percentage, and four ticks answers "how many left" at a
+   glance where a 75% bar makes them do arithmetic. */
+.pq-progress {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.pq-tick {
+  height: 4px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.25s ease, transform 0.25s ease;
+}
+.pq-tick--done { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.pq-tick--now {
+  background: var(--accent);
+  /* The current segment sits a touch proud of the others. */
+  transform: scaleY(1.5);
+}
+
+.pq-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+
+/* Says these answers go nowhere, once, quietly. The candidate is entitled to
+   know; they are not entitled to be told twice in a headline. */
+.pq-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pq-body { padding: 24px 26px 8px; }
+
+.pq-module {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.pq-stem {
+  margin: 0 0 20px;
+  font-size: 19px;
+  line-height: 1.5;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  animation: pq-stem-in 0.32s ease both;
+}
+
+@keyframes pq-stem-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.pq-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pq-option {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.12s ease;
+}
+
+.pq-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 2px 10px -4px rgb(16 24 40 / 22%);
+  transform: translateY(-1px);
+}
+.pq-option:active { transform: translateY(0); }
+.pq-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pq-option--chosen,
+.pq-option--chosen:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* The letter, as a key rather than as a bullet — it fills in on selection so
+   the choice is legible from across the row, not just at the tick. */
+.pq-key {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.pq-option--chosen .pq-key {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.pq-text { flex: 1; }
+
+/* Empty until chosen, then a filled tick. Drawn in CSS so there is no icon
+   font to load on the one screen that must not stutter. */
+.pq-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  position: relative;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.pq-option--chosen .pq-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pq-option--chosen .pq-mark::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2.5px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.pq-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 26px 22px;
+}
+
+.pq-next { box-shadow: 0 6px 16px -8px var(--accent); }
+.pq-next:disabled { box-shadow: none; }
+
+@media (max-width: 620px) {
+  .pq-head { padding: 16px 18px 14px; }
+  .pq-body { padding: 20px 18px 6px; }
+  .pq-foot { padding: 16px 18px 20px; flex-wrap: wrap; }
+  .pq-stem { font-size: 17px; }
+}
+
+/* -- Assessment windows --------------------------------------------------- */
+
+/* The two datetime boxes on the new-assessment form, side by side. */
+.a-window {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.a-window > div { flex: 1; min-width: 190px; }
+.a-window input { width: 100%; padding: 9px 11px; }
+.field-sub {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* One invite row's window: state pill, dates, and the override badge. */
+.inv-window {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* Reschedule sits beside Remove/Revoke rather than under it. */
+.inv-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+/* Candidate side: why there is no Start button, where the button would be. */
+.at-window-note {
+  align-self: center;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 9px 14px;
+}
+
+/* A deadline while they can still sit it — quieter, since it is not a block. */
+.at-window-open {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* -- Workspace settings -------------------------------------------------- */
+.set-card { max-width: 640px; }
+
+/* Hex box and swatch on one line. The text box stays the source of truth —
+   a native colour input has no way to express "unset", which is the default. */
+.set-colour {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.set-colour input[type='text'] { flex: 1; }
+.set-colour input[type='color'] {
+  width: 42px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+.set-colour input[type='color']:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   QUESTION PERFORMANCE (item analysis)
+   ─────────────────────────────────────────────────────────────────────────
+   Severity is carried by a left edge rather than by a full-card tint: a page
+   where every row is coloured reads as uniformly alarming, and the point here
+   is that a handful of questions need attention and the rest do not.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ia-list { display: flex; flex-direction: column; gap: 10px; }
+
+.ia-item {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.ia-item--bad  { border-left-color: var(--danger); }
+.ia-item--warn { border-left-color: var(--warn); }
+.ia-item--info { border-left-color: var(--border); }
+
+.ia-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.ia-head:hover { background: var(--bg); }
+
+.ia-text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 550;
+  line-height: 1.45;
+  /* Two lines, then ellipsis: the full text is one click away and a wall of
+     stems would bury the figures this page exists for. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ia-figures { display: flex; gap: 20px; flex: none; }
+
+.ia-figure { display: flex; flex-direction: column; align-items: flex-end; }
+.ia-figure-n {
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.ia-negative { color: var(--danger); }
+.ia-figure-l {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ia-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+
+.ia-flag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.ia-flag--bad  { color: var(--danger);  background: var(--danger-soft); }
+.ia-flag--warn { color: var(--warn);    background: var(--warn-soft); }
+.ia-flag--info { color: var(--text-muted); background: var(--bg); }
+
+.ia-detail {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ia-explain { margin: 0; font-size: 13px; line-height: 1.55; }
+
+.ia-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ia-meta strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.ia-options { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ia-options th {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 550;
+  padding: 0 0 6px;
+}
+.ia-options td {
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+.ia-option--correct { background: var(--success-soft); }
+
+.ia-correct-tag {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+.ia-rate {
+  width: 190px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.ia-rate-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.ia-rate-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.ia-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .ia-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .ia-figures { justify-content: space-between; }
+  .ia-figure { align-items: flex-start; }
+}
+
+/* ── Cohort view ──────────────────────────────────────────────────────────
+ *
+ * A rejected row recedes rather than turning red: a recruiter works down a
+ * long list, and a table where the "no" rows shout louder than the "yes" rows
+ * fights what they are trying to do.
+ */
+
+.cohort-rejected { opacity: 0.55; }
+.cohort-rejected:hover { opacity: 1; }
+
+.cohort-standing {
+  font-size: 15px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.cohort-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.cohort-tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.cohort-note {
+  margin: 6px 0 0;
+  padding-left: 9px;
+  border-left: 2px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 380px;
+}
+
+.cohort-note-edit { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.cohort-note-edit textarea {
+  width: 100%;
+  max-width: 380px;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.cohort-actions { display: flex; gap: 6px; }
+
+.cohort-pick {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+/* The chosen state is filled; the other stays neutral, so a glance down the
+   column reads as a set of decisions rather than a wall of buttons. */
+.cohort-pick--on {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+.cohort-pick--on:hover:not(:disabled) { background: var(--success); }
+.cohort-pick--off {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.cohort-pick--off:hover:not(:disabled) { background: var(--danger); }
+
+.cohort-note-btn { margin-top: 6px; font-size: 12px; padding: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PRINT
+   ─────────────────────────────────────────────────────────────────────────
+   "Save as PDF" is the browser's own print-to-PDF, so this stylesheet *is* the
+   PDF. No second rendering to keep in step with the screen, and no dependency.
+
+   The job here is to strip the application chrome and let the report itself
+   fill the page — a printed report should read like a document, not like a
+   screenshot of a web app.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  /* Navigation, buttons and anything else that cannot be acted on paper. */
+  .topbar,
+  .cand-panel,
+  .cand-topbar,
+  .report-head-actions,
+  .toolbar,
+  .user-menu,
+  button {
+    display: none !important;
+  }
+
+  body { background: #fff; font-size: 11pt; }
+
+  .main,
+  .cand-content {
+    max-width: none;
+    padding: 0;
+  }
+
+  .cand-shell { display: block; }
+
+  /* Cards become sections: a printed page does not need a raised surface, and
+     shadows render as grey smears on most printers. */
+  .card,
+  .report-module,
+  .at-card {
+    box-shadow: none !important;
+    border: 1px solid #ccc;
+    /* Keep a section and its heading together rather than orphaning a title at
+       the foot of a page. */
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1 { font-size: 18pt; }
+  h2 { font-size: 13pt; }
+
+  /* Expanded detail is the point of a printed report — collapsing it would
+     hand somebody a page of headings. */
+  .table-wrap { overflow: visible !important; }
+
+  /* Bars and fills are backgrounds, which browsers drop from print by default. */
+  .report-bar span,
+  .ia-rate-bar span,
+  .score-bar-fill {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  a { text-decoration: none; color: inherit; }
+}
+
+/* Workspace role selector in the People table. Sits under the account-type
+   badge rather than beside it: the two answer different questions, and a row
+   of two controls reads as one compound setting. */
+.people-org-role {
+  display: block;
+  margin-top: 6px;
+  max-width: 210px;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.people-org-role:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Who is asking ────────────────────────────────────────────────────────
+ *
+ * The inviting company, on the candidate's cards and attempt page.
+ *
+ * Scoped to this strip and never to the page: a candidate can hold invitations
+ * from several companies at once, so there is no such thing as "their" brand
+ * to theme the portal with. The accent only ever colours the mark.
+ */
+
+.ci-org {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* The company's accent, on a rule under the strip.
+ *
+ * A separate modifier rather than a border on `.ci-org` itself, so a company
+ * that has set no colour keeps exactly the spacing it had — an always-present
+ * transparent border would shift every unbranded card by 8px to no purpose.
+ *
+ * `fit-content` makes the rule hug the logo and name instead of running the
+ * full width of the card, where it would read as a divider rather than as the
+ * company's mark. The colour arrives inline from the API. */
+.ci-org--accented {
+  width: fit-content;
+  padding-bottom: 6px;
+  border-bottom: 2px solid transparent;
+}
+
+.ci-org-logo {
+  height: 20px;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+/* Fallback when no logo is set: the initial on the company's accent, or on the
+   product's own if they have not chosen one. */
+.ci-org-mark {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ci-org-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+
+/* Paper margins for the printed report.
+ *
+ * Chrome's own header and footer (date, title, URL, page number) sit outside
+ * this and cannot be removed from CSS — they are a browser setting, under
+ * "More settings > Headers and footers" in the print dialog. Worth knowing
+ * before anyone tries to hide them from here. */
+@page {
+  margin: 14mm;
+}
+
+
+/* ── Section tabs ─────────────────────────────────────────────────────────
+ *
+ * The strip under a page heading, for a section with more than one view.
+ * Underline rather than pills: the top bar already uses a filled state, and two
+ * levels of the same treatment stop reading as a hierarchy.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.subnav {
+  display: flex;
+  gap: 4px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.subnav a {
+  padding: 8px 12px 9px;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.subnav a:hover { color: var(--text); }
+.subnav a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Assessment list ──────────────────────────────────────────────────────
+ *
+ * The creation form used to sit above this. What is left is a list, so it gets
+ * a search box in its header instead of a second page of form.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* `flex-direction` is stated rather than inherited. Left to `.card-head` alone
+   this computed to `column`, which stacked the search box above its own count
+   and centred both; being explicit here is cheap and does not depend on
+   working out which later rule was responsible. */
+.al-head {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.al-search {
+  flex: 1;
+  min-width: 0;
+  max-width: 460px;
+}
+
+/* Round state. Only rendered when it is not the ordinary "open" — see the
+   note in Assessments.tsx. */
+.badge.al-scheduled {
+  background: var(--warn-soft, #fdf3e0);
+  color: var(--warn, #8a5a00);
+}
+.badge.al-closed {
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+/* Nothing built yet: says what an assessment is and offers the one action,
+   rather than rendering an empty table with a zero in the corner. */
+.al-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 26px;
+  color: var(--text-muted);
+}
+.al-empty h2 { margin: 4px 0 0; font-size: 17px; color: var(--text); }
+.al-empty p { margin: 0; max-width: 42ch; }
+.al-empty .button { margin-top: 8px; }
+
+/* ── New assessment ───────────────────────────────────────────────────────
+ *
+ * Its own page, in numbered steps. The action bar is sticky because the form
+ * is long enough to scroll past the button, and the shape of the test so far
+ * sits beside it — a recruiter should not have to add five time limits in their
+ * head to notice they have built a two-hour assessment.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.na-page { display: block; padding-bottom: 84px; }
+
+.na-step { overflow: hidden; }
+.na-step-head {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.na-step-head h2 { margin: 0; font-size: 15px; }
+.na-step-head p { margin: 3px 0 0; max-width: 68ch; }
+
+.na-step-n {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* A ticked subject, so the rows that matter stand out from the rows that are
+   only offered. */
+.na-on > td { background: var(--accent-soft); }
+.na-on > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+.na-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 -6px 20px -12px rgb(16 24 40 / 30%);
+}
+.na-summary { font-size: 13.5px; color: var(--text-muted); }
+.na-summary strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Back to the list, above the page title. */
+.back-link {
+  display: inline-block;
+  margin-bottom: 6px;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+
+@media (max-width: 720px) {
+  .na-bar { flex-direction: column; align-items: stretch; }
+  .al-head { flex-wrap: wrap; }
+  .al-search { max-width: none; }
+}
+
+
+/* ── Leaving the test ─────────────────────────────────────────────────────
+ *
+ * A page cannot stop a candidate switching away — Alt+Tab and Cmd+Tab belong
+ * to the operating system and never reach it. What it can do is notice, warn
+ * hard, and record.
+ *
+ * There was briefly a full-screen blackout here that hid the question the
+ * moment focus left. It is gone deliberately: it fired on every transient
+ * focus change, including a keyboard user tabbing one control too far, and
+ * took the test away from them while the clock ran. The warning below is
+ * unmissable without the test itself becoming the punishment.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.away-warn {
+  /* One line, and it stays for the rest of the section — so it is sized to sit
+     above the question without pushing it down the screen. */
+  margin: 0;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  /* The danger palette, not the warning one. This is the only mid-test message
+     about the candidate's conduct rather than their machine, and it should not
+     be mistaken for the connection notices. */
+  border: 1.5px solid var(--danger);
+  background: var(--danger-soft);
+  animation: away-warn-in 0.24s ease both;
+}
+
+@keyframes away-warn-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.away-warn strong { color: var(--danger); }
+
+/*
+ * The question is unselectable while a module runs. Copying the stem out is
+ * the same act as printing it, and the keyboard handler already refuses
+ * Ctrl+C — this closes the drag-select route to the same thing.
+ */
+body.assess-running .assess-shell {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+/* ── Question queue ───────────────────────────────────────────────────────
+ *
+ * The numbered strip above the question. Deliberately not interactive: answers
+ * are final and the server refuses a jump backwards, so these are labels, not
+ * buttons — no pointer cursor, no hover lift, nothing that invites a click
+ * that would be refused.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.assess-queue {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.assess-q {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Answered. Filled, because it is settled and cannot be returned to. */
+.assess-q--done {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* The one on screen. Ringed rather than filled, so it reads as "here" against
+   a row of "done". */
+.assess-q--now {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Past the section's guaranteed minimum — these may never be asked, and a
+   solid chip would promise a length the adaptive engine has not committed to. */
+.assess-q--maybe {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+@media (max-width: 620px) {
+  .assess-q { width: 27px; height: 27px; font-size: 12px; }
+}
+
+
+/* -- Readiness wizard ------------------------------------------------------
+ *
+ * One check per screen, joined by a rail on the left, and every step decides
+ * continuously rather than once.
+ *
+ * It replaced a single list of six ticks, and then had to be pushed further:
+ * the first wizard asked each question once and remembered the answer, which
+ * let a candidate through on a black frame because the *camera* had opened.
+ * A device answering is not a device doing its job, so the camera step now
+ * runs face detection on the preview and the microphone step waits for the
+ * meter to actually move.
+ * ------------------------------------------------------------------------- */
+
+.rc-shell { max-width: 900px; }
+
+.rc-card {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(16 24 40 / 6%),
+    0 12px 32px -12px rgb(16 24 40 / 18%);
+}
+
+.rc-body { display: flex; align-items: stretch; }
+
+.rc-rail {
+  flex: none;
+  width: 178px;
+  list-style: none;
+  margin: 0;
+  padding: 24px 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.rc-rail-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-muted);
+  border-left: 3px solid transparent;
+}
+
+/* The line joining one step to the next, so the rail reads as a route rather
+   than as five separate labels. Drawn from each step down to the one below,
+   which is why the last one does not get one. */
+.rc-rail-step::before {
+  content: '';
+  position: absolute;
+  left: 32px;
+  top: calc(50% + 14px);
+  width: 2px;
+  height: calc(100% - 28px);
+  background: var(--border);
+  transition: background 0.3s ease;
+}
+.rc-rail-step:last-child::before { display: none; }
+/* Filled behind you: the line turns as the step it leaves is cleared. */
+.rc-rail-step.rc-done::before { background: var(--success); }
+
+.rc-rail-step.rc-now {
+  color: var(--text);
+  border-left-color: var(--accent);
+  background: var(--surface);
+}
+.rc-rail-step.rc-done { color: var(--text); }
+
+.rc-rail-n {
+  flex: none;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+.rc-now .rc-rail-n {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+/* Passed and behind you. Green rather than accent, so "done" and "here" are
+   never the same colour on the same rail. */
+.rc-done .rc-rail-n {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.rc-main {
+  flex: 1;
+  min-width: 0;
+  padding: 26px 28px 28px;
+  animation: page-in 0.28s ease both;
+}
+.rc-main h1 { margin: 2px 0 0; font-size: 22px; }
+
+/* What "good" looks like, before the verdict. Deliberately above the result: a
+   candidate who reads the guidance first can often fix the problem before
+   being told there is one. */
+.rc-guide {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.rc-preview {
+  position: relative;
+  margin-top: 16px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #10131a;
+  aspect-ratio: 4 / 3;
+  max-width: 340px;
+  /* The frame itself answers, so the candidate does not have to read a line of
+     text to know whether they are in shot. */
+  box-shadow: 0 0 0 2px var(--border);
+  transition: box-shadow 0.3s ease;
+}
+.rc-preview--ok { box-shadow: 0 0 0 2px var(--success); }
+.rc-preview--bad { box-shadow: 0 0 0 2px var(--warn, #d99100); }
+
+.rc-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Mirrored: an unmirrored preview of your own face is the one thing
+     everybody finds unsettling, and this is not a recording. */
+  transform: scaleX(-1);
+}
+
+/* The oval to line your face up with. Drawn rather than an image so it costs
+   nothing and scales with the frame, and coloured by the live face count. */
+/* Position and size come from `OVAL` in ReadinessCheck.tsx as inline styles —
+   the ring the candidate is asked to fill has to be the ring being measured,
+   and two sets of numbers drift. Only the look lives here. */
+.rc-frame {
+  position: absolute;
+  border: 2px dashed rgb(255 255 255 / 45%);
+  border-radius: 50%;
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+.rc-preview--ok .rc-frame { border-color: var(--success); border-style: solid; }
+
+.rc-frame-tag {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #fff;
+  background: rgb(16 19 26 / 72%);
+}
+.rc-preview--ok .rc-frame-tag { background: var(--success); }
+.rc-preview--bad .rc-frame-tag { background: var(--warn, #8a5a00); }
+
+.rc-meter-wrap { margin-top: 16px; max-width: 340px; }
+.rc-meter {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.rc-meter span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--success);
+  /* No transition. The bar is written every animation frame, and a tween would
+     smear the very responsiveness it exists to demonstrate. */
+}
+.rc-meter-note { margin: 7px 0 0; }
+
+.rc-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  transition: border-color 0.25s ease, background 0.25s ease;
+}
+.rc-result strong { font-weight: 550; }
+.rc-result--ok { border-color: var(--success); background: var(--success-soft); }
+.rc-result--warn { border-color: var(--warn, #d99100); background: var(--warn-soft, #fdf3e0); }
+.rc-result--fail { border-color: var(--danger); background: var(--danger-soft); }
+
+.rc-actions { margin-top: 16px; }
+.rc-blocked { margin: 8px 0 0; max-width: 52ch; }
+
+@media (max-width: 760px) {
+  .rc-body { display: block; }
+  /* The rail becomes a strip. A 178px column beside a 340px preview leaves
+     neither enough room to be read. */
+  .rc-rail {
+    width: auto;
+    display: flex;
+    overflow-x: auto;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .rc-rail-step {
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  .rc-rail-step.rc-now { border-left: 0; border-bottom-color: var(--accent); }
+  /* The connector runs horizontally here, between the numbers. */
+  .rc-rail-step::before {
+    left: auto;
+    right: -6px;
+    top: 50%;
+    width: 12px;
+    height: 2px;
+  }
+  .rc-main { padding: 20px 18px 22px; }
+}
+
+
+/* -- Section splash --------------------------------------------------------
+ *
+ * The branded pause between the checks, the sample questions and the real
+ * assessment. Everything animates in sequence rather than together — the mark,
+ * then the name, then the rule, then the title — because a single simultaneous
+ * fade reads as a page loading, and a sequence reads as an introduction.
+ *
+ * Fixed to the viewport and above everything: it is the only thing on screen
+ * while it lasts, which is the point of it.
+ * ------------------------------------------------------------------------- */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* The brand purple, not the app's page grey. This is the one screen that is
+     the product introducing itself. */
+  background: linear-gradient(150deg, #2c1a6b 0%, #4c2bb5 48%, #6a3ce0 100%);
+  color: #fff;
+  animation: splash-in 0.4s ease both;
+}
+
+.splash--leaving { animation: splash-out 0.42s ease both; }
+
+@keyframes splash-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes splash-out {
+  from { opacity: 1; }
+  /* Lifts very slightly on the way out, so the next screen feels like it is
+     underneath rather than replacing it. */
+  to { opacity: 0; transform: scale(1.03); }
+}
+
+.splash-bg { position: absolute; inset: 0; pointer-events: none; }
+
+.splash-arc {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 12%);
+}
+.splash-arc--1 {
+  width: 620px;
+  height: 620px;
+  top: -180px;
+  right: -140px;
+  animation: splash-drift 22s ease-in-out infinite alternate;
+}
+.splash-arc--2 {
+  width: 880px;
+  height: 880px;
+  bottom: -380px;
+  left: -220px;
+  border-color: rgb(255 255 255 / 8%);
+  animation: splash-drift 28s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes splash-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(24px, -18px, 0) scale(1.06); }
+}
+
+.splash-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+}
+
+.splash-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  animation: splash-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.splash-mark {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #5e44ff 0%, #9b5cff 100%);
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 55%);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  /* Lands a beat before the wordmark beside it. */
+  animation: splash-mark-in 0.66s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+/* Sweeps once around the mark as it settles, then holds as a faint outline. */
+.splash-ring {
+  position: absolute;
+  inset: -7px;
+  border-radius: 19px;
+  border: 1.5px solid rgb(255 255 255 / 55%);
+  animation: splash-ring 1.1s 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes splash-ring {
+  from { opacity: 0; transform: scale(0.7) rotate(-25deg); }
+  60% { opacity: 1; }
+  to { opacity: 0.3; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes splash-mark-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.82); }
+  to { opacity: 1; transform: none; }
+}
+
+.splash-name {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  animation: splash-rise 0.6s 0.14s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Draws itself outward from the centre, which is what ties the brand above to
+   the section title below rather than leaving two stacked blocks. */
+.splash-rule {
+  width: 190px;
+  height: 1px;
+  margin: 26px 0 22px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 45%),
+    transparent
+  );
+  animation: splash-rule 0.7s 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes splash-rule {
+  from { opacity: 0; transform: scaleX(0.2); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+.splash-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  animation: splash-rise 0.65s 0.56s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.splash-sub {
+  margin: 12px 0 0;
+  max-width: 44ch;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: rgb(255 255 255 / 76%);
+  animation: splash-rise 0.65s 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.splash-progress {
+  display: block;
+  width: 150px;
+  height: 2px;
+  margin-top: 34px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 18%);
+  overflow: hidden;
+  animation: splash-rise 0.5s 0.85s ease both;
+}
+.splash-progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: #fff;
+  /* Matches `HOLD_MS` in SectionSplash.tsx, less the delay before it starts —
+     the bar has to arrive full exactly as the screen begins to leave, or the
+     pause reads as having been cut short. */
+  animation: splash-fill 1.35s 0.85s cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+
+@keyframes splash-fill {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@media (max-width: 620px) {
+  .splash-title { font-size: 30px; }
+  .splash-name { font-size: 21px; }
+  .splash-mark { width: 46px; height: 46px; font-size: 20px; }
+}
+
+/*
+ * Somebody who has asked for less motion still needs the signpost — they do
+ * not need it to move. Everything arrives at once, and the hold does the work.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash--leaving,
+  .splash-arc,
+  .splash-mark,
+  .splash-ring,
+  .splash-name,
+  .splash-rule,
+  .splash-title,
+  .splash-sub,
+  .splash-progress,
+  .splash-progress span {
+    animation-duration: 0.01ms;
+    animation-delay: 0ms;
+    animation-iteration-count: 1;
+  }
+  .splash-progress span { width: 100%; }
+}
+
+
+/* The camera's condition on a section's intro screen.
+ *
+ * A line of status, not a control. The camera turns itself on where permission
+ * already stands, which is every candidate who has just come through the
+ * readiness check — offering them a button for something the browser has
+ * already granted made a working product look broken. The control comes back
+ * only when the answer is no. */
+.assess-cam {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.assess-cam--on { color: var(--success); font-weight: 550; }
+.assess-cam--bad {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.assess-cam-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.assess-cam--on .assess-cam-dot {
+  background: var(--success);
+  /* The same slow pulse a recording indicator uses, so "on" reads as live
+     rather than as a static tick. */
+  animation: assess-cam-live 2s ease-in-out infinite;
+}
+
+@keyframes assess-cam-live {
+  50% { opacity: 0.35; }
 }

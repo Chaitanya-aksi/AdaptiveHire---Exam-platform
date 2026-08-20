@@ -34,6 +34,21 @@ export const QUESTION_VISIBLE_TO_ORG = `(
 )`;
 
 /**
+ * Never servable in a real assessment.
+ *
+ * Practice questions are shown before the clock starts, with the answer
+ * revealed, so serving one for real would be asking something the candidate has
+ * already been given. Kept beside the visibility rule rather than inlined at
+ * each call site for exactly the reason that rule is: a filter applied in three
+ * query paths out of four is the same as no filter.
+ *
+ * Applies to the selector and to an assessment's question pool. It deliberately
+ * does **not** apply to the question bank's own listing — a recruiter has to be
+ * able to see, write and review their practice questions.
+ */
+export const QUESTION_IS_SERVABLE = `q."isSample" = false`;
+
+/**
  * The same rule for a raw query, where named parameters are not available.
  * `$1` is the organisation id.
  */

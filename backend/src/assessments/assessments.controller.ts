@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -9,8 +10,9 @@ import {
 } from '@nestjs/common';
 import { CurrentOrg } from '../common/decorators/current-org.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { MinOrgRole } from '../common/decorators/org-roles.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../common/enums';
+import { OrgRole, UserRole } from '../common/enums';
 import { AssessmentsService } from './assessments.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { SetQuestionPoolDto } from './dto/set-question-pool.dto';
@@ -24,6 +26,7 @@ import { SetQuestionPoolDto } from './dto/set-question-pool.dto';
 export class AssessmentsController {
   constructor(private readonly assessments: AssessmentsService) {}
 
+  @MinOrgRole(OrgRole.HIRING_MANAGER)
   @Post()
   create(
     @Body() dto: CreateAssessmentDto,
@@ -52,6 +55,7 @@ export class AssessmentsController {
    * `PUT` rather than `PATCH` because the body is the whole intended set, not a
    * change to it. An empty list clears the pool, which means no restriction.
    */
+  @MinOrgRole(OrgRole.HIRING_MANAGER)
   @Put(':id/questions')
   setQuestionPool(
     @Param('id', ParseUUIDPipe) id: string,
@@ -63,5 +67,19 @@ export class AssessmentsController {
       dto.questionIds,
       organisationId,
     );
+  }
+
+  /**
+   * Deletes the assessment and every attempt made on it — answers, reports and
+   * proctoring logs included. Candidate accounts survive; only their data for
+   * this assessment goes.
+   */
+  @MinOrgRole(OrgRole.ADMIN)
+  @Delete(':id')
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.assessments.remove(id, organisationId);
   }
 }

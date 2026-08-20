@@ -101,7 +101,7 @@ export class AssessmentsService {
   ): Promise<void> {
     const visible = await this.questions
       .createQueryBuilder('q')
-      .select(['q.id', 'q.moduleId', 'q.status'])
+      .select(['q.id', 'q.moduleId', 'q.status', 'q.isSample'])
       .where('q.id IN (:...questionIds)', { questionIds })
       .andWhere(QUESTION_VISIBLE_TO_ORG, { organisationId })
       .getMany();
@@ -113,6 +113,19 @@ export class AssessmentsService {
       throw new BadRequestException(
         `${missing} of the chosen question${missing === 1 ? '' : 's'} ` +
           `${missing === 1 ? 'is' : 'are'} not available to your organisation.`,
+      );
+    }
+
+    // Named separately from the check above, because this one is a mistake the
+    // recruiter can fix rather than an id they should not have: a practice
+    // question is theirs and visible, it simply cannot be asked for real.
+    const samples = visible.filter((q) => q.isSample);
+    if (samples.length > 0) {
+      throw new BadRequestException(
+        `${samples.length} of the chosen question${samples.length === 1 ? ' is a' : 's are'} ` +
+          'practice question' +
+          `${samples.length === 1 ? '' : 's'}. Those are shown before the ` +
+          'assessment starts, with the answer, so they cannot be asked in it.',
       );
     }
 
@@ -181,11 +194,25 @@ export class AssessmentsService {
       }
     }
 
+    const opensAt = dto.opensAt ? new Date(dto.opensAt) : null;
+    const closesAt = dto.closesAt ? new Date(dto.closesAt) : null;
+
+    // A window that closes before it opens is unsittable rather than merely
+    // odd — nobody could ever start it, and the failure would surface as a
+    // confused candidate rather than as an error here.
+    if (opensAt && closesAt && opensAt.getTime() >= closesAt.getTime()) {
+      throw new BadRequestException(
+        'That window closes before it opens. Check the dates.',
+      );
+    }
+
     const assessment = this.assessments.create({
       title: dto.title.trim(),
       description: dto.description?.trim() || null,
       organisationId,
       createdById,
+      opensAt,
+      closesAt,
       modules: dto.modules.map((m, index) => ({
         moduleId: m.moduleId,
         minQuestions: m.minQuestions,
@@ -252,6 +279,63 @@ export class AssessmentsService {
    */
   async findOne(id: string, organisationId: string): Promise<Assessment> {
     return this.load({ id, organisationId });
+  }
+
+  /**
+   * Deletes an assessment and every trace of the attempts made on it.
+   *
+   * The database deliberately makes this impossible by accident:
+   * `assessment_sessions.assessmentId` is `RESTRICT`, so an assessment somebody
+   * has sat cannot simply be dropped. That guard exists to stop a stray delete
+   * from silently taking hiring records with it — here the caller is explicitly
+   * asking for exactly that, so the rows are removed in dependency order inside
+   * one transaction.
+   *
+   * Order matters and is not stylistic:
+   *   1. sessions — takes responses, reports, module results and proctoring
+   *      logs with them, all four cascade from the session;
+   *   2. invitations — `assessment_sessions.invitationId` is also `RESTRICT`,
+   *      so these cannot go while an attempt still points at them;
+   *   3. the assessment — its modules and question pool cascade from here.
+   *
+   * Candidate *accounts* are untouched. Someone who sat three of this
+   * organisation's tests should not vanish because one of them was deleted; use
+   * the People page to delete a person.
+   *
+   * Scoped by `organisationId`, so another company's assessment is a 404 rather
+   * than a deletion.
+   */
+  async remove(
+    id: string,
+    organisationId: string,
+  ): Promise<{ sessions: number; invitations: number }> {
+    // Throws 404 if it is not this organisation's, before anything is deleted.
+    await this.findOne(id, organisationId);
+
+    return this.dataSource.transaction(async (manager) => {
+      const sessions = await manager
+        .createQueryBuilder()
+        .delete()
+        .from('assessment_sessions')
+        .where(`"assessmentId" = :id`, { id })
+        .execute();
+
+      const invitations = await manager
+        .createQueryBuilder()
+        .delete()
+        .from('invitations')
+        .where(`"assessmentId" = :id`, { id })
+        .execute();
+
+      await manager.delete(Assessment, { id, organisationId });
+
+      // `affected` rather than the length of a raw query's result: TypeORM
+      // returns [rows, count] for a RETURNING delete, which always reads as 2.
+      return {
+        sessions: sessions.affected ?? 0,
+        invitations: invitations.affected ?? 0,
+      };
+    });
   }
 
   /**

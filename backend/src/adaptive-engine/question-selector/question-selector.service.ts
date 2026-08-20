@@ -14,7 +14,10 @@ import {
 } from '../adaptive-engine.constants';
 import { AbilityEstimatorService } from '../ability-estimator/ability-estimator.service';
 import { ConsistencyProbeService } from '../consistency-probe/consistency-probe.service';
-import { QUESTION_VISIBLE_TO_ORG } from '../../question-bank/question-visibility';
+import {
+  QUESTION_IS_SERVABLE,
+  QUESTION_VISIBLE_TO_ORG,
+} from '../../question-bank/question-visibility';
 import type { ModuleRunState } from '../engine.types';
 
 /**
@@ -329,7 +332,11 @@ export class QuestionSelectorService {
       // replaced by their version, and one they have hidden is not served at all.
       .andWhere(QUESTION_VISIBLE_TO_ORG, {
         organisationId: state.organisationId,
-      });
+      })
+      // Practice questions are shown before the assessment with their answers
+      // revealed, so serving one here would be asking something the candidate
+      // has already been given.
+      .andWhere(QUESTION_IS_SERVABLE);
 
     // A curated pool narrows what the engine may draw from; it does not replace
     // the choosing. Difficulty matching, trait targeting and the probe rules all

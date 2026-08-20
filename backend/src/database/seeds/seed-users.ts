@@ -1,5 +1,5 @@
 import * as argon2 from 'argon2';
-import { UserRole } from '../../common/enums';
+import { OrgRole, UserRole } from '../../common/enums';
 import { Organisation } from '../../organisations/entities/organisation.entity';
 import { User } from '../../users/entities/user.entity';
 import dataSource from '../data-source';
@@ -50,6 +50,20 @@ async function run(): Promise<void> {
   for (const seed of SEED_USERS) {
     const existing = await users.findOne({ where: { email: seed.email } });
     if (existing) {
+      // One repair, not a general update: a recruiter seeded before org roles
+      // existed has a null `orgRole`, and null is refused rather than assumed,
+      // so that account 403s on every guarded endpoint. Only nulls are filled
+      // — a recruiter deliberately set to `viewer` stays a viewer.
+      if (
+        existing.role === UserRole.RECRUITER_ADMIN &&
+        existing.orgRole === null
+      ) {
+        existing.orgRole = OrgRole.OWNER;
+        await users.save(existing);
+        console.log(`↺ ${seed.email} had no org role — set to owner`);
+        continue;
+      }
+
       console.log(`· ${seed.email} already exists — skipped`);
       continue;
     }
@@ -60,6 +74,13 @@ async function run(): Promise<void> {
         // Candidates belong to no company; only the recruiter gets the workspace.
         organisationId:
           seed.role === UserRole.RECRUITER_ADMIN ? organisation.id : null,
+        // Owner, matching what self-registration grants the person who creates
+        // a workspace. `orgRole` is nullable so a missing value is refused
+        // rather than assumed, which means leaving it unset here does not
+        // produce a limited recruiter — it produces one that 403s on every
+        // guarded endpoint, and a seeded account that cannot do anything is
+        // not a seed.
+        orgRole: seed.role === UserRole.RECRUITER_ADMIN ? OrgRole.OWNER : null,
       }),
     );
     console.log(`✓ created ${seed.role.padEnd(15)} ${seed.email}`);

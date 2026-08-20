@@ -1,6 +1,14 @@
 import { useRef, useState, type DragEvent } from 'react';
+import { SubNav } from '../../components/SubNav';
 import { questionsApi } from '../../lib/endpoints';
 import type { BulkImportResult } from '../../lib/types';
+
+/** Same three views as the rest of the section — see `Questions.tsx`. */
+const QUESTION_TABS = [
+  { to: '/admin/questions', label: 'Questions', end: true },
+  { to: '/admin/questions/analysis', label: 'Performance' },
+  { to: '/admin/import', label: 'Bulk import' },
+];
 
 export function BulkImport() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,11 +46,12 @@ export function BulkImport() {
     <>
       <div className="page-head">
         <div>
-          <h1>Bulk import</h1>
+          <h1>Question bank</h1>
           <p>
-            Upload a CSV or Excel sheet. Rows import independently — a bad row is
-            reported and skipped, never failing the whole file.
+            Upload a CSV or Excel sheet. Rows import independently — a bad row
+            is reported and skipped, never failing the whole file.
           </p>
+          <SubNav items={QUESTION_TABS} />
         </div>
       </div>
 
@@ -90,7 +99,9 @@ export function BulkImport() {
                 MCQ template
               </button>
               <button
-                onClick={() => void questionsApi.downloadTemplate('personality')}
+                onClick={() =>
+                  void questionsApi.downloadTemplate('personality')
+                }
               >
                 Personality template
               </button>
@@ -102,13 +113,18 @@ export function BulkImport() {
           <div className="card">
             <div className="card-head">
               <h2>Result — {filename}</h2>
-              <span className={`badge ${result.failed === 0 ? 'active' : 'draft'}`}>
+              <span
+                className={`badge ${result.failed === 0 ? 'active' : 'draft'}`}
+              >
                 {result.imported} of {result.totalRows} imported
               </span>
             </div>
 
             <div className="card-pad">
-              <div className="grid" style={{ marginBottom: result.failed ? 16 : 0 }}>
+              <div
+                className="grid"
+                style={{ marginBottom: result.failed ? 16 : 0 }}
+              >
                 <div className="stat">
                   <div className="label">Rows read</div>
                   <div className="value">{result.totalRows}</div>
@@ -124,7 +140,9 @@ export function BulkImport() {
                   <div className="label">Failed</div>
                   <div
                     className="value"
-                    style={{ color: result.failed ? 'var(--danger)' : undefined }}
+                    style={{
+                      color: result.failed ? 'var(--danger)' : undefined,
+                    }}
                   >
                     {result.failed}
                   </div>
@@ -133,8 +151,8 @@ export function BulkImport() {
 
               {result.imported > 0 && (
                 <div className="alert info" style={{ marginBottom: 0 }}>
-                  Imported questions land as <strong>draft</strong>. Review them in
-                  the question bank and activate the ones you want served.
+                  Imported questions land as <strong>draft</strong>. Review them
+                  in the question bank and activate the ones you want served.
                 </div>
               )}
             </div>

@@ -11,6 +11,18 @@ export const envValidationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   CORS_ORIGIN: Joi.string().default('http://localhost:5174'),
 
+  // Defaults to debug in development and info in production; set explicitly to
+  // turn the volume down on a noisy environment.
+  LOG_LEVEL: Joi.string()
+    .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
+    .optional(),
+
+  // Optional throughout: with no DSN, error tracking is simply off, so a local
+  // checkout and CI need no third-party account to boot.
+  SENTRY_DSN: Joi.string().allow('').default(''),
+  SENTRY_RELEASE: Joi.string().allow('').default(''),
+  SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0),
+
   POSTGRES_HOST: Joi.string().default('localhost'),
   POSTGRES_PORT: Joi.number().default(5432),
   POSTGRES_USER: Joi.string().required(),
@@ -34,6 +46,12 @@ export const envValidationSchema = Joi.object({
 
   // Frontend origin used inside invite emails.
   APP_URL: Joi.string().default('http://localhost:5174'),
+
+  // Fallback support address for candidates whose attempt is interrupted, used
+  // only where the inviting organisation has set none of its own. Optional:
+  // unset means the candidate UI offers no contact route, which beats offering
+  // one that goes nowhere.
+  SUPPORT_EMAIL: Joi.string().email().allow('').default(''),
 
   // Mail is optional in dev: with no MAIL_HOST the mailer logs to the console
   // instead of sending, so the invite flow is testable without an account.

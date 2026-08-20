@@ -9,24 +9,35 @@ interface NavItem {
   end?: boolean;
 }
 
-// "My account" is deliberately absent here — it lives in the user menu, so it
-// doesn't compete with the working pages for space in the top bar.
+/*
+ * Sections, not pages.
+ *
+ * "Question performance" used to sit here beside "Question bank" as though the
+ * two were different parts of the product rather than two views of the same
+ * one, and the bar grew a link every time anything was added. A section with
+ * more than one page now carries its own `SubNav`; this list stays short enough
+ * to read.
+ *
+ * "My account" is not here either — it is a tab inside Settings, and still
+ * reachable from the user menu, which is where people look for it first.
+ */
 const RECRUITER_NAV: NavItem[] = [
   { to: '/admin', label: 'Dashboard', end: true },
-  { to: '/admin/questions', label: 'Question bank' },
-  { to: '/admin/import', label: 'Bulk import' },
-  { to: '/admin/modules', label: 'Modules' },
   { to: '/admin/assessments', label: 'Assessments' },
+  { to: '/admin/questions', label: 'Question bank' },
+  { to: '/admin/modules', label: 'Modules' },
   { to: '/admin/people', label: 'People' },
+  { to: '/admin/settings', label: 'Settings' },
 ];
 
-const CANDIDATE_NAV: NavItem[] = [
-  { to: '/assessments', label: 'My assessments', end: true },
-];
-
+/**
+ * The recruiter shell. Candidates have their own — `CandidateLayout` — because
+ * two destinations do not fill a bar built for six, so the nav is unconditional
+ * here rather than branching on the role.
+ */
 export function AppLayout() {
   const { user } = useAuth();
-  const items = user?.role === 'recruiter_admin' ? RECRUITER_NAV : CANDIDATE_NAV;
+  const items = RECRUITER_NAV;
 
   return (
     <div className="shell">

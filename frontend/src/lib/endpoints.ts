@@ -4,21 +4,32 @@ import type {
   Assessment,
   AssessmentInvitation,
   AttemptListItem,
+  AttemptReview,
   AuthUser,
   BulkImportResult,
   BulkInviteResult,
+  CandidateAttemptView,
+  CandidateMessage,
   CandidateInvitation,
   CreatedUser,
   ModuleCatalogEntry,
+  OrganisationProfile,
+  BrandingPatch,
+  ItemAnalysis,
   ModuleQuestionStats,
+  OrgRole,
   Paginated,
+  PracticeQuestion,
   Question,
   QuestionDraft,
   LoginPortal,
   QuestionStatus,
   RegisterPayload,
+  AssessmentDeletionResult,
+  DeletionResult,
   ReportDetail,
   ReportSummary,
+  ReviewPatch,
   SessionStep,
   UserProfile,
   UserRole,
@@ -51,6 +62,22 @@ export const authApi = {
   refresh: () => api.post<AuthResponse>('/auth/refresh').then((r) => r.data),
 
   logout: () => api.post<void>('/auth/logout').then(() => undefined),
+
+  /**
+   * Asks for a reset link.
+   *
+   * Resolves the same way whether or not that address has an account — the
+   * server deliberately gives nothing away, so the UI must not either. Never
+   * branch on this result to say "we found you".
+   */
+  forgotPassword: (email: string) =>
+    api.post<void>('/auth/forgot-password', { email }).then(() => undefined),
+
+  /** Redeems the token from the emailed link. Signs out every other session. */
+  resetPassword: (token: string, password: string) =>
+    api
+      .post<void>('/auth/reset-password', { token, password })
+      .then(() => undefined),
 };
 
 export const usersApi = {
@@ -85,6 +112,20 @@ export const usersApi = {
     api
       .post<CreatedUser>('/users', { fullName, email, role })
       .then((r) => r.data),
+
+  /** Moves a colleague to another workspace role. Server has the final say. */
+  setOrgRole: (id: string, orgRole: OrgRole) =>
+    api
+      .patch<UserProfile>(`/users/${id}/org-role`, { orgRole })
+      .then((r) => r.data),
+
+  /**
+   * Deletes a person and everything this organisation holds about them. The
+   * server reports what it destroyed — the client must not re-derive that, or
+   * the confirmation it shows could contradict what actually happened.
+   */
+  remove: (id: string) =>
+    api.delete<DeletionResult>(`/users/${id}`).then((r) => r.data),
 };
 
 export interface UserQuery {
@@ -115,6 +156,14 @@ export const questionsApi = {
   /** One request for the whole dashboard, instead of a count per module. */
   stats: () =>
     api.get<ModuleQuestionStats[]>('/questions/stats').then((r) => r.data),
+
+  /** How each question is actually performing, from the answers already given. */
+  analysis: (moduleId?: string) =>
+    api
+      .get<ItemAnalysis[]>('/questions/analysis', {
+        params: moduleId ? { moduleId } : undefined,
+      })
+      .then((r) => r.data),
 
   list: (query: QuestionQuery) =>
     api
@@ -173,10 +222,9 @@ export const questionsApi = {
    * the bearer token has to travel. Fetch it, then hand the browser a blob.
    */
   downloadTemplate: async (kind: 'mcq' | 'personality') => {
-    const res = await api.get<Blob>(
-      `/questions/bulk-import/template/${kind}`,
-      { responseType: 'blob' },
-    );
+    const res = await api.get<Blob>(`/questions/bulk-import/template/${kind}`, {
+      responseType: 'blob',
+    });
 
     const url = URL.createObjectURL(res.data);
     const link = document.createElement('a');
@@ -189,17 +237,44 @@ export const questionsApi = {
   },
 };
 
-/** Fetches a recruiter-only file (bearer token required) and saves it. */
+/**
+ * Fetches a recruiter-only file (bearer token required) and saves it.
+ *
+ * `filename` is the fallback. A blob response discards `Content-Disposition`
+ * as far as the browser is concerned — the synthetic `<a download>` decides
+ * the name — so where the server named the file, that name is preferred and
+ * the caller's is only used if the header is missing or unreadable.
+ */
 async function downloadFile(path: string, filename: string): Promise<void> {
   const res = await api.get<Blob>(path, { responseType: 'blob' });
   const url = URL.createObjectURL(res.data);
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename;
+  link.download = filenameFromHeaders(res.headers) ?? filename;
   document.body.append(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * The filename the server chose, or null.
+ *
+ * Only the quoted `filename="…"` form is read, because that is the only form
+ * this API sends. Anything with a path separator in it is rejected rather than
+ * sanitised: a name that tries to steer where the file lands is not a name.
+ */
+function filenameFromHeaders(headers: unknown): string | null {
+  const raw = (headers as Record<string, unknown> | undefined)?.[
+    'content-disposition'
+  ];
+  if (typeof raw !== 'string') return null;
+
+  const match = /filename="([^"]+)"/.exec(raw);
+  const name = match?.[1];
+  if (!name || name.includes('/') || name.includes('\\')) return null;
+
+  return name;
 }
 
 export interface AssessmentModulePayload {
@@ -219,6 +294,12 @@ export interface CreateAssessmentPayload {
    * the default — the engine then uses everything the organisation can see.
    */
   questionIds?: string[];
+  /**
+   * When the round runs, as ISO strings. Omit either for no bound; omit both
+   * and it is open from the moment it exists, which is the default.
+   */
+  opensAt?: string;
+  closesAt?: string;
 }
 
 export const assessmentsApi = {
@@ -237,6 +318,35 @@ export const assessmentsApi = {
   setQuestionPool: (id: string, questionIds: string[]) =>
     api
       .put<Assessment>(`/assessments/${id}/questions`, { questionIds })
+      .then((r) => r.data),
+
+  /**
+   * Deletes the assessment and every attempt made on it. Candidate accounts
+   * survive — only their data for this assessment goes.
+   */
+  remove: (id: string) =>
+    api
+      .delete<AssessmentDeletionResult>(`/assessments/${id}`)
+      .then((r) => r.data),
+};
+
+export const organisationsApi = {
+  /**
+   * The caller's own workspace. There is deliberately no route taking an
+   * organisation id — the server reads the scope from the token, so there is no
+   * id here for anyone to substitute.
+   */
+  mine: () =>
+    api.get<OrganisationProfile>('/organisations/mine').then((r) => r.data),
+
+  /**
+   * Partial by design: an omitted field is left alone and an explicit `null`
+   * clears it. Send only what changed, or clearing a logo would also reset the
+   * colour.
+   */
+  updateBranding: (changes: BrandingPatch) =>
+    api
+      .patch<OrganisationProfile>('/organisations/mine/branding', changes)
       .then((r) => r.data),
 };
 
@@ -275,6 +385,26 @@ export const invitationsApi = {
       .delete<{ id: string; deleted: true }>(`/invitations/${invitationId}`)
       .then((r) => r.data),
 
+  /**
+   * Recruiter: move one candidate's window without touching the round.
+   *
+   * For the person who was ill on the day, or whose power went. Sets the
+   * per-invitation override, so rescheduling one candidate leaves the other
+   * ninety on the round's own dates. `null` on either end clears the override
+   * and returns that end to the assessment's schedule; omit a field to leave
+   * it alone.
+   */
+  reschedule: (
+    invitationId: string,
+    changes: { opensAt?: string | null; expiresAt?: string | null },
+  ) =>
+    api
+      .patch<AssessmentInvitation>(
+        `/invitations/${invitationId}/schedule`,
+        changes,
+      )
+      .then((r) => r.data),
+
   /** Recruiter: withdraw access but keep the record and any completed attempt. */
   revoke: (invitationId: string) =>
     api
@@ -282,11 +412,55 @@ export const invitationsApi = {
       .then((r) => r.data),
 
   downloadTemplate: () =>
-    downloadFile('/invitations/template', 'adaptivehire-candidates-template.csv'),
+    downloadFile(
+      '/invitations/template',
+      'adaptivehire-candidates-template.csv',
+    ),
 
   /** Candidate: their own invitations, for the assessment list. */
   mine: () =>
     api.get<CandidateInvitation[]>('/me/invitations').then((r) => r.data),
+
+  /**
+   * One timed round trip, for the readiness check's connection measurement.
+   *
+   * The same authenticated endpoint the candidate's own pages use, so what is
+   * measured is the real path — auth, database and all — rather than a public
+   * health route that skips most of the work a real request does.
+   *
+   * The nonce is the point of this existing separately from `mine`. Express
+   * puts an ETag on the response, so a repeated identical GET can come back as
+   * a 304 that is faster than the request it is meant to be timing, and the
+   * median of three would then measure the browser cache rather than the
+   * network. A unique query string makes every sample a real one.
+   */
+  ping: () =>
+    api
+      .get<CandidateInvitation[]>('/me/invitations', {
+        params: { _: `${Date.now()}-${Math.random().toString(36).slice(2)}` },
+      })
+      .then(() => undefined),
+
+  /**
+   * Candidate: untimed, unscored practice questions for one of their own
+   * invitations.
+   *
+   * An empty array is a normal answer — it means nobody has authored samples
+   * for these subjects yet, and the caller skips the step rather than blocking.
+   */
+  practice: (invitationId: string) =>
+    api
+      .get<PracticeQuestion[]>(`/me/invitations/${invitationId}/practice`)
+      .then((r) => r.data),
+
+  /**
+   * Candidate: one of their own invitations in full — where it has got to, and
+   * how their attempt went. Participation figures only; no score comes back.
+   */
+  myAttempt: (invitationId: string) =>
+    api
+      .get<CandidateAttemptView>(`/me/invitations/${invitationId}`)
+      .then((r) => r.data),
 };
 
 /**
@@ -337,14 +511,101 @@ export const reportsApi = {
       .get<AttemptListItem[]>(`/reports/assessments/${assessmentId}`)
       .then((r) => r.data),
 
+  /**
+   * Downloads the cohort as a CSV.
+   *
+   * Sends the session ids in the order they are on screen, so the file matches
+   * exactly what the recruiter filtered and sorted rather than approximating it
+   * from query parameters.
+   */
+  exportCohort: async (assessmentId: string, sessionIds: string[]) => {
+    const res = await api.post<Blob>(
+      `/reports/assessments/${assessmentId}/export`,
+      { sessionIds },
+      { responseType: 'blob' },
+    );
+
+    const url = URL.createObjectURL(res.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'adaptivehire-results.csv';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Saves one candidate's full report as a PDF.
+   *
+   * The server builds the file, so this is an ordinary authenticated download
+   * that lands in the downloads folder. It replaced `window.print()`, which
+   * could only ever open the print dialog and ask the recruiter to pick "Save
+   * as PDF" themselves — no page can skip that dialog.
+   */
+  downloadPdf: (sessionId: string) =>
+    downloadFile(
+      `/reports/sessions/${sessionId}/pdf`,
+      // Only reached if the server sent no filename; it always does.
+      'adaptivehire-report.pdf',
+    ),
+
+  /**
+   * Shortlist, reject, tag or annotate an attempt.
+   *
+   * Send only what changed. The row is shared across the organisation, so a
+   * full replacement would blank a colleague's note whenever the caller
+   * happened not to be showing it.
+   */
+  saveReview: (sessionId: string, patch: ReviewPatch) =>
+    api
+      .put<AttemptReview>(`/reports/sessions/${sessionId}/review`, patch)
+      .then((r) => r.data),
+
   /** Layer one: the stored summary and scores. */
   summary: (sessionId: string) =>
-    api.get<ReportSummary>(`/reports/sessions/${sessionId}`).then((r) => r.data),
+    api
+      .get<ReportSummary>(`/reports/sessions/${sessionId}`)
+      .then((r) => r.data),
 
   /** Layer two: fetched separately so the summary paints without waiting. */
   detail: (sessionId: string) =>
     api
       .get<ReportDetail>(`/reports/sessions/${sessionId}/detail`)
+      .then((r) => r.data),
+
+  /**
+   * Tells the candidate they were not taken forward.
+   *
+   * Separate from `saveReview` on purpose — this one reaches a person and
+   * cannot be undone. The decision must already be 'rejected' (400 otherwise),
+   * and a second call is refused with 409 rather than sending again, so the
+   * server is the guard here and the disabled button is only a courtesy.
+   */
+  sendRejectionEmail: (sessionId: string) =>
+    api
+      .post<{ sentAt: string; to: string }>(
+        `/reports/sessions/${sessionId}/rejection-email`,
+      )
+      .then((r) => r.data),
+
+  /**
+   * Writes to the candidate in the recruiter's own words.
+   *
+   * The way back to somebody already rejected — that decision is final on the
+   * server, so re-engaging means talking to them rather than un-ticking a box.
+   */
+  sendMessage: (sessionId: string, message: string) =>
+    api
+      .post<CandidateMessage>(`/reports/sessions/${sessionId}/messages`, {
+        message,
+      })
+      .then((r) => r.data),
+
+  /** What has already been said to this candidate, newest first. */
+  messages: (sessionId: string) =>
+    api
+      .get<CandidateMessage[]>(`/reports/sessions/${sessionId}/messages`)
       .then((r) => r.data),
 
   regenerate: (sessionId: string) =>

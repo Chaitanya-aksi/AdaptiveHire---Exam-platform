@@ -8,8 +8,15 @@ export type ProctoringEventType =
   | 'tab_switch'
   | 'fullscreen_exit'
   | 'face_absent'
+  | 'face_not_framed'
   | 'multiple_faces'
-  | 'multiple_displays_detected';
+  | 'multiple_displays_detected'
+  /**
+   * Sustained sound above a threshold. Named for what is measured: the level is
+   * read in the browser and the samples discarded, so this cannot distinguish a
+   * voice from a television and must never be presented as "talking".
+   */
+  | 'background_noise';
 
 export interface ProctoringEvent {
   sessionId: string;

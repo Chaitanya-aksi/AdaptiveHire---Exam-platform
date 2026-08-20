@@ -6,6 +6,8 @@ import { BulkImportService } from './bulk-import/bulk-import.service';
 import { McqQuestionDetails } from './entities/mcq-question-details.entity';
 import { PersonalityQuestionDetails } from './entities/personality-question-details.entity';
 import { Question } from './entities/question.entity';
+import { ItemAnalysisService } from './item-analysis.service';
+import { PracticeService } from './practice.service';
 import { QuestionBankController } from './question-bank.controller';
 import { QuestionBankService } from './question-bank.service';
 
@@ -21,7 +23,15 @@ import { QuestionBankService } from './question-bank.service';
   // BulkImportController is declared first so its literal
   // /questions/bulk-import path is matched before /questions/:id.
   controllers: [BulkImportController, QuestionBankController],
-  providers: [QuestionBankService, BulkImportService],
-  exports: [QuestionBankService, BulkImportService],
+  providers: [
+    QuestionBankService,
+    BulkImportService,
+    ItemAnalysisService,
+    PracticeService,
+  ],
+  // PracticeService is exported for the candidate runtime: the invitations
+  // module serves the pre-assessment practice through it, so the rule about
+  // which questions an organisation can see stays in one place.
+  exports: [QuestionBankService, BulkImportService, PracticeService],
 })
 export class QuestionBankModule {}

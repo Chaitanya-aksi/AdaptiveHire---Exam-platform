@@ -2,6 +2,8 @@ export interface AppConfig {
   nodeEnv: string;
   port: number;
   corsOrigins: string[];
+  /** Undefined lets the logger pick by environment: debug in dev, info in prod. */
+  logLevel?: string;
   database: {
     host: string;
     port: number;
@@ -28,6 +30,15 @@ export interface AppConfig {
   };
   /** Where the frontend lives — used to build links inside invite emails. */
   appUrl: string;
+  /**
+   * Fallback address a candidate can write to when an assessment goes wrong,
+   * used only where the inviting organisation has set none of its own.
+   *
+   * Null rather than a placeholder: an unset address means the UI shows no
+   * contact route at all, which is better than pointing someone whose attempt
+   * has just been cut short at a mailbox nobody reads.
+   */
+  supportEmail: string | null;
   mail: {
     /** Empty in dev: the mailer then logs messages instead of sending them. */
     host: string;
@@ -46,6 +57,7 @@ export default (): AppConfig => ({
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  logLevel: process.env.LOG_LEVEL || undefined,
   database: {
     host: process.env.POSTGRES_HOST ?? 'localhost',
     port: parseInt(process.env.POSTGRES_PORT ?? '5432', 10),
@@ -73,6 +85,7 @@ export default (): AppConfig => ({
     limit: parseInt(process.env.THROTTLE_LIMIT ?? '120', 10),
   },
   appUrl: process.env.APP_URL ?? 'http://localhost:5174',
+  supportEmail: process.env.SUPPORT_EMAIL?.trim() || null,
   mail: {
     host: process.env.MAIL_HOST ?? '',
     port: parseInt(process.env.MAIL_PORT ?? '587', 10),

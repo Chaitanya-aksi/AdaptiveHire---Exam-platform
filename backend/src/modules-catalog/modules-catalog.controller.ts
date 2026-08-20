@@ -10,8 +10,9 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { MinOrgRole } from '../common/decorators/org-roles.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../common/enums';
+import { OrgRole, UserRole } from '../common/enums';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { ModulesCatalogService } from './modules-catalog.service';
@@ -35,12 +36,14 @@ export class ModulesCatalogController {
   }
 
   @Roles(UserRole.RECRUITER_ADMIN)
+  @MinOrgRole(OrgRole.ADMIN)
   @Post()
   create(@Body() dto: CreateModuleDto) {
     return this.modules.create(dto);
   }
 
   @Roles(UserRole.RECRUITER_ADMIN)
+  @MinOrgRole(OrgRole.ADMIN)
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateModuleDto) {
     return this.modules.update(id, dto);
@@ -48,6 +51,7 @@ export class ModulesCatalogController {
 
   /** Soft delete — see the service for why hard deletes aren't offered. */
   @Roles(UserRole.RECRUITER_ADMIN)
+  @MinOrgRole(OrgRole.ADMIN)
   @Delete(':id')
   deactivate(@Param('id', ParseUUIDPipe) id: string) {
     return this.modules.deactivate(id);

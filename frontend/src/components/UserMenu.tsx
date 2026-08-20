@@ -16,9 +16,18 @@ export function initials(name: string | undefined): string {
   return (parts[0][0] + last).toUpperCase();
 }
 
-/** The profile route each role's layout mounts under. */
+/**
+ * The account route each role's layout mounts under.
+ *
+ * A recruiter's is a tab inside Settings rather than a page of its own — the
+ * things somebody changes about themselves and the things they change about
+ * the workspace belong in one place. This menu still points at it, because
+ * that is where people look for it first.
+ */
 export const profilePath = (role: UserRole | undefined): string =>
-  role === 'recruiter_admin' ? '/admin/profile' : '/assessments/profile';
+  role === 'recruiter_admin'
+    ? '/admin/settings/account'
+    : '/assessments/profile';
 
 /**
  * The account button in the top bar. It lives in a sticky header, so unlike

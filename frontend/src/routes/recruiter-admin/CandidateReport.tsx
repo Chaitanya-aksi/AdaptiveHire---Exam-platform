@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { reportsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
+// Aliased: this file already has a `formatDuration` that takes milliseconds,
+// for the per-question times in the answer table. This one takes seconds, and
+// two functions with the same name and different units is a bug waiting to be
+// written.
+import {
+  formatDuration as formatSeconds,
+  formatWhen as formatMoment,
+} from '../../lib/schedule';
 import type {
   AnswerDetail,
   BehavioralPattern,
@@ -32,6 +40,13 @@ const PATTERN_LABEL: Record<BehavioralPattern, string> = {
  */
 const PROBE_HELD_AT = 0.7;
 
+/**
+ * Evidence at or above which a trait is reported as a figure at all. Mirrors
+ * the backend's `MIN_TRAIT_CONFIDENCE`, which is the same floor the server
+ * applies when it decides whether a composite carries a score.
+ */
+const MIN_TRAIT_CONFIDENCE = 0.5;
+
 const BAND_LABEL: Record<ProfileBand, string> = {
   strong: 'Strong',
   moderate: 'Moderate',
@@ -49,8 +64,10 @@ const EVENT_LABEL: Record<ProctoringEventType, string> = {
   tab_switch: 'Switched away from the test',
   fullscreen_exit: 'Left full screen',
   face_absent: 'No face visible',
+  face_not_framed: 'Face not properly in view',
   multiple_faces: 'More than one face visible',
   multiple_displays_detected: 'More than one display detected',
+  background_noise: 'Background noise',
 };
 
 function formatDuration(ms: number | null): string {
@@ -115,9 +132,7 @@ function ProbeBlock({ probes }: { probes: ProbeSummary }) {
                 <span className="muted small mono">
                   Q{pair.firstSequence} → Q{pair.secondSequence}
                 </span>{' '}
-                <span
-                  className={`badge ${consistent ? 'active' : 'archived'}`}
-                >
+                <span className={`badge ${consistent ? 'active' : 'archived'}`}>
                   {consistent ? 'Same answer' : 'Answered differently'}
                 </span>
                 {pair.flipped === true && (
@@ -132,7 +147,10 @@ function ProbeBlock({ probes }: { probes: ProbeSummary }) {
                     ·{' '}
                     {pair.divergentTraits
                       .slice(0, 3)
-                      .map((t) => `${t.label} ${signed(t.first)} then ${signed(t.second)}`)
+                      .map(
+                        (t) =>
+                          `${t.label} ${signed(t.first)} then ${signed(t.second)}`,
+                      )
                       .join(', ')}
                   </span>
                 )}
@@ -208,23 +226,48 @@ function ModuleCard({ module }: { module: ReportModuleSummary }) {
 
       {module.traits.length > 0 && (
         <ul className="report-traits">
-          {module.traits.map((trait) => (
-            <li key={trait.key}>
-              <div className="spread">
-                <span>{trait.label}</span>
-                <span className="muted small">
-                  {trait.score}
-                  {/* Low confidence is shown, never silently hidden — a thin
-                      trait must not read like a firm finding. */}
-                  {trait.confidence < 0.5 && ' · low confidence'}
-                  {trait.consistency !== null &&
-                    trait.consistency < 0.5 &&
-                    ' · varied by situation'}
-                </span>
-              </div>
-              <ScoreBar score={trait.score} />
-            </li>
-          ))}
+          {module.traits.map((trait) => {
+            /*
+             * Same rule as the composites above: below the floor, no number and
+             * no bar.
+             *
+             * Two distinct cases, and calling them both "low confidence" was
+             * wrong. A trait with `confidence: 0` was never asked about at all
+             * — the estimator scores it at the neutral midpoint so the report
+             * can say "no signal" — so rendering "50" with a half-filled bar
+             * invented a measurement. A trait with one or two answers was
+             * measured, just not enough to report.
+             */
+            const answered = trait.confidence > 0;
+            const measured = trait.confidence >= MIN_TRAIT_CONFIDENCE;
+
+            return (
+              <li key={trait.key}>
+                <div className="spread">
+                  <span className={measured ? undefined : 'muted'}>
+                    {trait.label}
+                  </span>
+                  <span className="muted small">
+                    {measured ? (
+                      <>
+                        {trait.score}
+                        {trait.consistency !== null &&
+                          trait.consistency < 0.5 &&
+                          ' · varied by situation'}
+                      </>
+                    ) : answered ? (
+                      'Too few answers to report'
+                    ) : (
+                      'Not answered'
+                    )}
+                  </span>
+                </div>
+                {/* The bar is what makes a figure read as a measurement, so it
+                    goes wherever the figure does. */}
+                {measured && <ScoreBar score={trait.score} />}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -241,6 +284,17 @@ function ModuleCard({ module }: { module: ReportModuleSummary }) {
  * authored weights, then disagree with the blend if they read it differently.
  */
 function ProfileCard({ profile }: { profile: ProfileScore }) {
+  /*
+   * A composite with too little behind it carries no number and no band — the
+   * server withholds both rather than sending a figure with a caveat attached.
+   *
+   * The card stays, because "we asked about this and got too little back" is
+   * itself worth knowing, and a silently missing capability would read as one
+   * the assessment never covered. What goes is anything that could be mistaken
+   * for a finding: the figure, the band, and the filled bar.
+   */
+  const measured = profile.score !== null && profile.band !== null;
+
   return (
     <div className="report-module">
       <div className="spread">
@@ -249,27 +303,44 @@ function ProfileCard({ profile }: { profile: ProfileScore }) {
           <div className="muted small">{profile.description}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <strong className="report-score">{profile.score}</strong>
-          <div>
-            <span className={`badge ${BAND_BADGE[profile.band]}`}>
-              {BAND_LABEL[profile.band]}
-            </span>
-          </div>
+          {measured ? (
+            <>
+              <strong className="report-score">{profile.score}</strong>
+              <div>
+                <span className={`badge ${BAND_BADGE[profile.band!]}`}>
+                  {BAND_LABEL[profile.band!]}
+                </span>
+              </div>
+            </>
+          ) : (
+            <span className="badge">Not enough answers</span>
+          )}
         </div>
       </div>
 
-      <ScoreBar score={profile.score} />
+      {measured && <ScoreBar score={profile.score!} />}
 
       <div className="muted small">
-        {/* Low confidence is stated, never hidden: a composite resting on two
-            answers must not read like a firm finding. */}
-        {profile.confidence < 0.5
-          ? 'Low confidence — too few answers behind the traits in this blend. '
-          : ''}
-        Built from{' '}
-        {profile.contributions
-          .map((c) => `${c.label} ${c.score} (${Math.round(c.weight * 100)}%)`)
-          .join(' · ')}
+        {measured ? (
+          ''
+        ) : (
+          <>
+            Too few answers touched the traits behind this to report a
+            score.{' '}
+          </>
+        )}
+        {profile.contributions.length > 0 ? (
+          <>
+            Built from{' '}
+            {profile.contributions
+              .map(
+                (c) => `${c.label} ${c.score} (${Math.round(c.weight * 100)}%)`,
+              )
+              .join(' · ')}
+          </>
+        ) : (
+          'None of its traits were measured.'
+        )}
       </div>
     </div>
   );
@@ -335,6 +406,8 @@ export function CandidateReport() {
   const [showDetail, setShowDetail] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** The PDF is built server-side, so the button has to say it is working. */
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -342,7 +415,9 @@ export function CandidateReport() {
     reportsApi
       .summary(sessionId)
       .then(setSummary)
-      .catch((err) => setError(describeError(err, 'Could not load the report.')))
+      .catch((err) =>
+        setError(describeError(err, 'Could not load the report.')),
+      )
       .finally(() => setLoading(false));
   }, [sessionId]);
 
@@ -371,10 +446,76 @@ export function CandidateReport() {
           <p>
             {summary.assessment.title} · {candidate.email}
           </p>
+          {/*
+           * When they sat it and how long it took.
+           *
+           * Two clocks, kept apart. "Elapsed" is start to submit and includes
+           * thinking and stepping away; "answering" sums the per-question
+           * timers. Presenting only one would either make a candidate who took
+           * a phone call look slow, or hide someone who spent an hour on a
+           * twenty-minute test.
+           */}
+          <p className="report-timing">
+            <span>
+              Started <strong>{formatMoment(summary.timing.startedAt)}</strong>
+            </span>
+            {summary.timing.submittedAt && (
+              <span>
+                Submitted{' '}
+                <strong>{formatMoment(summary.timing.submittedAt)}</strong>
+              </span>
+            )}
+            {summary.timing.elapsedSeconds !== null && (
+              <span>
+                <strong>{formatSeconds(summary.timing.elapsedSeconds)}</strong>{' '}
+                elapsed
+                {/* Said plainly: for a timed-out attempt the elapsed figure is
+                    the assessment's own limit, not a choice the candidate
+                    made, and reading it as slowness would be unfair. */}
+                {summary.timing.autoSubmitted && ' — ran out of time'}
+              </span>
+            )}
+            {summary.timing.timeOnQuestionsSeconds !== null && (
+              <span>
+                <strong>
+                  {formatSeconds(summary.timing.timeOnQuestionsSeconds)}
+                </strong>{' '}
+                answering
+              </span>
+            )}
+          </p>
         </div>
-        <Link to={`/admin/assessments/${summary.assessment.id}/results`}>
-          Back to results
-        </Link>
+        <div className="row report-head-actions">
+          {/*
+           * A server-built PDF, not `window.print()`.
+           *
+           * Printing was the original approach and could never drift from the
+           * screen, because it *was* the screen. What it could never do is
+           * download: no web page may skip the browser's print dialog, so a
+           * button labelled "Save as PDF" always opened a dialog with a
+           * destination to choose — which is how it kept getting reported as
+           * broken. The server now renders the file and this saves it, so the
+           * label finally describes what happens.
+           */}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              setSaving(true);
+              reportsApi
+                .downloadPdf(summary.sessionId)
+                .catch((err) =>
+                  setError(describeError(err, 'Could not build the PDF.')),
+                )
+                .finally(() => setSaving(false));
+            }}
+          >
+            {saving ? 'Preparing…' : 'Save as PDF'}
+          </button>
+          <Link to={`/admin/assessments/${summary.assessment.id}/results`}>
+            Back to results
+          </Link>
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
@@ -391,11 +532,20 @@ export function CandidateReport() {
                 )}
               </div>
             </div>
-            <span
-              className={`badge ${RECOMMENDATION_BADGE[report.hiringRecommendation]}`}
-            >
-              {RECOMMENDATION_LABEL[report.hiringRecommendation]}
-            </span>
+            {/* No score, no band. "Borderline" used to sit here on an attempt
+                where nothing was answered, which reads as a verdict somebody
+                reached rather than the absence of one. */}
+            {report.hiringRecommendation ? (
+              <span
+                className={`badge ${RECOMMENDATION_BADGE[report.hiringRecommendation]}`}
+              >
+                {RECOMMENDATION_LABEL[report.hiringRecommendation]}
+              </span>
+            ) : (
+              <span className="badge" title="Nothing scoreable was answered">
+                No result
+              </span>
+            )}
           </div>
 
           {/* Where the headline came from. Shown only when both halves exist —
@@ -418,8 +568,8 @@ export function CandidateReport() {
           <p className="report-summary">{report.summary}</p>
 
           <p className="muted small" style={{ margin: 0 }}>
-            Rule-based from the scores below. Proctoring signals never affect
-            it — the decision is yours.
+            Rule-based from the scores below. Proctoring signals never affect it
+            — the decision is yours.
           </p>
         </div>
 

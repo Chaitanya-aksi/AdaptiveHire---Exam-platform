@@ -62,17 +62,22 @@ describe('Step 2 — Question Bank', () => {
       }
     });
 
-    it('has a trait module declaring all five Big Five keys with labels', () => {
+    it('has a trait module declaring the ten workplace traits with labels', () => {
       const personality = moduleBySlug('personality');
       expect(personality.scoringType).toBe('trait');
 
       const keys = (personality.traits ?? []).map((t) => t.key).sort();
       expect(keys).toEqual([
-        'agreeableness',
-        'conscientiousness',
-        'extraversion',
-        'neuroticism',
-        'openness',
+        'accountability',
+        'adaptability',
+        'communication',
+        'empathy',
+        'integrity',
+        'leadership',
+        'ownership',
+        'resilience',
+        'risk_tolerance',
+        'teamwork',
       ]);
 
       for (const trait of personality.traits ?? []) {
@@ -81,12 +86,12 @@ describe('Step 2 — Question Bank', () => {
       }
     });
 
-    it('marks neuroticism as inverted for reporting', () => {
-      const neuroticism = (moduleBySlug('personality').traits ?? []).find(
-        (t) => t.key === 'neuroticism',
-      );
-      // Reported as its opposite pole, so the raw score must be flipped.
-      expect(neuroticism?.invertForReport).toBe(true);
+    it('declares every trait key exactly once', () => {
+      // Two entries sharing a key would silently merge into one score, and the
+      // second label would never be shown — the sort of thing a hand-edited
+      // vocabulary migration gets wrong without failing anything else.
+      const keys = (moduleBySlug('personality').traits ?? []).map((t) => t.key);
+      expect(new Set(keys).size).toBe(keys.length);
     });
 
     it('refuses to give an objective module traits', async () => {
@@ -226,6 +231,90 @@ describe('Step 2 — Question Bank', () => {
       expect((archived.body as { status: string }).status).toBe('archived');
     });
 
+    /*
+     * Practice questions, and the one property that makes them safe.
+     *
+     * The candidate is shown the answer before the assessment starts. If such a
+     * question could then be asked for real, practice would be a leak of the
+     * paper rather than a rehearsal of the controls — so the exclusion is the
+     * feature, and these are the tests that hold it in place.
+     */
+    describe('sample questions', () => {
+      it('records the flag and keeps it through an edit', async () => {
+        const created = await http(app)
+          .post('/api/questions')
+          .set(auth())
+          .send(aptitudeQuestion({ isSample: true }))
+          .expect(201);
+
+        const { id } = created.body as { id: string };
+        createdQuestionIds.push(id);
+        expect((created.body as { isSample: boolean }).isSample).toBe(true);
+
+        // An unrelated edit must not quietly put it back into circulation.
+        const edited = await http(app)
+          .patch(`/api/questions/${id}`)
+          .set(auth())
+          .send({ questionText: 'E2E: what is 6 x 7, reworded?' })
+          .expect(200);
+        expect((edited.body as { isSample: boolean }).isSample).toBe(true);
+      });
+
+      it('refuses to put one in an assessment’s question pool', async () => {
+        const sample = await http(app)
+          .post('/api/questions')
+          .set(auth())
+          .send(aptitudeQuestion({ isSample: true, status: 'active' }))
+          .expect(201);
+        const sampleId = (sample.body as { id: string }).id;
+        createdQuestionIds.push(sampleId);
+
+        const res = await http(app)
+          .post('/api/assessments')
+          .set(auth())
+          .send({
+            title: 'E2E sample-pool assessment',
+            modules: [
+              {
+                moduleId: moduleBySlug('aptitude').id,
+                minQuestions: 1,
+                maxQuestions: 3,
+                timeLimitSeconds: 600,
+              },
+            ],
+            questionIds: [sampleId],
+          })
+          .expect(400);
+
+        // Named as the fixable mistake it is, not as a missing id — the
+        // question is theirs and visible, it just cannot be asked for real.
+        expect(JSON.stringify(res.body)).toContain('practice question');
+      });
+
+      it('stays visible in the bank, so it can be reviewed', async () => {
+        // The exclusion is from *serving*, not from the recruiter's own
+        // listing. Hiding samples from the bank would leave nobody able to
+        // find, edit or retire the questions candidates practise on.
+        const sample = await http(app)
+          .post('/api/questions')
+          .set(auth())
+          .send(aptitudeQuestion({ isSample: true, status: 'active' }))
+          .expect(201);
+        const sampleId = (sample.body as { id: string }).id;
+        createdQuestionIds.push(sampleId);
+
+        const listed = await http(app)
+          .get('/api/questions?limit=200')
+          .set(auth())
+          .expect(200);
+
+        const found = (listed.body as { items: { id: string }[] }).items.find(
+          (q) => q.id === sampleId,
+        );
+        expect(found).toBeDefined();
+      });
+    });
+
     it('permanently deletes a question no candidate has answered', async () => {
       const created = await http(app)
         .post('/api/questions')
@@ -296,11 +385,16 @@ describe('Step 2 — Question Bank', () => {
           moduleId: moduleBySlug('aptitude').id,
           questionText: 'E2E mismatch',
           personality: {
+            // A valid pattern and real trait keys throughout, so the 400 can
+            // only be the module/payload mismatch this test is named for.
+            // Without the pattern it still returned 400 — for the missing
+            // pattern instead, which is not what is under test.
+            pattern: 'situational',
             options: [
-              { key: 'A', text: 'w', traitWeights: { openness: 2 } },
-              { key: 'B', text: 'x', traitWeights: { openness: 1 } },
-              { key: 'C', text: 'y', traitWeights: { openness: -1 } },
-              { key: 'D', text: 'z', traitWeights: { openness: -2 } },
+              { key: 'A', text: 'w', traitWeights: { teamwork: 2 } },
+              { key: 'B', text: 'x', traitWeights: { teamwork: 1 } },
+              { key: 'C', text: 'y', traitWeights: { teamwork: -1 } },
+              { key: 'D', text: 'z', traitWeights: { teamwork: -2 } },
             ],
           },
         })
@@ -315,18 +409,22 @@ describe('Step 2 — Question Bank', () => {
           moduleId: moduleBySlug('personality').id,
           questionText: 'E2E undeclared trait',
           personality: {
+            // Everything valid except the one bogus key — otherwise the request
+            // is rejected before trait validation is ever reached, and the test
+            // passes without exercising the rule it names.
+            pattern: 'situational',
             options: [
               {
                 key: 'A',
                 text: 'Strongly agree',
                 traitWeights: { punctuality: 2 },
               },
-              { key: 'B', text: 'Agree', traitWeights: { openness: 1 } },
-              { key: 'C', text: 'Disagree', traitWeights: { openness: -1 } },
+              { key: 'B', text: 'Agree', traitWeights: { teamwork: 1 } },
+              { key: 'C', text: 'Disagree', traitWeights: { teamwork: -1 } },
               {
                 key: 'D',
                 text: 'Strongly disagree',
-                traitWeights: { openness: -2 },
+                traitWeights: { teamwork: -2 },
               },
             ],
           },

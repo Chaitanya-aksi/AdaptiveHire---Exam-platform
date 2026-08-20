@@ -110,15 +110,27 @@ export interface ProfileScore {
   key: string;
   label: string;
   description: string;
-  /** 0-100, the weighted mean of the traits that make it up. */
-  score: number;
+  /**
+   * 0-100, the weighted mean of the traits that make it up — or **null when
+   * the evidence behind it is below `MIN_TRAIT_CONFIDENCE`**.
+   *
+   * Withheld rather than shown with a caveat: a number on screen gets acted on
+   * whatever sits next to it. Three answers spread across ten traits produces
+   * arithmetic that is perfectly correct and means nothing, and rendering
+   * "50.8 — Moderate" beside a grey line about low confidence invites exactly
+   * the reading the caveat was meant to prevent.
+   *
+   * `contributions` still carries the working, so a recruiter who wants to see
+   * what little was measured can.
+   */
+  score: number | null;
   /**
    * Evidence behind it, 0..1 — the weighted mean of its traits' confidences.
-   * A composite resting on thinly-measured traits is reported with the same
-   * caveat those traits carry, never laundered into a firm number.
+   * Always reported, including when it is what caused `score` to be withheld.
    */
   confidence: number;
-  band: ProfileBand;
+  /** Null whenever `score` is: an unreportable composite has no band either. */
+  band: ProfileBand | null;
   /** Which traits fed it, strongest contribution first — the working. */
   contributions: {
     key: string;
@@ -164,7 +176,15 @@ export function buildBehavioralProfiles(
       .map(([key, weight]) => ({ trait: byKey.get(key), weight }))
       .filter(
         (entry): entry is { trait: ReportedTrait; weight: number } =>
-          entry.trait !== undefined,
+          // Present in the map is not the same as measured. The estimator
+          // reports every trait the module declared, scoring an unanswered one
+          // at the neutral midpoint with `confidence: 0` so the report can say
+          // "no signal" rather than omit it silently. Those must not reach a
+          // composite: a 50 nobody produced, carried at 35% of the blend,
+          // fabricates a third of the answer and pulls it toward the middle —
+          // which is precisely what the comment above this function forbids
+          // and what the filter used to allow through.
+          entry.trait !== undefined && entry.trait.confidence > 0,
       );
 
     // Nothing measured that bears on this composite: report no composite at
@@ -179,13 +199,18 @@ export function buildBehavioralProfiles(
       present.reduce((sum, e) => sum + e.trait.confidence * e.weight, 0) /
       totalWeight;
 
+    // Below the floor the composite is still listed — a recruiter needs to see
+    // that this capability was asked about and came back thin — but it carries
+    // no number and no band.
+    const reportable = confidence >= MIN_TRAIT_CONFIDENCE;
+
     profiles.push({
       key: definition.key,
       label: definition.label,
       description: definition.description,
-      score: round1(score),
+      score: reportable ? round1(score) : null,
       confidence: round2(confidence),
-      band: bandFor(score),
+      band: reportable ? bandFor(score) : null,
       contributions: present
         .map((entry) => ({
           key: entry.trait.key,
@@ -219,8 +244,12 @@ export function buildBehavioralProfiles(
  * itself refuses to call a strength or a weakness.
  */
 function behavioralIndex(profiles: ProfileScore[]): number | null {
+  // `score !== null` is the same test as the confidence floor — it is set by
+  // it — but keying off the value means the index can never be built from a
+  // number the report itself declined to show.
   const confident = profiles.filter(
-    (profile) => profile.confidence >= MIN_TRAIT_CONFIDENCE,
+    (profile): profile is ProfileScore & { score: number } =>
+      profile.score !== null,
   );
   if (confident.length === 0) return null;
 

@@ -15,6 +15,7 @@ import {
   type SubmittedAnswer,
 } from '../adaptive-engine/adaptive-engine.service';
 import { AbilityEstimatorService } from '../adaptive-engine/ability-estimator/ability-estimator.service';
+import { effectiveWindow, windowState } from '../assessments/assessment-window';
 import type { ModuleRunState } from '../adaptive-engine/engine.types';
 import { EvaluationService } from '../adaptive-engine/evaluation/evaluation.service';
 import type { SelectedQuestion } from '../adaptive-engine/question-selector/question-selector.service';
@@ -56,6 +57,18 @@ import type {
  * intro screens between modules (which run outside any module's clock).
  */
 const INTERMISSION_SECONDS_PER_MODULE = 120;
+
+/**
+ * How long a candidate may sit on the very first intro screen before the
+ * session is abandoned.
+ *
+ * Two hours. Nothing is being measured while they are there — the real clock
+ * does not start until they press Begin — so this exists only to stop a
+ * session sitting `in_progress` forever if somebody opens the runtime and
+ * walks away. The invitation's own window is what actually governs when an
+ * assessment may be sat.
+ */
+const START_GRACE_SECONDS = 7200;
 
 /** Latency allowance so an answer sent just before the buzzer still counts. */
 const ANSWER_GRACE_MS = 2000;
@@ -119,8 +132,29 @@ export class SessionsService {
         'This invitation is no longer valid. Ask the recruiter to re-send it.',
       );
     }
-    if (invitation.expiresAt && invitation.expiresAt.getTime() < Date.now()) {
-      throw new ForbiddenException('This invitation has expired.');
+    /*
+     * The scheduled window, checked before anything is created.
+     *
+     * Replaces a bare `expiresAt` comparison, which knew nothing about the
+     * assessment's own window and so could not express "this round opens on
+     * Tuesday". The two ends are resolved in `effectiveWindow` so this and the
+     * candidate's assessment list always agree — a button that works while the
+     * copy beside it says the test has not opened is worse than either.
+     *
+     * Only checked on the way in. A candidate who started inside the window and
+     * is still working when it closes keeps their session: the module clock and
+     * the auto-submit job already bound how long they have, and cutting them
+     * off mid-question would take an attempt away for being slow.
+     */
+    const state = windowState(
+      effectiveWindow(invitation.assessment, invitation),
+    );
+
+    if (state === 'not_yet') {
+      throw new ForbiddenException('This assessment has not opened yet.');
+    }
+    if (state === 'closed') {
+      throw new ForbiddenException('This assessment has closed.');
     }
 
     const existing = await this.sessions.findOne({ where: { invitationId } });
@@ -163,7 +197,19 @@ export class SessionsService {
         total + config.timeLimitSeconds + INTERMISSION_SECONDS_PER_MODULE,
       0,
     );
-    const expiresAt = now + budgetSeconds * 1000;
+
+    /*
+     * A placeholder deadline, rebased by `beginSessionClock` the moment the
+     * first module actually starts.
+     *
+     * It is not simply "now + budget" any more, because that is what let a
+     * candidate's whole allowance drain while they read the first intro
+     * screen. `START_GRACE_SECONDS` is the window they have to press Begin at
+     * all — generous, because nothing is being measured yet and the invitation
+     * window is the real bound on when they may sit it — and the budget itself
+     * does not begin until they do.
+     */
+    const expiresAt = now + (budgetSeconds + START_GRACE_SECONDS) * 1000;
 
     const session = await this.sessions.save(
       this.sessions.create({
@@ -258,6 +304,14 @@ export class SessionsService {
    * Starts the current module's clock. Explicit rather than automatic so the
    * seconds a candidate spends reading the intro screen aren't taken out of
    * their answering time.
+   *
+   * **Beginning the first module is also when the session's own deadline
+   * starts.** It used to start at `createSession`, which is the moment the
+   * candidate's browser loads the runtime — so the whole budget burned while
+   * they sat on the very first intro screen reading it, and an attempt could
+   * auto-submit with zero answers before a single question had been served.
+   * The per-module clock was always correct; the session clock above it was
+   * not, and it is the one auto-submit fires on.
    */
   async startCurrentModule(
     candidateId: string,
@@ -268,6 +322,11 @@ export class SessionsService {
 
     if (module && module.status === 'pending') {
       const now = Date.now();
+
+      // Read before the status below changes it: this is the first module to
+      // start when nothing has started yet.
+      const isFirst = state.modules.every((m) => m.status === 'pending');
+
       module.status = 'in_progress';
       module.startedAt = now;
       module.deadlineAt = now + module.timeLimitSeconds * 1000;
@@ -276,10 +335,50 @@ export class SessionsService {
         module.moduleId,
         module.timeLimitSeconds,
       );
+
+      if (isFirst) await this.beginSessionClock(state, now);
+
       await this.store.save(state);
     }
 
     return this.advance(state);
+  }
+
+  /**
+   * Rebases the session's deadline to the moment the assessment actually
+   * began.
+   *
+   * `startedAt` moves with it, and deliberately. A recruiter reads the elapsed
+   * time as how long the attempt took; left at session-creation it would
+   * include however long the candidate spent on the intro screen — eight hours,
+   * if they opened it in the morning and sat it after lunch.
+   *
+   * The queued job has to be removed before the replacement is added: BullMQ
+   * keys on `jobId` and silently keeps the existing job rather than replacing
+   * it, so adding alone would leave the original — now far too early —
+   * deadline in place.
+   */
+  private async beginSessionClock(
+    state: SessionState,
+    now: number,
+  ): Promise<void> {
+    const budgetMs = state.modules.reduce(
+      (total, module) =>
+        total +
+        (module.timeLimitSeconds + INTERMISSION_SECONDS_PER_MODULE) * 1000,
+      0,
+    );
+
+    state.startedAt = now;
+    state.expiresAt = now + budgetMs;
+
+    await this.sessions.update(state.sessionId, {
+      startedAt: new Date(now),
+      expiresAt: new Date(state.expiresAt),
+    });
+
+    await this.removeAutoSubmit(state.sessionId);
+    await this.scheduleAutoSubmit(state.sessionId, budgetMs);
   }
 
   /**

@@ -145,6 +145,21 @@ describe('buildReport — overall score', () => {
     expect(report.abilityScore).toBeNull();
     expect(report.behavioralScore).toBeNull();
     expect(report.summary).toContain('no score to report');
+
+    // Not `borderline`. That band is a finding — the evidence put them in the
+    // middle — and there is no evidence here. Storing it made an unanswered
+    // test indistinguishable, in a cohort list, from one somebody genuinely
+    // scraped through, and those call for opposite next steps.
+    expect(report.hiringRecommendation).toBeNull();
+  });
+
+  it('still bands a real middling score as borderline', () => {
+    // The counterpart to the test above: `borderline` must keep meaning what it
+    // always did, or withholding it on an empty attempt achieves nothing.
+    const report = buildReport(input({ modules: [objectiveModule(50)] }));
+
+    expect(report.overallScore).toBe(50);
+    expect(report.hiringRecommendation).toBe(HiringRecommendation.BORDERLINE);
   });
 });
 
@@ -183,6 +198,87 @@ describe('buildReport — behavioural composites', () => {
       HiringRecommendation.STRONGLY_RECOMMENDED,
     );
     expect(report.profiles).toHaveLength(5);
+  });
+
+  /*
+   * A thin attempt must not produce a confident-looking profile.
+   *
+   * Both of these were live defects. A candidate who answered 3 of 5 personality
+   * questions — leaving most traits with one answer and two with none at all —
+   * was shown five composites with scores around 50 and bands reading
+   * "Moderate", which is exactly what a recruiter acts on.
+   */
+  describe('when the evidence is thin', () => {
+    it('keeps an unmeasured trait out of the blend entirely', () => {
+      // The estimator reports every declared trait, scoring an unanswered one at
+      // the neutral midpoint with confidence 0 so the report can say "no
+      // signal". Letting that 50 into a composite fabricates the answer: here
+      // teamwork carries 35% of Team Collaboration on no evidence at all.
+      const module = traitModule([
+        { key: 'teamwork', label: 'Teamwork', score: 50, confidence: 0 },
+        { key: 'empathy', label: 'Empathy', score: 100, confidence: 1 },
+        {
+          key: 'communication',
+          label: 'Communication',
+          score: 100,
+          confidence: 1,
+        },
+        { key: 'integrity', label: 'Integrity', score: 100, confidence: 1 },
+      ]);
+
+      const report = buildReport(input({ modules: [module] }));
+      const collaboration = report.profiles.find(
+        (p) => p.key === 'collaboration',
+      )!;
+
+      // Teamwork dropped, the other three renormalised — so 100, not the 82.5
+      // that including a phantom 50 at 35% would produce.
+      expect(collaboration.contributions.map((c) => c.key)).not.toContain(
+        'teamwork',
+      );
+      expect(collaboration.score).toBe(100);
+    });
+
+    it('withholds the score and band when confidence is below the floor', () => {
+      // One answer per trait: arithmetically fine, and meaningless. A number on
+      // screen gets acted on whatever caveat sits beside it, so there is none.
+      const report = buildReport({
+        ...input({ modules: [flatProfile(50, 0.33)] }),
+      });
+
+      for (const profile of report.profiles) {
+        expect(profile.score).toBeNull();
+        expect(profile.band).toBeNull();
+        // Still listed, and still showing its working — "we asked and got too
+        // little back" is itself worth knowing.
+        expect(profile.contributions.length).toBeGreaterThan(0);
+      }
+
+      // Nothing to build a headline on either.
+      expect(report.behavioralScore).toBeNull();
+    });
+
+    it('drops a composite whose traits were none of them measured', () => {
+      const module = traitModule([
+        {
+          key: 'adaptability',
+          label: 'Adaptability',
+          score: 50,
+          confidence: 0,
+        },
+        { key: 'resilience', label: 'Resilience', score: 50, confidence: 0 },
+        { key: 'risk_tolerance', label: 'Risk', score: 50, confidence: 0 },
+        { key: 'ownership', label: 'Ownership', score: 50, confidence: 0 },
+      ]);
+
+      const report = buildReport(input({ modules: [module] }));
+
+      // Every trait behind Adaptability Under Pressure is unmeasured, so there
+      // is no composite to report — not a composite scoring 50.
+      expect(
+        report.profiles.find((p) => p.key === 'resilience_under_pressure'),
+      ).toBeUndefined();
+    });
   });
 
   it('blends ability and behaviour 70/30', () => {

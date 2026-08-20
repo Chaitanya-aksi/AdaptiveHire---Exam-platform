@@ -1,13 +1,27 @@
+// Must be first: the Sentry SDK patches the modules it instruments as they are
+// loaded, so anything imported above it would be missed.
+import { initSentry } from './common/logging/sentry';
+const sentryEnabled = initSentry();
+
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // Holds start-up logs until the pino logger is attached below, so the first
+    // few lines of every boot are not in a different format from the rest.
+    bufferLogs: true,
+  });
+
+  app.useLogger(app.get(Logger));
+
   const config = app.get(ConfigService);
+  const logger = app.get(Logger);
 
   app.setGlobalPrefix('api');
   app.use(helmet());
@@ -31,7 +45,15 @@ async function bootstrap() {
 
   const port = config.getOrThrow<number>('port');
   await app.listen(port, '0.0.0.0');
-  console.log(`AdaptiveHire API listening on http://localhost:${port}/api`);
+
+  logger.log(`AdaptiveHire API listening on http://localhost:${port}/api`);
+  // ASCII only: a Windows console renders the em-dash this line used to carry
+  // as mojibake, so the very first thing you see looks like a broken build.
+  logger.log(
+    sentryEnabled
+      ? 'Error tracking is on (SENTRY_DSN is set)'
+      : 'Error tracking is off. Set SENTRY_DSN to enable it.',
+  );
 }
 
 void bootstrap();

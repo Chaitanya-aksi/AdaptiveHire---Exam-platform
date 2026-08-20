@@ -124,7 +124,11 @@ export interface BuiltReport {
   summary: string;
   strengths: string[];
   weaknesses: string[];
-  hiringRecommendation: HiringRecommendation;
+  /**
+   * Null when there is no score to band — an attempt with nothing scoreable
+   * answered gets no recommendation rather than a middling one.
+   */
+  hiringRecommendation: HiringRecommendation | null;
   /**
    * The headline figure the recommendation is banded on: ability and the
    * behavioural index blended, or whichever of the two the assessment produced.
@@ -149,9 +153,23 @@ const VIOLATION_LABEL: Record<ProctoringEventType, [string, string]> = {
     'period with no face visible',
     'periods with no face visible',
   ],
+  // "Not properly in view", never "looked away". The measurement is where a
+  // face sat in the frame, which says nothing about where its eyes went.
+  [ProctoringEventType.FACE_NOT_FRAMED]: [
+    'period with the face not properly in view',
+    'periods with the face not properly in view',
+  ],
   [ProctoringEventType.MULTIPLE_FACES]: [
     'sighting of more than one face',
     'sightings of more than one face',
+  ],
+  // "Period of background noise", never "period of talking". The browser
+  // measures a level and discards the samples — it cannot tell a voice from a
+  // television, and wording it as speech would put a claim in the report that
+  // the measurement does not support.
+  [ProctoringEventType.BACKGROUND_NOISE]: [
+    'period of background noise',
+    'periods of background noise',
   ],
   [ProctoringEventType.MULTIPLE_DISPLAYS_DETECTED]: [
     'multi-display detection',
@@ -254,8 +272,13 @@ export function blendScores(
 function recommend(
   overallScore: number | null,
   coverage: number,
-): HiringRecommendation {
-  if (overallScore === null) return HiringRecommendation.BORDERLINE;
+): HiringRecommendation | null {
+  // No score, no recommendation. "Borderline" used to stand in here, which was
+  // the wrong shape of answer: it is a band — a judgement that the evidence put
+  // this candidate in the middle — and there was no evidence. A recruiter
+  // scanning a list has no way to tell that "borderline" from one somebody
+  // actually earned, and the two mean opposite things about what to do next.
+  if (overallScore === null) return null;
 
   const banded =
     overallScore >= STRONGLY_RECOMMENDED_AT
@@ -454,8 +477,12 @@ function describeProfiles(
   behavioral: BehavioralAssessment,
   hasAbilityScore: boolean,
 ): string {
+  // Narrated only where the composite carries a score. A withheld one has too
+  // little behind it to be called a strength or a weakness in prose, which is
+  // the same judgement that withheld the number in the first place.
   const profiles = behavioral.profiles.filter(
-    (profile) => profile.confidence >= MIN_TRAIT_CONFIDENCE,
+    (profile): profile is ProfileScore & { score: number } =>
+      profile.score !== null && profile.confidence >= MIN_TRAIT_CONFIDENCE,
   );
   if (profiles.length === 0 || behavioral.index === null) return '';
 

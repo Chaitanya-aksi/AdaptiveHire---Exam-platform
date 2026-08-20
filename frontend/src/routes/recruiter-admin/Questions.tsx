@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SubNav } from '../../components/SubNav';
 import { useSearchParams } from 'react-router-dom';
 import { ConfirmDialog } from '../../components/Modal';
 import { QuestionEditor } from '../../components/questions/QuestionEditor';
@@ -22,6 +23,19 @@ const PATTERN_BADGE: Record<BehavioralPattern, string> = {
   trade_off: 'trade-off',
   ranking: 'ranking',
 };
+
+/**
+ * The one section, its three views.
+ *
+ * Performance is not a separate part of the product — it is the same questions
+ * with their answer statistics attached, and bulk import is how they arrive.
+ * All three used to be top-level nav items.
+ */
+const QUESTION_TABS = [
+  { to: '/admin/questions', label: 'Questions', end: true },
+  { to: '/admin/questions/analysis', label: 'Performance' },
+  { to: '/admin/import', label: 'Bulk import' },
+];
 
 export function Questions() {
   const toast = useToast();
@@ -217,6 +231,7 @@ export function Questions() {
         <div>
           <h1>Question bank</h1>
           <p>Every question the adaptive engine can draw from.</p>
+          <SubNav items={QUESTION_TABS} />
         </div>
         <button
           className="primary"
@@ -258,12 +273,17 @@ export function Questions() {
             <option value="archived">Archived</option>
           </select>
           {(moduleId || status) && (
-            <button className="link" onClick={() => setFilter({ moduleId: '', status: '' })}>
+            <button
+              className="link"
+              onClick={() => setFilter({ moduleId: '', status: '' })}
+            >
               Clear filters
             </button>
           )}
           <span className="muted small">
-            {data ? `${data.total} question${data.total === 1 ? '' : 's'}` : '…'}
+            {data
+              ? `${data.total} question${data.total === 1 ? '' : 's'}`
+              : '…'}
           </span>
         </div>
 
@@ -300,7 +320,9 @@ export function Questions() {
                   <td>
                     <button
                       className="link"
-                      onClick={() => setExpanded(expanded === q.id ? null : q.id)}
+                      onClick={() =>
+                        setExpanded(expanded === q.id ? null : q.id)
+                      }
                       style={{ textAlign: 'left' }}
                     >
                       {q.questionText}
@@ -341,7 +363,10 @@ export function Questions() {
                                 )}{' '}
                                 <span className="muted mono">
                                   {Object.entries(o.traitWeights)
-                                    .map(([t, w]) => `${t}: ${w > 0 ? '+' : ''}${w}`)
+                                    .map(
+                                      ([t, w]) =>
+                                        `${t}: ${w > 0 ? '+' : ''}${w}`,
+                                    )
                                     .join(', ')}
                                 </span>
                               </li>
@@ -383,7 +408,10 @@ export function Questions() {
                   </td>
                   <td>
                     <div className="row-actions">
-                      <button className="link" onClick={() => setEditor({ question: q })}>
+                      <button
+                        className="link"
+                        onClick={() => setEditor({ question: q })}
+                      >
                         Edit
                       </button>
                       {q.status !== 'active' && (
@@ -416,12 +444,18 @@ export function Questions() {
           </table>
         </div>
 
-        <div className="toolbar spread" style={{ borderTop: '1px solid var(--border)', borderBottom: 0 }}>
+        <div
+          className="toolbar spread"
+          style={{ borderTop: '1px solid var(--border)', borderBottom: 0 }}
+        >
           <span className="muted small">
             Page {data?.page ?? 1} of {totalPages}
           </span>
           <div className="row">
-            <button disabled={!data || data.page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <button
+              disabled={!data || data.page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
               Previous
             </button>
             <button

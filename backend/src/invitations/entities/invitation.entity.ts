@@ -71,6 +71,21 @@ export class Invitation {
   })
   status!: InvitationStatus;
 
+  /**
+
+   * This candidate's own window, overriding the assessment's.
+
+   *
+
+   * Null means "inherit", not "no bound" — so rescheduling somebody's
+
+   * start time cannot accidentally remove their deadline.
+
+   */
+
+  @Column({ type: 'timestamptz', nullable: true })
+  opensAt!: Date | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt!: Date | null;
 

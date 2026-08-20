@@ -1,209 +1,107 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { QuestionPoolPicker } from '../../components/questions/QuestionPoolPicker';
-import { useToast } from '../../components/Toast';
 import {
-  assessmentsApi,
-  modulesApi,
-  questionsApi,
-  type AssessmentModulePayload,
-} from '../../lib/endpoints';
+  IconArrow,
+  IconAssessment,
+  IconClock,
+  IconModules,
+  IconTrash,
+} from '../../components/Icons';
+import { Modal } from '../../components/Modal';
+import { useToast } from '../../components/Toast';
+import { assessmentsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
-import type {
-  Assessment,
-  ModuleCatalogEntry,
-  Question,
-} from '../../lib/types';
+import { formatWhen } from '../../lib/schedule';
+import type { Assessment } from '../../lib/types';
 
-/** Enough to cover the largest module in the bank in one request. */
-const QUESTION_PAGE_SIZE = 200;
+/*
+ * Every assessment this workspace has built.
+ *
+ * A list, and only a list. The creation form used to sit on top of it, so the
+ * page a recruiter opens forty times to reach a set of results led with a long
+ * form they need once — it now lives at `assessments/new`. What is left can be
+ * scanned, which is what a list is for.
+ */
 
-interface ModuleRow {
-  included: boolean;
-  minQuestions: number;
-  maxQuestions: number;
-  timeLimitSeconds: number;
+/** What the round is doing right now, from its window alone. */
+type Phase = 'open' | 'scheduled' | 'closed';
+
+function phaseOf(assessment: Assessment): Phase {
+  const now = Date.now();
+  if (assessment.opensAt && Date.parse(assessment.opensAt) > now) {
+    return 'scheduled';
+  }
+  if (assessment.closesAt && Date.parse(assessment.closesAt) < now) {
+    return 'closed';
+  }
+  return 'open';
 }
 
-const DEFAULT_ROW: ModuleRow = {
-  included: false,
-  minQuestions: 5,
-  maxQuestions: 12,
-  timeLimitSeconds: 600,
+const PHASE_LABEL: Record<Phase, string> = {
+  open: 'Open',
+  scheduled: 'Scheduled',
+  closed: 'Closed',
 };
 
 export function Assessments() {
   const toast = useToast();
 
   const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [modules, setModules] = useState<ModuleCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [rows, setRows] = useState<Record<string, ModuleRow>>({});
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
-  /**
-   * The question pool being built, per module, and the questions to pick from.
-   *
-   * Both keyed by module id and fetched only for modules actually ticked — the
-   * bank runs to a few hundred questions, and loading all of them to render a
-   * form most people submit unchanged would be wasted.
-   *
-   * An empty set for a module means no restriction on it, which is the default.
-   */
-  const [pool, setPool] = useState<Record<string, Set<string>>>({});
-  const [available, setAvailable] = useState<Record<string, Question[]>>({});
-  const [fetching, setFetching] = useState<Record<string, boolean>>({});
+  /** The assessment the delete dialog is asking about. */
+  const [pendingDelete, setPendingDelete] = useState<Assessment | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const load = async () => {
-    const [list, mods] = await Promise.all([
-      assessmentsApi.list(),
-      modulesApi.list(),
-    ]);
-    setAssessments(list);
-    setModules(mods);
-  };
+  const load = () =>
+    assessmentsApi
+      .list()
+      .then(setAssessments)
+      .catch((err) =>
+        setError(describeError(err, 'Could not load assessments.')),
+      );
 
   useEffect(() => {
-    load()
-      .catch((err) => setError(describeError(err, 'Could not load assessments.')))
-      .finally(() => setLoading(false));
+    void load().finally(() => setLoading(false));
   }, []);
 
-  const rowFor = (id: string): ModuleRow => rows[id] ?? DEFAULT_ROW;
+  const shown = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return assessments;
+
+    return assessments.filter(
+      (a) =>
+        a.title.toLowerCase().includes(term) ||
+        (a.description ?? '').toLowerCase().includes(term) ||
+        a.modules.some((m) => m.module?.name.toLowerCase().includes(term)),
+    );
+  }, [assessments, search]);
 
   /**
-   * Loads a module's active questions the first time it is ticked.
-   *
-   * Only active ones: a draft can never be served, so offering it would let
-   * someone build a pool that looks big enough and still starves the module.
+   * Deleting an assessment deletes every attempt at it, which is why the
+   * dialog says so — the answers and reports of everyone who sat it go too.
    */
-  const loadQuestions = useCallback(async (moduleId: string) => {
-    setFetching((current) => ({ ...current, [moduleId]: true }));
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+
+    setDeleting(true);
     try {
-      const page = await questionsApi.list({
-        moduleId,
-        status: 'active',
-        limit: QUESTION_PAGE_SIZE,
-      });
-      setAvailable((current) => ({ ...current, [moduleId]: page.items }));
-    } catch (err) {
-      setError(describeError(err, 'Could not load questions for that subject.'));
-    } finally {
-      setFetching((current) => ({ ...current, [moduleId]: false }));
-    }
-  }, []);
-
-  const patchRow = (id: string, patch: Partial<ModuleRow>) => {
-    setRows((current) => ({
-      ...current,
-      [id]: { ...rowFor(id), ...patch },
-    }));
-
-    if (patch.included && !available[id] && !fetching[id]) {
-      void loadQuestions(id);
-    }
-  };
-
-  const poolFor = (moduleId: string): Set<string> =>
-    pool[moduleId] ?? new Set<string>();
-
-  const patchPool = (moduleId: string, next: Set<string>) =>
-    setPool((current) => ({ ...current, [moduleId]: next }));
-
-  const togglePooled = (moduleId: string, questionId: string) => {
-    const next = new Set(poolFor(moduleId));
-    if (next.has(questionId)) next.delete(questionId);
-    else next.add(questionId);
-    patchPool(moduleId, next);
-  };
-
-  const setManyPooled = (
-    moduleId: string,
-    questionIds: string[],
-    include: boolean,
-  ) => {
-    const next = new Set(poolFor(moduleId));
-    for (const questionId of questionIds) {
-      if (include) next.add(questionId);
-      else next.delete(questionId);
-    }
-    patchPool(moduleId, next);
-  };
-
-  const selected = modules.filter((m) => rowFor(m.id).included);
-  const canSubmit = title.trim().length >= 2 && selected.length > 0;
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!canSubmit) return;
-
-    setBusy(true);
-    setError(null);
-
-    const payloadModules: AssessmentModulePayload[] = selected.map((m, i) => {
-      const row = rowFor(m.id);
-      return {
-        moduleId: m.id,
-        minQuestions: row.minQuestions,
-        maxQuestions: row.maxQuestions,
-        timeLimitSeconds: row.timeLimitSeconds,
-        displayOrder: i,
-      };
-    });
-
-    // Cheap client-side guard; the server enforces this too.
-    const badRange = payloadModules.find((m) => m.maxQuestions < m.minQuestions);
-    if (badRange) {
-      setError('Each module needs max questions ≥ min questions.');
-      setBusy(false);
-      return;
-    }
-
-    // A module with *some* questions chosen but fewer than its own minimum would
-    // end every attempt early with an exhausted pool. Choosing none is fine —
-    // that means no restriction.
-    const starved = selected.find((m) => {
-      const chosen = poolFor(m.id).size;
-      return chosen > 0 && chosen < rowFor(m.id).minQuestions;
-    });
-    if (starved) {
-      setError(
-        `${starved.name}: choose at least ${rowFor(starved.id).minQuestions} ` +
-          'questions, or none at all to use every question you can see.',
-      );
-      setBusy(false);
-      return;
-    }
-
-    const questionIds = selected.flatMap((m) => [...poolFor(m.id)]);
-
-    try {
-      const created = await assessmentsApi.create({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        modules: payloadModules,
-        // Omitted when nothing was picked, which leaves the assessment drawing
-        // on every question the organisation can see.
-        ...(questionIds.length > 0 && { questionIds }),
-      });
+      const result = await assessmentsApi.remove(pendingDelete.id);
       toast.success(
-        questionIds.length > 0
-          ? `Created "${created.title}" with ${questionIds.length} questions.`
-          : `Created "${created.title}".`,
+        `"${pendingDelete.title}" deleted, with ${result.sessions} attempt${
+          result.sessions === 1 ? '' : 's'
+        } and ${result.invitations} invitation${
+          result.invitations === 1 ? '' : 's'
+        }.`,
       );
-      setTitle('');
-      setDescription('');
-      setRows({});
-      setPool({});
-      await load();
+      setPendingDelete(null);
+      void load();
     } catch (err) {
-      setError(describeError(err, 'Could not create the assessment.'));
+      toast.error(describeError(err, 'Could not delete this assessment.'));
     } finally {
-      setBusy(false);
+      setDeleting(false);
     }
   };
 
@@ -214,233 +112,228 @@ export function Assessments() {
       <div className="page-head">
         <div>
           <h1>Assessments</h1>
-          <p>Create an assessment, then invite candidates to it.</p>
+          <p>Every round this workspace has built.</p>
         </div>
+        <Link className="button primary" to="/admin/assessments/new">
+          New assessment
+        </Link>
       </div>
 
       {error && <div className="alert error">{error}</div>}
 
-      <div className="stack">
-        <div className="card">
-          <div className="card-head">
-            <h2>New assessment</h2>
-          </div>
-          <form className="card-pad" onSubmit={(e) => void submit(e)}>
-            <div className="field">
-              <label htmlFor="title">Title</label>
-              <input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Graduate Aptitude Screen"
-                maxLength={200}
-                required
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="description">Description (optional)</label>
-              <input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What this assessment covers"
-                maxLength={2000}
-              />
-            </div>
-
-            <div className="field">
-              <label>Modules</label>
-              <p className="field-note">
-                Tick the modules to include and set how many questions the
-                adaptive engine may ask and the time limit (seconds).
-              </p>
-            </div>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: 40 }} />
-                    <th>Module</th>
-                    <th style={{ width: 110 }}>Min</th>
-                    <th style={{ width: 110 }}>Max</th>
-                    <th style={{ width: 140 }}>Time (s)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {modules.map((m) => {
-                    const row = rowFor(m.id);
-                    return (
-                      <tr key={m.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={row.included}
-                            onChange={(e) =>
-                              patchRow(m.id, { included: e.target.checked })
-                            }
-                          />
-                        </td>
-                        <td>
-                          {m.name}
-                          <span className="muted small"> · {m.scoringType}</span>
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={1}
-                            value={row.minQuestions}
-                            disabled={!row.included}
-                            onChange={(e) =>
-                              patchRow(m.id, {
-                                minQuestions: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={1}
-                            value={row.maxQuestions}
-                            disabled={!row.included}
-                            onChange={(e) =>
-                              patchRow(m.id, {
-                                maxQuestions: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={1}
-                            value={row.timeLimitSeconds}
-                            disabled={!row.included}
-                            onChange={(e) =>
-                              patchRow(m.id, {
-                                timeLimitSeconds: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {selected.length > 0 && (
-              <div className="field" style={{ marginTop: 18 }}>
-                <label>Questions</label>
-                <p className="field-note">
-                  Optional. Leave a subject untouched and the engine draws on
-                  every question you can see; choose some and it draws only on
-                  those. Either way it still picks question by question on how
-                  the candidate is doing.
-                </p>
-              </div>
-            )}
-
-            <div className="stack">
-              {selected.map((m) => (
-                <QuestionPoolPicker
-                  key={m.id}
-                  collapsible
-                  name={m.name}
-                  questions={available[m.id] ?? []}
-                  loading={fetching[m.id] ?? false}
-                  selected={poolFor(m.id)}
-                  minQuestions={rowFor(m.id).minQuestions}
-                  maxQuestions={rowFor(m.id).maxQuestions}
-                  onToggle={(questionId) => togglePooled(m.id, questionId)}
-                  onSetMany={(questionIds, include) =>
-                    setManyPooled(m.id, questionIds, include)
-                  }
-                />
-              ))}
-            </div>
-
-            <button
-              className="primary block"
-              type="submit"
-              disabled={!canSubmit || busy}
-              style={{ marginTop: 16 }}
-            >
-              {busy ? 'Creating…' : 'Create assessment'}
-            </button>
-          </form>
+      {assessments.length === 0 ? (
+        /* An empty state that says what to do, rather than a card with a
+           count of zero in it. */
+        <div className="card card-pad al-empty">
+          <IconAssessment width={26} height={26} />
+          <h2>No assessments yet</h2>
+          <p className="muted">
+            An assessment is a set of subjects with a time limit. Build one,
+            then invite candidates to sit it.
+          </p>
+          <Link className="button primary" to="/admin/assessments/new">
+            Create your first assessment
+            <IconArrow />
+          </Link>
         </div>
-
+      ) : (
         <div className="card">
-          <div className="card-head">
-            <h2>Existing assessments</h2>
-            <span className="badge">{assessments.length}</span>
+          <div className="card-head al-head">
+            <input
+              className="al-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by title, description or subject"
+              aria-label="Search assessments"
+            />
+            <span className="badge">
+              {shown.length === assessments.length
+                ? assessments.length
+                : `${shown.length} of ${assessments.length}`}
+            </span>
           </div>
 
-          {assessments.length === 0 ? (
-            <div className="card-pad muted">
-              No assessments yet — create one above.
-            </div>
+          {shown.length === 0 ? (
+            <div className="card-pad muted">Nothing matches that search.</div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th style={{ width: 110 }}>Modules</th>
-                    <th style={{ width: 260 }} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {assessments.map((a) => (
-                    <tr key={a.id}>
-                      <td>
-                        <strong>{a.title}</strong>
-                        {a.description && (
-                          <div className="muted small">{a.description}</div>
+            <ul className="a-list">
+              {shown.map((a) => {
+                // The three things a recruiter actually wants to know at a
+                // glance about a test they built.
+                const names = a.modules
+                  .map((m) => m.module?.name)
+                  .filter((n): n is string => Boolean(n));
+                const minQ = a.modules.reduce((t, m) => t + m.minQuestions, 0);
+                const maxQ = a.modules.reduce((t, m) => t + m.maxQuestions, 0);
+                const minutes = Math.round(
+                  a.modules.reduce((t, m) => t + m.timeLimitSeconds, 0) / 60,
+                );
+                const curated = a.questionPool.length > 0;
+                const phase = phaseOf(a);
+
+                return (
+                  <li key={a.id} className="a-row">
+                    <div className="a-main">
+                      <div className="a-title-line">
+                        {/*
+                          One real link per row, stretched over the whole row by
+                          `.a-title::after`. An onClick on the <li> would have
+                          been fewer lines but is not a link: no keyboard focus,
+                          no middle-click, no "open in new tab", nothing for a
+                          screen reader to announce. The action buttons sit above
+                          the overlay so they still work.
+                        */}
+                        <Link
+                          className="a-title"
+                          to={`/admin/assessments/${a.id}`}
+                        >
+                          {a.title}
+                          <IconArrow className="a-go" width={15} height={15} />
+                        </Link>
+                        {/* Only when it says something. "Open" is the normal
+                            state and every row would carry it. */}
+                        {phase !== 'open' && (
+                          <span className={`badge al-${phase}`}>
+                            {PHASE_LABEL[phase]}
+                          </span>
                         )}
-                      </td>
-                      <td>{a.modules.length}</td>
-                      <td>
-                        <div className="row">
-                          <Link
-                            className="button"
-                            to={`/admin/assessments/${a.id}/questions`}
-                            title={
-                              a.questionPool.length === 0
-                                ? 'Drawing on every question you can see'
-                                : `Restricted to ${a.questionPool.length} questions`
-                            }
+                        {curated && (
+                          <span
+                            className="badge accent"
+                            title={`The engine may only draw from ${a.questionPool.length} chosen questions`}
                           >
-                            Questions
-                            {a.questionPool.length > 0 &&
-                              ` (${a.questionPool.length})`}
-                          </Link>
-                          <Link
-                            className="button"
-                            to={`/admin/assessments/${a.id}/invite`}
-                          >
-                            Invite candidates
-                          </Link>
-                          <Link
-                            className="button"
-                            to={`/admin/assessments/${a.id}/results`}
-                          >
-                            Results
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                            Curated
+                          </span>
+                        )}
+                      </div>
+
+                      {a.description && (
+                        <p className="a-desc muted">{a.description}</p>
+                      )}
+
+                      <div className="a-meta">
+                        <span title="Subjects in this assessment">
+                          <IconModules width={14} height={14} />
+                          {names.length > 0
+                            ? names.join(' · ')
+                            : `${a.modules.length} module${a.modules.length === 1 ? '' : 's'}`}
+                        </span>
+                        <span title="Questions this assessment can ask">
+                          <IconAssessment width={14} height={14} />
+                          {/* A range, not a number: the test is adaptive, so
+                              two candidates rarely answer the same count. */}
+                          {minQ === maxQ ? minQ : `${minQ}–${maxQ}`} questions
+                        </span>
+                        <span title="Total time limit across every module">
+                          <IconClock width={14} height={14} />
+                          {minutes} min
+                        </span>
+                        {/* Only when there is a bound to state. Most rounds
+                            have none, and "always open" is not news. */}
+                        {(a.opensAt || a.closesAt) && (
+                          <span title="When candidates can sit this round">
+                            <IconClock width={14} height={14} />
+                            {a.opensAt && a.closesAt
+                              ? `${formatWhen(a.opensAt)} → ${formatWhen(a.closesAt)}`
+                              : a.opensAt
+                                ? `From ${formatWhen(a.opensAt)}`
+                                : `Until ${formatWhen(a.closesAt)}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="a-actions">
+                      <Link
+                        className="button"
+                        to={`/admin/assessments/${a.id}/questions`}
+                        title={
+                          curated
+                            ? `Restricted to ${a.questionPool.length} questions`
+                            : 'Drawing on every question you can see'
+                        }
+                      >
+                        Questions
+                        {curated && ` (${a.questionPool.length})`}
+                      </Link>
+                      <Link
+                        className="button"
+                        to={`/admin/assessments/${a.id}/invite`}
+                      >
+                        Invite
+                      </Link>
+                      <Link
+                        className="button primary"
+                        to={`/admin/assessments/${a.id}/results`}
+                      >
+                        Results
+                      </Link>
+                      {/* Icon-only and last: destructive, so it should not
+                          compete with the three things you came here to do.
+                          Labelled for screen readers, since it has no text. */}
+                      <button
+                        className="icon-button destructive"
+                        onClick={() => setPendingDelete(a)}
+                        title="Delete assessment"
+                        aria-label={`Delete ${a.title}`}
+                      >
+                        <IconTrash width={17} height={17} />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
-      </div>
+      )}
+
+      {/*
+        Deliberately explicit about the blast radius. This is the one action in
+        the product that destroys other people's work: everyone who sat this
+        assessment loses their answers, their score and their report. The
+        candidates themselves keep their accounts — only this assessment's data
+        goes — because someone who sat three of your tests should not disappear
+        along with one of them.
+      */}
+      <Modal
+        open={pendingDelete !== null}
+        title="Delete this assessment?"
+        onClose={() => {
+          if (!deleting) setPendingDelete(null);
+        }}
+        footer={
+          <>
+            <button onClick={() => setPendingDelete(null)} disabled={deleting}>
+              Cancel
+            </button>
+            <button
+              className="danger"
+              onClick={() => void confirmDelete()}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Delete permanently'}
+            </button>
+          </>
+        }
+      >
+        {pendingDelete && (
+          <>
+            <p style={{ marginTop: 0 }}>
+              <strong>{pendingDelete.title}</strong>
+            </p>
+            <p>
+              Every attempt made on this assessment is destroyed with it — each
+              candidate&rsquo;s answers, ability scores, behavioural profile,
+              report and proctoring log — along with every invitation to it.
+            </p>
+            <p className="muted small" style={{ marginBottom: 0 }}>
+              The candidates keep their accounts and anything they did on your
+              other assessments. This cannot be undone.
+            </p>
+          </>
+        )}
+      </Modal>
     </>
   );
 }

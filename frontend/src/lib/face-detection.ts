@@ -29,10 +29,99 @@ async function loadModel(): Promise<FaceApi> {
   return faceapi;
 }
 
-export interface FaceMonitor {
-  /** Number of faces currently visible, or null if a frame couldn't be read. */
-  count: () => Promise<number | null>;
+/**
+ * One detected face, normalised 0..1 against the video's own dimensions.
+ *
+ * Position and size, not just a count. Counting alone let a candidate pass with
+ * their face jammed against the left edge of frame and the alignment oval
+ * completely empty — the detector was perfectly happy, because something in the
+ * picture was a face. Where it is and how big it is are the questions that
+ * actually matter for proctoring.
+ */
+export interface FaceBox {
+  /** Left edge, as a fraction of video width. */
+  x: number;
+  /** Top edge, as a fraction of video height. */
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Like `FaceMonitor`, but reports where the faces are rather than how many. */
+export interface FaceWatcher {
+  /** Null when no frame could be read — unknown, which is not "nobody". */
+  faces: () => Promise<FaceBox[] | null>;
   stop: () => void;
+}
+
+export interface FaceMonitor {
+  /**
+   * Where the faces are, or null if a frame couldn't be read.
+   *
+   * Boxes rather than a count, the same as `FaceWatcher`. The runtime needs to
+   * know whether the candidate is still *framed*, not merely whether the
+   * detector can find a face somewhere in the picture — a face at the very
+   * edge of a camera pointed at the ceiling satisfies a count and tells a
+   * recruiter nothing.
+   */
+  faces: () => Promise<FaceBox[] | null>;
+  stop: () => void;
+}
+
+/**
+ * Counts faces in a `<video>` the caller already owns.
+ *
+ * The difference from `startFaceMonitor` is who owns the camera.
+ * `startFaceMonitor` opens its own stream for the assessment runtime, where
+ * nothing is on screen. The readiness check already has a stream attached to a
+ * preview the candidate is looking at, and opening a second one to detect on
+ * would light two camera indicators and double the work for the same answer.
+ *
+ * `stop` only halts detection. The stream belongs to the caller and is left
+ * exactly as it was found.
+ */
+export async function watchFaces(
+  video: HTMLVideoElement,
+): Promise<FaceWatcher> {
+  const api = await loadModel();
+
+  const options = new api.TinyFaceDetectorOptions({
+    inputSize: INPUT_SIZE,
+    scoreThreshold: SCORE_THRESHOLD,
+  });
+
+  let stopped = false;
+
+  return {
+    faces: async () => {
+      // `readyState < 2` is a video that has no frame yet — starting up, or
+      // between streams. Unknown, not empty: reporting "no face" for a video
+      // that has not decoded one would fail a candidate for their webcam's
+      // warm-up time.
+      if (stopped || video.readyState < 2) return null;
+
+      const { videoWidth: w, videoHeight: h } = video;
+      if (w === 0 || h === 0) return null;
+
+      try {
+        const found = await api.detectAllFaces(video, options);
+        // Normalised against the video's own dimensions, so the caller can
+        // reason about position and size without knowing the resolution — and
+        // without every caller re-deriving the same division.
+        return found.map(({ box }) => ({
+          x: box.x / w,
+          y: box.y / h,
+          width: box.width / w,
+          height: box.height / h,
+        }));
+      } catch {
+        return null;
+      }
+    },
+    stop: () => {
+      stopped = true;
+    },
+  };
 }
 
 /**
@@ -62,11 +151,20 @@ export async function startFaceMonitor(): Promise<FaceMonitor> {
   let stopped = false;
 
   return {
-    count: async () => {
+    faces: async () => {
       if (stopped || video.readyState < 2) return null;
+
+      const { videoWidth: w, videoHeight: h } = video;
+      if (w === 0 || h === 0) return null;
+
       try {
-        const faces = await api.detectAllFaces(video, options);
-        return faces.length;
+        const found = await api.detectAllFaces(video, options);
+        return found.map(({ box }) => ({
+          x: box.x / w,
+          y: box.y / h,
+          width: box.width / w,
+          height: box.height / h,
+        }));
       } catch {
         // A dropped frame is not a violation; report "unknown" instead.
         return null;

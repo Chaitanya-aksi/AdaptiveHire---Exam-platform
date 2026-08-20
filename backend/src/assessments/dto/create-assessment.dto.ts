@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
@@ -26,6 +27,25 @@ export class CreateAssessmentDto {
   @ValidateNested({ each: true })
   @Type(() => AssessmentModuleConfigDto)
   modules!: AssessmentModuleConfigDto[];
+
+  /**
+   * The scheduled window, as ISO-8601 with an offset.
+   *
+   * Both optional, and absence is meaningful: no window at all means the
+   * assessment can be sat from the moment somebody is invited, which is how
+   * every assessment behaved before scheduling existed.
+   *
+   * An offset is required rather than a bare local time — a round scheduled by
+   * a recruiter in one time zone and sat by a candidate in another has to mean
+   * one instant.
+   */
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  opensAt?: string;
+
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  closesAt?: string;
 
   /**
    * Which questions the engine may draw from. Omit or send an empty list for no

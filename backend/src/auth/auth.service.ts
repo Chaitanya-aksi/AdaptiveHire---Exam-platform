@@ -6,18 +6,26 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
-import { DataSource } from 'typeorm';
-import { randomUUID } from 'node:crypto';
-import { UserRole } from '../common/enums';
+import { Queue } from 'bullmq';
+import { DataSource, IsNull, Repository } from 'typeorm';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { OrgRole, UserRole } from '../common/enums';
 import { InvitationsService } from '../invitations/invitations.service';
+import {
+  INVITE_EMAILS_QUEUE,
+  type OutboundEmailJob,
+} from '../queues/invite-emails/invite-emails.job';
 import { User, type RecentRefreshToken } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { OrganisationsService } from '../organisations/organisations.service';
 import { LoginDto, LoginPortal } from './dto/login.dto';
 import { RegisterDto, RegistrationType } from './dto/register.dto';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
 import type { JwtPayload } from './strategies/jwt.strategy';
 
 /**
@@ -26,6 +34,22 @@ import type { JwtPayload } from './strategies/jwt.strategy';
  * usable credentials.
  */
 const MAX_RECENT_REFRESH_TOKENS = 5;
+
+/**
+ * How long a reset link lasts. Short, because the link is a full credential
+ * sitting in an inbox — but long enough to survive a slow mail relay and
+ * somebody reading their email an hour later on a different device.
+ */
+const RESET_TOKEN_TTL_MINUTES = 60;
+
+/**
+ * SHA-256, not Argon2: the token is 256 bits of `randomBytes`, so there is
+ * nothing to brute-force, and a deterministic digest is what lets redemption be
+ * a single indexed lookup instead of a scan-and-verify over every live token.
+ */
+function hashResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 export interface TokenPair {
   accessToken: string;
@@ -40,6 +64,13 @@ export interface AuthResult extends TokenPair {
     role: UserRole;
     /** The company this account works for; null for candidates. */
     organisationId: string | null;
+    /** What they may do inside it; null for candidates. */
+    orgRole: OrgRole | null;
+    /**
+     * True while the account is still on the password we generated and emailed
+     * it. The client sends such a user to set their own before anything else.
+     */
+    mustChangePassword: boolean;
   };
 }
 
@@ -53,6 +84,10 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly invitations: InvitationsService,
     private readonly organisations: OrganisationsService,
+    @InjectRepository(PasswordResetToken)
+    private readonly resetTokens: Repository<PasswordResetToken>,
+    @InjectQueue(INVITE_EMAILS_QUEUE)
+    private readonly emailQueue: Queue<OutboundEmailJob>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -143,6 +178,10 @@ export class AuthService {
           fullName: dto.fullName,
           role: UserRole.RECRUITER_ADMIN,
           organisationId: organisation.id,
+          // Whoever registers the workspace owns it. There is nobody else to
+          // grant it to, and an organisation whose only member cannot manage
+          // it would be unusable from the first request.
+          orgRole: OrgRole.OWNER,
         }),
       );
     });
@@ -235,6 +274,146 @@ export class AuthService {
     await this.users.clearRefreshTokens(userId);
   }
 
+  /**
+   * Issues a reset link, if that address has an account.
+   *
+   * Returns nothing either way and never signals which case it was. The
+   * forgot-password form is unauthenticated, so a response that differed for a
+   * known address would turn it into an oracle for enumerating every email on
+   * the platform — including which of a company's staff are recruiters here.
+   * The throttle on the route limits how fast it can be asked at all; this
+   * makes the answer worthless even when it can be.
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    const normalised = email.trim().toLowerCase();
+    const user = await this.users.findByEmail(normalised);
+
+    if (!user) {
+      // Deliberately silent. Logged at debug only — an info-level line naming
+      // the address would move the oracle from the API into the log file.
+      this.logger.debug(
+        `Password reset requested for an address with no account`,
+      );
+      return;
+    }
+
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000);
+
+    /*
+     * Asking again does NOT invalidate the previous link, and that is a
+     * correction rather than an oversight.
+     *
+     * It used to. The result was a trap: the expired screen offers "send me a
+     * new link", which issued a new token and killed the one the person still
+     * had open in their mail client. They would go back to that tab, submit,
+     * be told it had expired, ask for another — and repeat, with every attempt
+     * killing the link they were about to use. Three requests in six minutes,
+     * every submission refused.
+     *
+     * So outstanding links now coexist. Each is still single-use and still dies
+     * after an hour, and the moment any one of them is redeemed the rest are
+     * burned with it — see `resetPassword`, which is where invalidating a live
+     * link actually protects something.
+     */
+    await this.resetTokens.save(
+      this.resetTokens.create({
+        userId: user.id,
+        tokenHash: hashResetToken(token),
+        expiresAt,
+      }),
+    );
+
+    const appUrl = this.config.getOrThrow<string>('appUrl');
+    const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    try {
+      await this.emailQueue.add(
+        'password-reset',
+        {
+          kind: 'password-reset',
+          to: user.email,
+          fullName: user.fullName,
+          resetUrl,
+          expiresInMinutes: RESET_TOKEN_TTL_MINUTES,
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          // The payload holds a live reset link, so neither outcome is retained
+          // for inspection — same rule the credentials invite follows.
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    } catch (error) {
+      // The token is already stored, so a queue outage means the link exists
+      // but never arrives. Loud, because the user is left waiting for an email
+      // that is not coming and has no way to tell.
+      this.logger.error(
+        `Failed to queue a password-reset email: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Redeems a reset token and sets the new password.
+   *
+   * Every rejection is the same message. Distinguishing "no such token" from
+   * "expired" from "already used" would tell someone holding a stolen or
+   * guessed value which part they got right.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const record = await this.resetTokens.findOne({
+      where: { tokenHash: hashResetToken(token) },
+    });
+
+    const invalid =
+      !record ||
+      record.usedAt !== null ||
+      record.expiresAt.getTime() < Date.now();
+
+    if (invalid) {
+      throw new BadRequestException(
+        'That reset link is no longer valid. Request a new one.',
+      );
+    }
+
+    // Marked spent before the password changes, and conditioned on it still
+    // being unspent, so two requests arriving together cannot both succeed —
+    // the second updates zero rows and is refused.
+    const claimed = await this.resetTokens.update(
+      { id: record.id, usedAt: IsNull() },
+      { usedAt: new Date() },
+    );
+
+    if (!claimed.affected) {
+      throw new BadRequestException(
+        'That reset link is no longer valid. Request a new one.',
+      );
+    }
+
+    // Every other link this account has outstanding dies here. This is the
+    // point where invalidating them is worth something: the password has just
+    // changed, so any link still sitting in an inbox is a way to change it
+    // again without knowing the new one.
+    await this.resetTokens.update(
+      { userId: record.userId, usedAt: IsNull() },
+      { usedAt: new Date() },
+    );
+
+    await this.users.setPassword(record.userId, newPassword);
+
+    // Anyone already signed in as this account is signed out. A reset is what
+    // someone does when they think another person has their password, and
+    // leaving that person's session alive would defeat the point of resetting.
+    await this.users.clearRefreshTokens(record.userId);
+
+    this.logger.log(`Password reset completed for user ${record.userId}`);
+  }
+
   private graceWindowMs(): number {
     return (this.config.get<number>('jwt.refreshGraceSeconds') ?? 0) * 1000;
   }
@@ -320,6 +499,11 @@ export class AuthService {
         // caches and query keys. It is not a capability: every request's scope
         // is read from the database, never from what the client holds.
         organisationId: user.organisationId,
+        // Same caveat: this is so the UI can avoid offering buttons it knows
+        // will be refused, not a permission. `OrgRolesGuard` reads the role
+        // from the database on every request and is the only thing enforcing it.
+        orgRole: user.orgRole,
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }

@@ -1,16 +1,22 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AssessmentsModule } from './assessments/assessments.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { OrgRolesGuard } from './auth/guards/org-roles.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
+import { AuditLogEntry } from './common/audit/audit-log.entity';
+import { AuditInterceptor } from './common/audit/audit.interceptor';
+import { LoggingModule } from './common/logging/logging.module';
+import { SessionContextInterceptor } from './common/logging/session-context.interceptor';
 import { entities } from './database/entities';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
@@ -24,6 +30,10 @@ import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
+    // First, so its error handling wraps everything below. A no-op unless
+    // SENTRY_DSN is set — see `common/logging/sentry.ts`.
+    SentryModule.forRoot(),
+    LoggingModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
@@ -46,6 +56,9 @@ import { UsersModule } from './users/users.module';
         migrationsRun: false,
       }),
     }),
+    // Registered at the root because the audit interceptor is global — it has
+    // no module of its own to hang the repository off.
+    TypeOrmModule.forFeature([AuditLogEntry]),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -85,7 +98,14 @@ import { UsersModule } from './users/users.module';
     // Order matters: authenticate, then check the role, then rate-limit.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // After RolesGuard: which audience may reach the route is settled first,
+    // then what this member of the workspace may do with it.
+    { provide: APP_GUARD, useClass: OrgRolesGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Both run after the guards, so `req.user` is populated and each can name
+    // who was acting.
+    { provide: APP_INTERCEPTOR, useClass: SessionContextInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

@@ -48,6 +48,39 @@ export class Organisation {
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 
+  /**
+   * Company logo shown to candidates, as an absolute https URL.
+   *
+   * A URL rather than an upload: file storage, virus scanning and a CDN are a
+   * whole subsystem, and every customer that has a logo already has it hosted
+   * somewhere. Null falls back to AdaptiveHire's own mark.
+   */
+  @Column({ type: 'varchar', length: 2048, nullable: true })
+  logoUrl!: string | null;
+
+  /**
+   * Accent colour as `#rrggbb`, applied to the candidate portal.
+   *
+   * One colour, not a palette. It is enough to make the page recognisably the
+   * customer's, and the surfaces it lands on are derived from it — a full
+   * theme would need contrast checking against every one of them, which is a
+   * different and much larger feature.
+   */
+  @Column({ type: 'varchar', length: 7, nullable: true })
+  accentColor!: string | null;
+
+  /**
+   * Where a candidate writes when something goes wrong during an assessment.
+   *
+   * On the organisation rather than the platform because the company that
+   * invited them is the one that can act — only they can decide whether an
+   * interrupted attempt is re-run. Null falls back to the platform's own
+   * `SUPPORT_EMAIL`, and if that is unset the UI shows nothing rather than a
+   * dead link.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  supportEmail!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

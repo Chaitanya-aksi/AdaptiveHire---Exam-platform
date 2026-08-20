@@ -58,6 +58,23 @@ export class Assessment {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt!: Date;
 
+  /**
+   * The scheduled window, stored as an instant.
+   *
+   * Null means no bound, so an assessment with neither is always open — which
+   * is what every assessment created before windows existed has, and why
+   * adding this changed nothing for them.
+   *
+   * An invitation may override either end for one candidate. The two are
+   * combined in exactly one place, `assessment-window.ts`, so the runtime and
+   * the candidate's own list can never disagree about whether a test is open.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  opensAt!: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  closesAt!: Date | null;
+
   @OneToMany(
     () => AssessmentModule,
     (assessmentModule) => assessmentModule.assessment,

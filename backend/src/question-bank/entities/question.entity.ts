@@ -66,6 +66,28 @@ export class Question {
   probeGroup!: string | null;
 
   /**
+   * A practice question, shown before the assessment starts and never in it.
+   *
+   * The point of practice is that the first time somebody meets a ranking
+   * control is not while the clock is running. That only works if the question
+   * they rehearse on is a real one of its kind — so these live in the bank
+   * beside the others rather than in a separate table, sharing the same
+   * renderer, the same options and the same shape.
+   *
+   * Which makes the exclusion the important half: a sample is filtered out of
+   * the adaptive selector and refused from an assessment's question pool. Serve
+   * one for real and it would be a question the candidate had already seen and
+   * been told the answer to.
+   *
+   * Deliberately independent of `status`. A sample still moves draft → active
+   * like anything else, because an unreviewed practice question is as bad as an
+   * unreviewed real one.
+   */
+  @Index()
+  @Column({ type: 'boolean', default: false })
+  isSample!: boolean;
+
+  /**
    * The company that authored this question, or null for a platform question.
    *
    * Null is a meaningful value here, not a missing one. A platform question is

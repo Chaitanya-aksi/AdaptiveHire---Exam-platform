@@ -1,4 +1,13 @@
 export type UserRole = 'candidate' | 'recruiter_admin';
+
+/**
+ * What a recruiter may do inside their workspace.
+ *
+ * A second axis to `UserRole`, which says which side of the platform they
+ * are on. Null for every candidate. Useful for hiding controls that would
+ * be refused — never for deciding access, which only the server does.
+ */
+export type OrgRole = 'viewer' | 'hiring_manager' | 'admin' | 'owner';
 export type ScoringType = 'objective' | 'trait';
 export type QuestionStatus = 'draft' | 'active' | 'archived';
 
@@ -8,6 +17,12 @@ export interface AuthUser {
   fullName: string;
   role: UserRole;
   /**
+   * True while the account is still using the password AdaptiveHire generated
+   * and emailed when a recruiter invited them. They must choose their own
+   * before they can reach an assessment.
+   */
+  mustChangePassword: boolean;
+  /**
    * The company a recruiter works for; null for candidates.
    *
    * Useful for cache keys and for showing whose workspace you are in. It is not
@@ -15,6 +30,8 @@ export interface AuthUser {
    * request and never trusts what the client holds.
    */
   organisationId: string | null;
+  /** What they may do inside it; null for candidates. */
+  orgRole: OrgRole | null;
 }
 
 /**
@@ -50,6 +67,25 @@ export interface RegisterPayload {
 export interface UserProfile extends AuthUser {
   isActive: boolean;
   createdAt: string;
+}
+
+/** What deleting a person destroyed, reported back so the UI can say so. */
+export interface DeletionResult {
+  /**
+   * Whether the login row itself went. False only for a candidate another
+   * company has also invited — deleting it would take their records too.
+   */
+  accountDeleted: boolean;
+  /** Attempts wiped, and with them every answer, report and proctoring log. */
+  sessions: number;
+  /** Invitations withdrawn. */
+  invitations: number;
+}
+
+/** What deleting an assessment destroyed. */
+export interface AssessmentDeletionResult {
+  sessions: number;
+  invitations: number;
 }
 
 /**
@@ -175,11 +211,7 @@ export interface BulkImportResult {
 }
 
 export type InvitationStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'expired'
-  | 'revoked';
+  'pending' | 'in_progress' | 'completed' | 'expired' | 'revoked';
 
 export interface AssessmentModuleConfig {
   id: string;
@@ -197,6 +229,16 @@ export interface Assessment {
   description: string | null;
   isActive: boolean;
   createdAt: string;
+  /**
+   * The round's own window. Null on either end means no bound, so an
+   * assessment with neither is always open — which is the default and what
+   * every assessment created before windows existed still is.
+   *
+   * A single candidate can be moved off this without disturbing it, via the
+   * per-invitation override. See `InvitationWindow`.
+   */
+  opensAt: string | null;
+  closesAt: string | null;
   modules: AssessmentModuleConfig[];
   /**
    * The questions the engine may draw from.
@@ -216,6 +258,31 @@ export interface BulkInviteResult {
   failures: { row: number; email?: string; reason: string }[];
 }
 
+export type WindowState =
+  /** Sittable now. */
+  | 'open'
+  /** Scheduled, but not yet. */
+  | 'not_yet'
+  /** The window has passed. */
+  | 'closed';
+
+/**
+ * When one candidate may sit, as resolved by the server.
+ *
+ * `state` is not recomputed here — the browser clock is not the one enforcing
+ * the window, and a page that decides for itself is how a candidate ends up
+ * looking at a Start button the runtime refuses.
+ */
+export interface InvitationWindow {
+  /** The per-invitation override, null where it inherits the assessment's. */
+  overrideOpensAt: string | null;
+  overrideExpiresAt: string | null;
+  /** What actually applies, after the override is layered over the round. */
+  opensAt: string | null;
+  closesAt: string | null;
+  state: WindowState;
+}
+
 /** An invitation as the recruiter sees it, for one assessment. */
 export interface AssessmentInvitation {
   id: string;
@@ -224,6 +291,52 @@ export interface AssessmentInvitation {
   registered: boolean;
   candidateName: string | null;
   createdAt: string;
+  /** Null only if the server could not resolve it; treat as unknown, not open. */
+  window: InvitationWindow | null;
+}
+
+/**
+ * How a company presents itself to the candidates it assesses.
+ *
+ * Carried per invitation, never per viewer: a candidate belongs to no
+ * organisation and may be assessed by several at once, so the portal cannot
+ * be branded to "their" company — there is no such thing.
+ */
+export interface Branding {
+  name: string;
+  logoUrl: string | null;
+  /** `#rrggbb`, or null to use AdaptiveHire's own accent. */
+  accentColor: string | null;
+  /**
+   * Where to write when an assessment goes wrong — already resolved by the
+   * server to the company's own address, the platform fallback, or null.
+   *
+   * Null means show no contact route at all. Do not substitute a placeholder:
+   * the person reading it has just lost an attempt to something outside their
+   * control, and an address nobody answers is worse than none.
+   */
+  supportEmail: string | null;
+}
+
+/**
+ * The same workspace as its own members see it — `Branding` plus the two
+ * identifiers a candidate is never shown.
+ */
+export interface OrganisationProfile extends Branding {
+  id: string;
+  slug: string;
+}
+
+/**
+ * A branding change. Every field optional and nullable, and the two mean
+ * different things: omitted leaves the value alone, `null` clears it back to
+ * AdaptiveHire's own. Without that distinction there would be no way to remove
+ * a logo without also resetting the colour.
+ */
+export interface BrandingPatch {
+  logoUrl?: string | null;
+  accentColor?: string | null;
+  supportEmail?: string | null;
 }
 
 /** An invitation as the candidate sees it, in their own list. */
@@ -231,16 +344,138 @@ export interface CandidateInvitation {
   id: string;
   status: InvitationStatus;
   createdAt: string;
-  assessment: { id: string; title: string; description: string | null };
+  assessment: {
+    id: string;
+    title: string;
+    description: string | null;
+    /** Subject names in the order they will be sat. */
+    modules: string[];
+    /**
+     * Sum of the per-module limits. An upper bound, not a promise — a module
+     * that stops early gives the rest of its clock back.
+     */
+    totalTimeSeconds: number;
+  };
+  organisation: Branding;
+  /** Whether they may start now, and when if not. */
+  window: InvitationWindow;
+}
+
+/* ── Item analysis ───────────────────────────────────────────────────────── */
+
+/** What's wrong with a question, if anything. */
+export type ItemFlag =
+  | 'insufficient_data'
+  | 'too_easy'
+  | 'too_hard'
+  | 'weak_discrimination'
+  | 'negative_discrimination'
+  | 'dead_distractor'
+  | 'difficulty_drift';
+
+export interface ItemOptionStat {
+  key: string;
+  text: string;
+  isCorrect: boolean;
+  /** Share of attempts that chose this option, 0-1. */
+  pickRate: number;
+}
+
+export interface ItemAnalysis {
+  questionId: string;
+  questionText: string;
+  moduleName: string;
+  status: QuestionStatus;
+  authoredDifficulty: number;
+  attempts: number;
+  /** Proportion answered correctly — difficulty as observed, 0-1. */
+  pValue: number | null;
+  /**
+   * Point-biserial correlation between answering this correctly and overall
+   * ability on the attempt, -1 to 1. Negative means weak candidates do better
+   * than strong ones, which is almost always a mis-keyed answer.
+   */
+  discrimination: number | null;
+  /** Observed difficulty minus authored. Positive = harder than it claims. */
+  drift: number | null;
+  options: ItemOptionStat[];
+  flags: ItemFlag[];
+}
+
+/* ── The candidate's view of their own attempt ───────────────────────────── */
+
+/**
+ * Everything below is **participation, never performance** — counts, clocks and
+ * timestamps. The API deliberately serves no question text, no chosen option,
+ * no right/wrong and no score to a candidate; see `candidate-attempt.ts` on the
+ * backend for why. Do not add a field here that the API does not already send.
+ */
+export type AttemptStageKey =
+  'invited' | 'started' | 'submitted' | 'under_review';
+
+/** `stopped` means the invitation lapsed or was withdrawn before this stage. */
+export type AttemptStageState = 'done' | 'current' | 'upcoming' | 'stopped';
+
+export interface AttemptStage {
+  key: AttemptStageKey;
+  label: string;
+  note: string;
+  at: string | null;
+  state: AttemptStageState;
+}
+
+export interface AttemptSection {
+  moduleId: string;
+  name: string;
+  questionsAnswered: number;
+  /** Sum of the per-question times — not wall-clock. */
+  timeOnQuestionsSeconds: number;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface AttemptPaceEntry {
+  sequenceNumber: number;
+  moduleName: string;
+  seconds: number | null;
+  /** False when the clock ran out before an answer was chosen. */
+  answered: boolean;
+}
+
+export interface CandidateAttempt {
+  status: SessionStatus;
+  startedAt: string;
+  submittedAt: string | null;
+  questionsAnswered: number;
+  timeOnQuestionsSeconds: number;
+  /** Null rather than 0 when nothing was answered. */
+  averageSecondsPerQuestion: number | null;
+  sections: AttemptSection[];
+  pace: AttemptPaceEntry[];
+}
+
+export interface CandidateAttemptView {
+  invitation: { id: string; status: InvitationStatus; invitedAt: string };
+  /** The company assessing them — this page is branded by whoever sent it. */
+  organisation: Branding;
+  /** When they may sit it. Resolved by the server, never recomputed here. */
+  window: InvitationWindow;
+  assessment: {
+    id: string;
+    title: string;
+    description: string | null;
+    sections: { name: string; timeLimitSeconds: number }[];
+    totalTimeSeconds: number;
+  };
+  stages: AttemptStage[];
+  /** Null until they begin — there is no attempt yet to describe. */
+  attempt: CandidateAttempt | null;
 }
 
 /* ── Test-taking runtime ─────────────────────────────────────────────────── */
 
 export type SessionStatus =
-  | 'in_progress'
-  | 'completed'
-  | 'auto_submitted'
-  | 'abandoned';
+  'in_progress' | 'completed' | 'auto_submitted' | 'abandoned';
 
 export type ModuleRunStatus = 'pending' | 'in_progress' | 'completed';
 
@@ -250,10 +485,7 @@ export type ModuleRunStatus = 'pending' | 'in_progress' | 'completed';
  * as a plain single choice.
  */
 export type BehavioralPattern =
-  | 'situational'
-  | 'forced_choice'
-  | 'trade_off'
-  | 'ranking';
+  'situational' | 'forced_choice' | 'trade_off' | 'ranking';
 
 /**
  * A question as served to a candidate. Note what is absent: no correct option,
@@ -274,8 +506,7 @@ export interface RuntimeQuestion {
  * served, so these are never interchangeable.
  */
 export type AnswerPayload =
-  | { selectedOption: string }
-  | { selectedOptions: string[] };
+  { selectedOption: string } | { selectedOptions: string[] };
 
 export interface RuntimeModule {
   moduleId: string;
@@ -322,17 +553,34 @@ export type SessionStep =
 /* ── Reports (recruiter-only) ────────────────────────────────────────────── */
 
 export type HiringRecommendation =
-  | 'strongly_recommended'
-  | 'recommended'
-  | 'borderline'
-  | 'not_recommended';
+  'strongly_recommended' | 'recommended' | 'borderline' | 'not_recommended';
 
 export type ProctoringEventType =
   | 'tab_switch'
   | 'fullscreen_exit'
   | 'face_absent'
+  /**
+   * A face is visible but not properly in shot — off to one side, too far
+   * away, or pressed against the lens.
+   *
+   * Distinct from `face_absent`. Face presence used to be a head-count, so a
+   * camera angled at the ceiling with the candidate in one corner logged
+   * nothing at all; this is what that case reports now. Named for what was
+   * measured — an occupied chair reported as an empty one would be a false
+   * claim in somebody's hiring record.
+   */
+  | 'face_not_framed'
   | 'multiple_faces'
-  | 'multiple_displays_detected';
+  | 'multiple_displays_detected'
+  /**
+   * Sustained sound above a threshold while a module was running.
+   *
+   * The level is measured in the browser and the samples discarded — nothing is
+   * recorded or transmitted — so this cannot tell a voice from a television.
+   * Label it for what it measures; "talking" would be a claim the measurement
+   * cannot support, in a document that decides whether somebody gets a job.
+   */
+  | 'background_noise';
 
 export interface ReportedTrait {
   key: string;
@@ -419,10 +667,17 @@ export interface ProfileScore {
   key: string;
   label: string;
   description: string;
-  score: number;
+  /**
+   * 0-100, or **null when the evidence behind it is too thin to report**.
+   *
+   * Withheld by the server rather than caveated: a number on screen gets
+   * acted on whatever sits beside it. Render "not enough answers", never a 0.
+   */
+  score: number | null;
   /** 0..1 — the weighted evidence behind the traits that make it up. */
   confidence: number;
-  band: ProfileBand;
+  /** Null whenever `score` is. */
+  band: ProfileBand | null;
   /** Which traits fed it and their renormalised shares, largest first. */
   contributions: {
     key: string;
@@ -438,13 +693,22 @@ export interface ReportSummary {
   status: SessionStatus;
   startedAt: string;
   submittedAt: string | null;
+  /** Both clocks, and whether the deadline ended it. */
+  timing: AttemptTiming;
   assessment: { id: string; title: string };
   candidate: { id: string; fullName: string; email: string };
   report: {
     summary: string;
     strengths: string[];
     weaknesses: string[];
-    hiringRecommendation: HiringRecommendation;
+    /**
+     * Null when the attempt produced no score to band.
+     *
+     * Not "borderline". That band is a finding — the evidence put them in the
+     * middle — and an attempt with no evidence has not produced one. Render
+     * "no result", never a band.
+     */
+    hiringRecommendation: HiringRecommendation | null;
     /** The blended headline figure the recommendation was banded on. */
     overallScore: number | null;
     /** Its ability half, or null when the assessment had no scored section. */
@@ -516,17 +780,121 @@ export interface ReportDetail {
   }[];
 }
 
+/**
+ * A practice question, shown before the assessment and never in it.
+ *
+ * Comes from a question flagged `isSample`, which the adaptive selector and the
+ * assessment pools both refuse — which is why it is safe for `correctOption` to
+ * be here at all. Nothing on this object can be asked for real afterwards.
+ */
+export interface PracticeQuestion {
+  id: string;
+  /** The subject it previews. */
+  moduleName: string;
+  scoringType: ScoringType;
+  text: string;
+  options: { key: string; text: string }[];
+  /** Drives the same renderer the real test uses. Null means single-choice. */
+  pattern: BehavioralPattern | null;
+  /**
+   * Null for every trait question — not "unknown" but *there isn't one*, which
+   * is the single most useful thing practice can teach about a personality
+   * section.
+   */
+  correctOption: string | null;
+}
+
+/** What a recruiting team decided about an attempt. */
+export type ReviewDecision = 'shortlisted' | 'rejected';
+
+/**
+ * Shared by the whole organisation, not private to one recruiter — a note is
+ * meant to be read by colleagues, and `updatedBy` says who wrote it last.
+ */
+export interface AttemptReview {
+  decision: ReviewDecision | null;
+  tags: string[];
+  note: string | null;
+  /** Null once that account is gone; the decision outlives the person. */
+  updatedBy: string | null;
+  updatedAt: string;
+  /**
+   * When the candidate was told they were not taken forward, or null.
+   *
+   * Read-only from the client's side: it is set by the send endpoint, and the
+   * server refuses a second send whatever the UI does with this.
+   */
+  rejectionEmailSentAt: string | null;
+}
+
+/**
+ * One message the team sent to a candidate.
+ *
+ * Not the same thing as a review `note`. A note is internal and never leaves
+ * the workspace; this was written to be read by the candidate and has been.
+ * They live apart so neither can turn into the other by accident.
+ */
+export interface CandidateMessage {
+  id: string;
+  body: string;
+  /** The address it went to, as it was at send time. */
+  sentTo: string;
+  /** Null once that account is gone; the record outlives the sender. */
+  sentBy: string | null;
+  sentAt: string;
+}
+
+/**
+ * How long an attempt took.
+ *
+ * Two clocks, never combined. `elapsedSeconds` is wall time from start to
+ * submit, which includes thinking and walking away; `timeOnQuestionsSeconds`
+ * sums the per-question timers, which is closer to effort spent answering.
+ * A recruiter asking "how long did they take" is owed both.
+ */
+export interface AttemptTiming {
+  startedAt: string;
+  submittedAt: string | null;
+  /** Null while the attempt is still running. */
+  elapsedSeconds: number | null;
+  /** Null on list views, where the per-question rows are not loaded. */
+  timeOnQuestionsSeconds: number | null;
+  /** The deadline submitted it, so the duration is just the time limit. */
+  autoSubmitted: boolean;
+}
+
+/** A partial update. Omitted fields are left alone; `null` clears. */
+export interface ReviewPatch {
+  decision?: ReviewDecision | null;
+  tags?: string[];
+  note?: string | null;
+}
+
 export interface AttemptListItem {
   sessionId: string;
   candidate: { id: string; fullName: string; email: string };
   status: SessionStatus;
   startedAt: string;
   submittedAt: string | null;
+  /** `timeOnQuestionsSeconds` is null here — see the note on the type. */
+  timing: AttemptTiming;
   questionsAnswered: number;
   overallScore: number | null;
   /** The two halves behind it, so a blended figure is never unexplained. */
   abilityScore: number | null;
   behavioralScore: number | null;
+  /**
+   * Position among the scored attempts at this assessment — 1 is the highest
+   * overall score. Ties share a position (1, 2, 2, 4).
+   *
+   * Null when the attempt has no score yet, which is not the same as coming
+   * last and must never render as a number.
+   */
+  rank: number | null;
+  /** Scored attempts in the cohort, so `rank` reads as "2nd of 14". */
+  cohortSize: number;
   hiringRecommendation: HiringRecommendation | null;
   violationCount: number;
+  /** Null until somebody on the team has acted on this attempt. */
+  review: AttemptReview | null;
 }

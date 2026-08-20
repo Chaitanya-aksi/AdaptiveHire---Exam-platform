@@ -28,7 +28,7 @@ const STAGES = [
   },
   {
     Icon: IconAdaptive,
-    label: 'They sit it',
+    label: 'Candidates take the assessment',
     detail: 'Difficulty adapts as they answer',
   },
   {

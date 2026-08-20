@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -54,6 +55,17 @@ export class CreateQuestionDto {
   @IsString()
   @MaxLength(80)
   probeGroup?: string;
+
+  /**
+   * Marks this as a practice question, shown before an assessment starts.
+   *
+   * The adaptive selector and the assessment pools both refuse a sample, so
+   * ticking this takes the question permanently out of circulation for real
+   * attempts — which is the point, since practice reveals the answer.
+   */
+  @IsOptional()
+  @IsBoolean()
+  isSample?: boolean;
 
   @IsOptional()
   @ValidateNested()

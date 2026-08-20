@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { homeFor } from './ProtectedRoute';
 import { useAuth } from '../lib/auth';
 import type { LoginPortal } from '../lib/types';
@@ -22,6 +22,14 @@ const OTHER_DOOR: Record<LoginPortal, { to: string; label: string }> = {
 export function SignInForm({ portal }: { portal: LoginPortal }) {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+
+  /**
+   * Set by the reset page on its way here. Worth confirming: the reset signs
+   * out every session, so arriving at a sign-in form is the expected outcome
+   * rather than a sign that nothing happened.
+   */
+  const justReset = params.get('reset') === '1';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,8 +61,7 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
       if (status === 403) {
         setWrongDoor(true);
         setError(
-          response?.data?.message ??
-            'That account signs in on the other page.',
+          response?.data?.message ?? 'That account signs in on the other page.',
         );
       } else {
         setError(
@@ -72,10 +79,39 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
 
   return (
     <form className="auth-form" onSubmit={(e) => void submit(e)}>
+      {justReset && !error && (
+        <div className="auth-ok-alert" role="status">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={16}
+            height={16}
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="8,12.5 11,15.5 16,9" />
+          </svg>
+          <span>Password changed. Sign in with your new one.</span>
+        </div>
+      )}
 
       {error && (
         <div className="auth-error-alert" role="alert">
-          <svg className="auth-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+          <svg
+            className="auth-error-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={16}
+            height={16}
+          >
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -87,7 +123,9 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
             {wrongDoor && (
               <>
                 {' '}
-                <Link to={OTHER_DOOR[portal].to}>{OTHER_DOOR[portal].label}</Link>
+                <Link to={OTHER_DOOR[portal].to}>
+                  {OTHER_DOOR[portal].label}
+                </Link>
               </>
             )}
           </span>
@@ -97,7 +135,17 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
       <div className="field">
         <label htmlFor="email">Email or Candidate ID</label>
         <div className="field-input-wrap">
-          <svg className="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={17} height={17}>
+          <svg
+            className="field-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={17}
+            height={17}
+          >
             <rect x="2" y="4" width="20" height="16" rx="2" />
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
           </svg>
@@ -116,12 +164,30 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
       <div className="field">
         <div className="field-header">
           <label htmlFor="password">Password</label>
-          <a href="#" className="field-forgot" tabIndex={-1} onClick={(e) => e.preventDefault()}>
+          {/* Carries whatever has been typed so far, so nobody retypes their
+              address on the next screen. Empty is fine — the field there is
+              simply blank. */}
+          <Link
+            to={`/forgot-password${
+              email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''
+            }`}
+            className="field-forgot"
+          >
             Forgot password?
-          </a>
+          </Link>
         </div>
         <div className="field-input-wrap">
-          <svg className="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={17} height={17}>
+          <svg
+            className="field-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={17}
+            height={17}
+          >
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
@@ -142,13 +208,31 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
             tabIndex={-1}
           >
             {showPassword ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width={16}
+                height={16}
+              >
                 <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
                 <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
                 <line x1="1" y1="1" x2="23" y2="23" />
               </svg>
             ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width={16}
+                height={16}
+              >
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
@@ -167,7 +251,16 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
           />
           <span className="auth-remember-box" aria-hidden="true">
             {rememberMe && (
-              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" width={10} height={10}>
+              <svg
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width={10}
+                height={10}
+              >
                 <polyline points="2,6 5,9 10,3" />
               </svg>
             )}
@@ -185,15 +278,22 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
         ) : (
           <>
             Sign in
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
-              strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-              width={16} height={16} aria-hidden="true">
+            <svg
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width={16}
+              height={16}
+              aria-hidden="true"
+            >
               <path d="M4 10h12M11 5l5 5-5 5" />
             </svg>
           </>
         )}
       </button>
-
     </form>
   );
 }

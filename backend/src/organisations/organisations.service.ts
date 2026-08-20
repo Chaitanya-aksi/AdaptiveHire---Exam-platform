@@ -16,6 +16,33 @@ const FIRST_SUFFIX = 2;
  */
 const MAX_SLUG_ATTEMPTS = 50;
 
+/**
+ * A workspace as its own members see it.
+ *
+ * `Branding` below is the subset candidates are shown, and is deliberately
+ * narrower — a candidate has no business knowing an organisation's id or slug.
+ */
+export interface OrganisationProfile extends Branding {
+  id: string;
+  slug: string;
+}
+
+/**
+ * What a candidate is shown about the company assessing them: who they are,
+ * and how to reach them when something goes wrong.
+ */
+export interface Branding {
+  name: string;
+  logoUrl: string | null;
+  accentColor: string | null;
+  /**
+   * Already resolved — the organisation's own address, or the platform's
+   * fallback, or null when neither is configured. The UI shows a contact route
+   * only when this is non-null, so it can never render a dead link.
+   */
+  supportEmail: string | null;
+}
+
 @Injectable()
 export class OrganisationsService {
   constructor(
@@ -40,6 +67,55 @@ export class OrganisationsService {
     const slug = await this.availableSlug(trimmed, manager);
 
     return manager.save(manager.create(Organisation, { name: trimmed, slug }));
+  }
+
+  /** The caller's own workspace, including how it presents to candidates. */
+  async profile(organisationId: string): Promise<OrganisationProfile> {
+    const organisation = await this.organisations.findOneOrFail({
+      where: { id: organisationId },
+    });
+
+    return {
+      id: organisation.id,
+      name: organisation.name,
+      slug: organisation.slug,
+      logoUrl: organisation.logoUrl,
+      accentColor: organisation.accentColor,
+      // Unresolved here: a recruiter editing this needs to see their own value
+      // and whether it is set, not the platform fallback standing in for it.
+      supportEmail: organisation.supportEmail,
+    };
+  }
+
+  /**
+   * Sets the logo and accent candidates see.
+   *
+   * Partial: an omitted field is left alone and an explicit `null` clears it
+   * back to AdaptiveHire's own. Without the distinction there would be no way
+   * to remove a logo without also resetting the colour.
+   */
+  async updateBranding(
+    organisationId: string,
+    changes: {
+      logoUrl?: string | null;
+      accentColor?: string | null;
+      supportEmail?: string | null;
+    },
+  ): Promise<OrganisationProfile> {
+    const organisation = await this.organisations.findOneOrFail({
+      where: { id: organisationId },
+    });
+
+    if (changes.logoUrl !== undefined) organisation.logoUrl = changes.logoUrl;
+    if (changes.accentColor !== undefined) {
+      organisation.accentColor = changes.accentColor;
+    }
+    if (changes.supportEmail !== undefined) {
+      organisation.supportEmail = changes.supportEmail;
+    }
+
+    await this.organisations.save(organisation);
+    return this.profile(organisationId);
   }
 
   /**

@@ -1,6 +1,6 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
-import { UserRole } from '../enums';
+import { OrgRole, UserRole } from '../enums';
 
 export interface AuthenticatedUser {
   id: string;
@@ -15,6 +15,13 @@ export interface AuthenticatedUser {
    * instead of whenever its token happens to expire.
    */
   organisationId: string | null;
+
+  /**
+   * What this account may do inside that organisation. Null for every
+   * candidate, and read fresh each request alongside the rest — a demotion
+   * takes effect immediately rather than when a token expires.
+   */
+  orgRole: OrgRole | null;
 }
 
 export const CurrentUser = createParamDecorator(

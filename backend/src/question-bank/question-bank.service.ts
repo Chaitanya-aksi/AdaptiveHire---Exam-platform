@@ -151,6 +151,7 @@ export class QuestionBankService {
           // string must mean "not twinned" rather than becoming a group name
           // that every untwinned question would then share.
           probeGroup: dto.probeGroup || null,
+          isSample: dto.isSample ?? false,
           // Authored questions always belong to their organisation. Only the
           // seed script creates platform questions, by leaving this null.
           organisationId,
@@ -312,6 +313,7 @@ export class QuestionBankService {
             dto.probeGroup === undefined
               ? original.probeGroup
               : dto.probeGroup || null,
+          isSample: dto.isSample ?? original.isSample,
           organisationId,
           createdById,
           forkedFromId: original.id,
@@ -410,6 +412,10 @@ export class QuestionBankService {
       // untwinned without deleting and re-authoring it.
       if (dto.probeGroup !== undefined)
         question.probeGroup = dto.probeGroup || null;
+      // Flipping this on takes the question out of circulation for real
+      // attempts, and flipping it off puts it back — both are deliberate acts,
+      // so neither is inferred from anything else.
+      if (dto.isSample !== undefined) question.isSample = dto.isSample;
       await manager.save(question);
 
       if (dto.mcq) {

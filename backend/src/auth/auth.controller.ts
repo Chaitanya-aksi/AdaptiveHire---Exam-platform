@@ -20,8 +20,10 @@ import { Public } from '../common/decorators/public.decorator';
 import { UsersService } from '../users/users.service';
 import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH } from './auth.constants';
 import { AuthService, type AuthResult } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import type { RefreshRequestUser } from './strategies/jwt-refresh.strategy';
 
@@ -67,6 +69,36 @@ export class AuthController {
       await this.auth.refresh(sub, refreshToken),
       res,
     );
+  }
+
+  /**
+   * Asks for a reset link.
+   *
+   * Always 204, whether or not that address has an account — see
+   * `AuthService.requestPasswordReset`. Throttled harder than login: this is
+   * the one unauthenticated route that causes mail to be sent, so an unbounded
+   * version is both an enumeration tool and a way to use the platform to spam
+   * a third party's inbox.
+   */
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {
+    await this.auth.requestPasswordReset(dto.email);
+  }
+
+  /**
+   * Redeems the token from that link and sets the new password. Signs out every
+   * existing session for the account, so the response deliberately carries no
+   * tokens — the new password has to be used to sign in.
+   */
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    await this.auth.resetPassword(dto.token, dto.password);
   }
 
   @Post('logout')
