@@ -1909,6 +1909,36 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   .ar-engine { display: none; }
 }
 
+/*
+ * Short windows, at any width.
+ *
+ * The panel centres its body and hides its overflow — the ambient glows are
+ * 680px circles that have to be clipped by something. Centred content that
+ * does not fit therefore overflows *both* ends and the top is cut off, which
+ * takes the heading with it and cannot be scrolled back to.
+ *
+ * At its natural spacing this panel needs about 690px, and the panel is the
+ * window less 64px of page padding. A 1366×768 laptop leaves roughly 640px
+ * once browser chrome is taken off, so the sign-in heading was being clipped
+ * on one of the most common screens there is. The recruiter page is the worst
+ * case: it has the longest subtitle, so the tallest heading block.
+ *
+ * Tighten the vertical rhythm rather than let anything be cut off. Nothing
+ * here changes the horizontal alignment — the title, subtitle, fields and
+ * links stay on the same left edge.
+ */
+@media (max-height: 800px) {
+  /* The page's own margin around the card goes first: it is decoration, and
+     trimming it buys 40px of the panel's height without touching anything
+     inside the panel. */
+  .auth-page { padding-top: 12px; padding-bottom: 12px; }
+  .auth-left { padding-top: 30px; padding-bottom: 30px; }
+  .al-body { gap: 18px; padding-bottom: 0; }
+  .al-head { gap: 6px; }
+  .al-head h1 { font-size: 32px; }
+  .auth-left .auth-form { gap: 14px; }
+}
+
 /* -- Accessibility: respect reduced-motion preference ─────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .ar-orb--3,
@@ -4730,8 +4760,15 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 /* `flex-direction` is stated rather than inherited. Left to `.card-head` alone
    this computed to `column`, which stacked the search box above its own count
    and centred both; being explicit here is cheap and does not depend on
-   working out which later rule was responsible. */
-.al-head {
+   working out which later rule was responsible.
+
+   Named `al-list-head`, not `al-head`. The auth pages use `al-` for "auth
+   left" and had their own `.al-head` — the stacked title and subtitle at the
+   top of the sign-in panel. Two features, one prefix, one shared word: this
+   rule is later in the file at equal specificity, so it silently won there and
+   laid the sign-in heading out as a row, dropping the subtitle beside the
+   title instead of under it. Keep the two prefixes apart. */
+.al-list-head {
   flex-direction: row;
   align-items: center;
   gap: 12px;
@@ -4836,7 +4873,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 
 @media (max-width: 720px) {
   .na-bar { flex-direction: column; align-items: stretch; }
-  .al-head { flex-wrap: wrap; }
+  .al-list-head { flex-wrap: wrap; }
   .al-search { max-width: none; }
 }
 
@@ -5373,10 +5410,12 @@ body.assess-running .assess-shell {
   width: 0;
   border-radius: 999px;
   background: #fff;
-  /* Matches `HOLD_MS` in SectionSplash.tsx, less the delay before it starts —
-     the bar has to arrive full exactly as the screen begins to leave, or the
-     pause reads as having been cut short. */
-  animation: splash-fill 1.35s 0.85s cubic-bezier(0.3, 0, 0.2, 1) both;
+  /* `--splash-fill` is set by Splash.tsx as the hold less the 0.85s delay
+     below — the bar has to arrive full exactly as the screen begins to leave,
+     or the pause reads as having been cut short. The fallback is the assessment
+     hold, so the bar is still right if the variable never arrives. */
+  animation: splash-fill var(--splash-fill, 1.35s) 0.85s
+    cubic-bezier(0.3, 0, 0.2, 1) both;
 }
 
 @keyframes splash-fill {

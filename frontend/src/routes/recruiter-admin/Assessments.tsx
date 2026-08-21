@@ -138,7 +138,7 @@ export function Assessments() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-head al-head">
+          <div className="card-head al-list-head">
             <input
               className="al-search"
               value={search}

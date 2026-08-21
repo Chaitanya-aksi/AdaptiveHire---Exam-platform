@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { IconArrow } from '../../components/Icons';
-import { SectionSplash } from '../../components/assessment/SectionSplash';
+import { BrandSplash } from '../../components/Splash';
 import { invitationsApi } from '../../lib/endpoints';
 import { watchFaces, type FaceWatcher } from '../../lib/face-detection';
 import { OVAL, SETUP_RULE, framing } from '../../lib/face-framing';
@@ -467,7 +467,7 @@ export function ReadinessCheck() {
 
   if (phase === 'splash-practice') {
     return (
-      <SectionSplash
+      <BrandSplash
         title="Sample test"
         subtitle="A few untimed questions so the controls are familiar. Nothing here is scored."
         onDone={() => setPhase('practice')}
@@ -477,7 +477,7 @@ export function ReadinessCheck() {
 
   if (phase === 'splash-assessment') {
     return (
-      <SectionSplash
+      <BrandSplash
         title={assessmentTitle ?? 'Your assessment'}
         subtitle="This one counts. The clock starts on the first question and your answers are final."
         onDone={begin}

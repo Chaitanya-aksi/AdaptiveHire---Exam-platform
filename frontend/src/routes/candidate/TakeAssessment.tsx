@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { ModuleProgress } from '../../components/assessment/ModuleProgress';
 import { ProctoringBar } from '../../components/assessment/ProctoringBar';
-import { SectionSplash } from '../../components/assessment/SectionSplash';
+import { BrandSplash } from '../../components/Splash';
 import { QuestionCard } from '../../components/assessment/QuestionCard';
 import { Timer } from '../../components/assessment/Timer';
 import { useProctoring } from '../../hooks/useProctoring';
@@ -208,7 +208,7 @@ function AssessmentRuntime() {
     // says *which* section, the card says how long it is and how it is scored.
     if (announcing === session.currentModuleIndex) {
       return (
-        <SectionSplash
+        <BrandSplash
           title={module.name}
           subtitle={`Section ${position} of ${session.modules.length}. The clock for this one starts when you begin it.`}
           onDone={() => setAnnouncing(null)}
@@ -361,6 +361,7 @@ function AssessmentRuntime() {
 
       <ProctoringBar
         isFullscreen={proctoring.isFullscreen}
+        browserFullscreen={proctoring.browserFullscreen}
         camera={proctoring.camera}
         notice={proctoring.notice}
         onDismissNotice={proctoring.dismissNotice}

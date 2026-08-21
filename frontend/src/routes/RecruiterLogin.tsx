@@ -28,13 +28,7 @@ export function RecruiterLogin() {
     >
       <SignInForm portal="recruiter" />
 
-      {import.meta.env.DEV && (
-        <div className="hint">
-          Seeded account — password <code>ChangeMe!2345</code>
-          <br />
-          <code>recruiter@adaptivehire.local</code> · recruiter_admin
-        </div>
-      )}
+      
     </AuthShell>
   );
 }

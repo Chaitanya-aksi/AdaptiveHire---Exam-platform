@@ -1,9 +1,10 @@
-import { Suspense, lazy, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { CandidateLayout } from './components/CandidateLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute, homeFor } from './components/ProtectedRoute';
+import { BrandSplash, SplashProvider } from './components/Splash';
 import { ToastProvider } from './components/Toast';
 import { AuthProvider, useAuth } from './lib/auth';
 import { ForgotPassword } from './routes/ForgotPassword';
@@ -100,6 +101,55 @@ const Settings = lazy(() =>
   })),
 );
 
+/**
+ * The minimum the page-load splash stays up.
+ *
+ * Not a pause for its own sake. The silent refresh is usually quick, and left
+ * to finish on its own the splash would blink in and out — worse than the blank
+ * it replaced. It also buys the work that follows: `ProtectedRoute` cannot
+ * mount a recruiter route until the session resolves, so the lazy chunk for
+ * that page only starts downloading part-way through this window and lands
+ * inside it, where before it produced a second "Loading…" of its own.
+ */
+const BOOT_MIN_MS = 900;
+
+/**
+ * What a reload looks like.
+ *
+ * Every page load starts with no access token — it is held in memory only, so
+ * a refresh genuinely has none — and `AuthProvider` has to trade the httpOnly
+ * cookie for a new one before anything can render. Until that settles every
+ * route here renders "Loading…" on white, which is the flash this replaces.
+ *
+ * It waits on `loading` rather than a fixed hold, because the honest length of
+ * this one is however long the round trip takes. `BOOT_MIN_MS` only stops it
+ * being shorter than the eye can follow.
+ *
+ * Deliberately not conditional on already having a session: nothing can know
+ * whether the cookie is good until the call comes back, so a first-time visitor
+ * gets the same brand moment on their way to the sign-in page.
+ */
+function BootSplash() {
+  const { loading } = useAuth();
+  // Latched, not derived from `loading`. The exit animation runs *after* the
+  // session resolves, so the splash has to outlive the condition that raised
+  // it — unmounting the moment `loading` flips would cut the fade off.
+  const [gone, setGone] = useState(false);
+  const finish = useCallback(() => setGone(true), []);
+
+  if (gone) return null;
+
+  return (
+    <BrandSplash
+      title="Just a moment"
+      subtitle="Getting things ready."
+      holdMs={BOOT_MIN_MS}
+      ready={!loading}
+      onDone={finish}
+    />
+  );
+}
+
 /** Sends an already-signed-in user to their own home instead of the login form. */
 function RootRedirect() {
   const { user, loading } = useAuth();
@@ -146,172 +196,182 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <ToastProvider>
-            {/* Covers the lazy recruiter chunks while they download. */}
-            <Suspense fallback={<div className="empty">Loading…</div>}>
-              <Routes>
-                <Route path="/" element={<RootRedirect />} />
-                <Route
-                  path="/login"
-                  element={
-                    <GuestOnly>
-                      <Login />
-                    </GuestOnly>
-                  }
-                />
-                <Route
-                  path="/recruiter/login"
-                  element={
-                    <GuestOnly>
-                      <RecruiterLogin />
-                    </GuestOnly>
-                  }
-                />
-                <Route
-                  path="/register"
-                  element={
-                    <GuestOnly>
-                      <Register />
-                    </GuestOnly>
-                  }
-                />
-                <Route
-                  path="/recruiter/register"
-                  element={
-                    <GuestOnly>
-                      <RecruiterRegister />
-                    </GuestOnly>
-                  }
-                />
+            {/*
+              Outside <Routes> on purpose. The sign-in splash has to survive the
+              navigation it introduces — `GuestOnly` below redirects the moment
+              a session exists, and anything rendered inside the sign-in page
+              would be unmounted with it. Here the destination mounts and
+              fetches underneath the overlay instead of after it.
+            */}
+            <SplashProvider>
+              <BootSplash />
+              {/* Covers the lazy recruiter chunks while they download. */}
+              <Suspense fallback={<div className="empty">Loading…</div>}>
+                <Routes>
+                  <Route path="/" element={<RootRedirect />} />
+                  <Route
+                    path="/login"
+                    element={
+                      <GuestOnly>
+                        <Login />
+                      </GuestOnly>
+                    }
+                  />
+                  <Route
+                    path="/recruiter/login"
+                    element={
+                      <GuestOnly>
+                        <RecruiterLogin />
+                      </GuestOnly>
+                    }
+                  />
+                  <Route
+                    path="/register"
+                    element={
+                      <GuestOnly>
+                        <Register />
+                      </GuestOnly>
+                    }
+                  />
+                  <Route
+                    path="/recruiter/register"
+                    element={
+                      <GuestOnly>
+                        <RecruiterRegister />
+                      </GuestOnly>
+                    }
+                  />
 
-                {/*
-                  Deliberately NOT `GuestOnly`, unlike the sign-in pages.
-                  Someone can easily click a reset link in the same browser
-                  they are signed in on, and bouncing them to their dashboard
-                  with no explanation is the worst possible answer — they came
-                  from their inbox holding a link that should work. The token
-                  identifies the account on its own; the session is irrelevant
-                  to redeeming it, and the reset ends that session anyway.
-                */}
-                <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
+                  {/*
+                    Deliberately NOT `GuestOnly`, unlike the sign-in pages.
+                    Someone can easily click a reset link in the same browser
+                    they are signed in on, and bouncing them to their dashboard
+                    with no explanation is the worst possible answer — they came
+                    from their inbox holding a link that should work. The token
+                    identifies the account on its own; the session is irrelevant
+                    to redeeming it, and the reset ends that session anyway.
+                  */}
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
 
-                {/* Outside the app shell on purpose: the account cannot reach
-                  the product until this is done, so a nav bar full of links
-                  that all bounce back here would only mislead. */}
-                <Route
-                  path="/set-password"
-                  element={
-                    <ProtectedRoute allow={['candidate', 'recruiter_admin']}>
-                      <SetPassword />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Outside the app shell on purpose: the account cannot reach
+                    the product until this is done, so a nav bar full of links
+                    that all bounce back here would only mislead. */}
+                  <Route
+                    path="/set-password"
+                    element={
+                      <ProtectedRoute allow={['candidate', 'recruiter_admin']}>
+                        <SetPassword />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/admin"
-                  element={
-                    <ProtectedRoute allow={['recruiter_admin']}>
-                      <AppLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<Dashboard />} />
-                  <Route path="questions" element={<Questions />} />
                   <Route
-                    path="questions/analysis"
-                    element={<QuestionAnalysis />}
-                  />
-                  <Route path="import" element={<BulkImport />} />
-                  <Route path="modules" element={<Modules />} />
-                  <Route path="people" element={<People />} />
-                  <Route path="settings" element={<Settings />} />
-                  {/* "My account" is a tab of Settings, not a section of its
-                      own — same page component, mounted here so the tab strip
-                      and the URL agree with each other. */}
-                  <Route path="settings/account" element={<Profile />} />
-                  <Route path="assessments" element={<AdminAssessments />} />
-                  {/* Above `assessments/:id`, or "new" is read as an id. */}
-                  <Route path="assessments/new" element={<NewAssessment />} />
-                  {/* The overview: how the test is set up, and who is taking or
-                    has taken it. Listed with its siblings so the relationship is
-                    visible; react-router ranks by specificity, so the deeper
-                    paths below still win over this one. */}
-                  <Route
-                    path="assessments/:id"
-                    element={<AssessmentDetail />}
-                  />
-                  <Route
-                    path="assessments/:id/questions"
-                    element={<AssessmentQuestions />}
-                  />
-                  <Route
-                    path="assessments/:id/invite"
-                    element={<InviteCandidates />}
-                  />
-                  <Route
-                    path="assessments/:id/results"
-                    element={<AssessmentReports />}
-                  />
-                  <Route
-                    path="reports/:sessionId"
-                    element={<CandidateReport />}
-                  />
-                  {/* Kept as an alias rather than deleted: this path is in
-                      people's history and in old links. */}
-                  <Route
-                    path="profile"
-                    element={<Navigate to="/admin/settings/account" replace />}
-                  />
-                </Route>
+                    path="/admin"
+                    element={
+                      <ProtectedRoute allow={['recruiter_admin']}>
+                        <AppLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<Dashboard />} />
+                    <Route path="questions" element={<Questions />} />
+                    <Route
+                      path="questions/analysis"
+                      element={<QuestionAnalysis />}
+                    />
+                    <Route path="import" element={<BulkImport />} />
+                    <Route path="modules" element={<Modules />} />
+                    <Route path="people" element={<People />} />
+                    <Route path="settings" element={<Settings />} />
+                    {/* "My account" is a tab of Settings, not a section of its
+                        own — same page component, mounted here so the tab strip
+                        and the URL agree with each other. */}
+                    <Route path="settings/account" element={<Profile />} />
+                    <Route path="assessments" element={<AdminAssessments />} />
+                    {/* Above `assessments/:id`, or "new" is read as an id. */}
+                    <Route path="assessments/new" element={<NewAssessment />} />
+                    {/* The overview: how the test is set up, and who is taking or
+                      has taken it. Listed with its siblings so the relationship is
+                      visible; react-router ranks by specificity, so the deeper
+                      paths below still win over this one. */}
+                    <Route
+                      path="assessments/:id"
+                      element={<AssessmentDetail />}
+                    />
+                    <Route
+                      path="assessments/:id/questions"
+                      element={<AssessmentQuestions />}
+                    />
+                    <Route
+                      path="assessments/:id/invite"
+                      element={<InviteCandidates />}
+                    />
+                    <Route
+                      path="assessments/:id/results"
+                      element={<AssessmentReports />}
+                    />
+                    <Route
+                      path="reports/:sessionId"
+                      element={<CandidateReport />}
+                    />
+                    {/* Kept as an alias rather than deleted: this path is in
+                        people's history and in old links. */}
+                    <Route
+                      path="profile"
+                      element={<Navigate to="/admin/settings/account" replace />}
+                    />
+                  </Route>
 
-                {/* The candidate side has its own shell — the split brand panel
-                  from the sign-in pages, not the recruiter's top nav bar. */}
-                <Route
-                  path="/assessments"
-                  element={
-                    <ProtectedRoute allow={['candidate']}>
-                      <CandidateLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<Assessments />} />
-                  {/* Ranked below `:invitationId/take` by react-router's own
-                    specificity rules, and distinct from it on purpose: this one
-                    keeps the shell, the test deliberately does not. */}
-                  <Route path=":invitationId" element={<AttemptDetail />} />
-                  <Route path="profile" element={<Profile />} />
-                </Route>
+                  {/* The candidate side has its own shell — the split brand panel
+                    from the sign-in pages, not the recruiter's top nav bar. */}
+                  <Route
+                    path="/assessments"
+                    element={
+                      <ProtectedRoute allow={['candidate']}>
+                        <CandidateLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<Assessments />} />
+                    {/* Ranked below `:invitationId/take` by react-router's own
+                      specificity rules, and distinct from it on purpose: this one
+                      keeps the shell, the test deliberately does not. */}
+                    <Route path=":invitationId" element={<AttemptDetail />} />
+                    <Route path="profile" element={<Profile />} />
+                  </Route>
 
-                {/*
-                 * Deliberately outside AppLayout: while a module's clock is
-                 * running there should be no nav bar tempting the candidate to
-                 * click away from the test.
-                 */}
-                {/* The pre-flight: system check, then practice. Outside the
-                    shell for the same reason the test is — it ends by starting
-                    the assessment, and a nav bar at that moment is an invitation
-                    to wander off mid-gate. Reachable on its own so somebody can
-                    check their machine days before the assessment. */}
-                <Route
-                  path="/assessments/:invitationId/ready"
-                  element={
-                    <ProtectedRoute allow={['candidate']}>
-                      <ReadinessCheck />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/assessments/:invitationId/take"
-                  element={
-                    <ProtectedRoute allow={['candidate']}>
-                      <TakeAssessment />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/*
+                   * Deliberately outside AppLayout: while a module's clock is
+                   * running there should be no nav bar tempting the candidate to
+                   * click away from the test.
+                   */}
+                  {/* The pre-flight: system check, then practice. Outside the
+                      shell for the same reason the test is — it ends by starting
+                      the assessment, and a nav bar at that moment is an invitation
+                      to wander off mid-gate. Reachable on its own so somebody can
+                      check their machine days before the assessment. */}
+                  <Route
+                    path="/assessments/:invitationId/ready"
+                    element={
+                      <ProtectedRoute allow={['candidate']}>
+                        <ReadinessCheck />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/assessments/:invitationId/take"
+                    element={
+                      <ProtectedRoute allow={['candidate']}>
+                        <TakeAssessment />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route path="*" element={<RootRedirect />} />
-              </Routes>
-            </Suspense>
+                  <Route path="*" element={<RootRedirect />} />
+                </Routes>
+              </Suspense>
+            </SplashProvider>
           </ToastProvider>
         </AuthProvider>
       </BrowserRouter>

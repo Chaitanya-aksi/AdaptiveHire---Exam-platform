@@ -1,14 +1,47 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { homeFor } from './ProtectedRoute';
+import { useSplash } from './Splash';
 import { useAuth } from '../lib/auth';
-import type { LoginPortal } from '../lib/types';
+import type { AuthUser, LoginPortal } from '../lib/types';
 
 /** Where to send someone who used the wrong form, per portal. */
 const OTHER_DOOR: Record<LoginPortal, { to: string; label: string }> = {
   candidate: { to: '/recruiter/login', label: 'Go to recruiter sign in' },
   recruiter: { to: '/login', label: 'Go to candidate sign in' },
 };
+
+/**
+ * What the splash says while the destination loads behind it.
+ *
+ * Named for where they are going rather than for what the app is doing —
+ * "Opening your assessments" is the same beat as a spinner and tells them
+ * something, which is the whole reason the splash is there instead of one.
+ */
+function landing(user: AuthUser): { title: string; subtitle: string } {
+  // First name only. The greeting is the proof the right account was reached,
+  // and a full legal name reads like a record rather than a welcome.
+  const firstName = user.fullName.trim().split(/\s+/)[0];
+  const title = firstName ? `Welcome back, ${firstName}` : 'Welcome back';
+
+  // A provisioned account is bounced to /set-password by ProtectedRoute, so
+  // promising them their assessments here would name a screen they are not
+  // about to see.
+  if (user.mustChangePassword) {
+    return {
+      title,
+      subtitle: 'One thing first — the password we emailed you needs replacing.',
+    };
+  }
+
+  return {
+    title,
+    subtitle:
+      user.role === 'recruiter_admin'
+        ? 'Opening your workspace.'
+        : 'Opening your assessments.',
+  };
+}
 
 /**
  * The sign-in form itself, shared by the candidate and recruiter entry points.
@@ -22,6 +55,7 @@ const OTHER_DOOR: Record<LoginPortal, { to: string; label: string }> = {
 export function SignInForm({ portal }: { portal: LoginPortal }) {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const splash = useSplash();
   const [params] = useSearchParams();
 
   /**
@@ -48,6 +82,11 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
 
     try {
       const user = await login(email, password, portal);
+      // Raised before the navigation, and in the same tick, so React commits
+      // the overlay and the route change together. Reversing the two would
+      // paint a frame of the half-built destination first, which is precisely
+      // the moment the splash exists to cover.
+      splash.show(landing(user));
       void navigate(homeFor(user.role), { replace: true });
     } catch (err) {
       const response = (

@@ -2,6 +2,12 @@ import type { CameraState } from '../../hooks/useProctoring';
 
 interface ProctoringBarProps {
   isFullscreen: boolean;
+  /**
+   * The browser's own F11 full screen. Only ever true here alongside
+   * `isFullscreen` being false, which is the case worth wording differently —
+   * see the alert below.
+   */
+  browserFullscreen: boolean;
   camera: CameraState;
   notice: string | null;
   onDismissNotice: () => void;
@@ -30,6 +36,7 @@ const CAMERA_LABEL: Record<CameraState, string> = {
  */
 export function ProctoringBar({
   isFullscreen,
+  browserFullscreen,
   camera,
   notice,
   onDismissNotice,
@@ -49,9 +56,17 @@ export function ProctoringBar({
 
       {!isFullscreen && (
         <div className="alert warn assess-proctor-alert">
+          {/*
+            Two wordings, because they are two different situations to the
+            person reading. Told "you are not in full screen" while looking at a
+            full-screen window, a candidate reasonably concludes the app is
+            broken and keeps going. The second sentence names what they can see
+            and gives them the one action that works.
+          */}
           <span>
-            You are not in full screen. This has been recorded. Return to full
-            screen to continue the assessment.
+            {browserFullscreen
+              ? 'Full screen was opened by the browser rather than by the assessment. This has been recorded. Use the button below to continue.'
+              : 'You are not in full screen. This has been recorded. Return to full screen to continue the assessment.'}
           </span>
           <button type="button" onClick={onReturnToFullscreen}>
             Return to full screen

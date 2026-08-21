@@ -47,6 +47,13 @@ export type MicrophoneState = CameraState;
 interface Proctoring {
   connected: boolean;
   isFullscreen: boolean;
+  /**
+   * True while the browser's own F11 full screen is on. Read together with
+   * `isFullscreen`: both false is an ordinary window, `isFullscreen` true is
+   * ours, and this one alone means F11 got past the redirect and the screen
+   * looks locked without being locked.
+   */
+  browserFullscreen: boolean;
   enterFullscreen: () => Promise<void>;
   /**
    * The candidate has left the window at least once during this module.
@@ -133,6 +140,20 @@ export function useProctoring(
   const [isFullscreen, setIsFullscreen] = useState(
     () => document.fullscreenElement !== null,
   );
+  /**
+   * The browser's own full screen (F11), which is a different thing from ours.
+   *
+   * Only interesting when `isFullscreen` is false at the same time: that pair
+   * means the candidate is looking at a full-screen window that carries none of
+   * the protection, because `keyboard.lock()` cannot arm against it. Without
+   * this the warning tells somebody staring at a full-screen browser that they
+   * are "not in full screen", which reads as a broken app rather than as the
+   * real and specific problem it is.
+   *
+   * `display-mode` is a progressive enhancement — where a browser does not
+   * report it the pair simply never occurs and the generic wording stands.
+   */
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const [camera, setCamera] = useState<CameraState>(() =>
     // `mediaDevices` is typed as always present but is genuinely undefined on
     // an insecure origin, so this is a runtime check, not a type guard.
@@ -281,6 +302,19 @@ export function useProctoring(
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, [active, emit, showNotice]);
+
+  // Watches for the browser's own full screen, which fires no
+  // `fullscreenchange` and so needs its own listener.
+  useEffect(() => {
+    if (!active) return;
+
+    const query = window.matchMedia('(display-mode: fullscreen)');
+    const sync = () => setBrowserFullscreen(query.matches);
+    sync();
+
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, [active]);
 
   /*
    * Full-screen belongs to the test and has to be handed back when it ends.
@@ -521,6 +555,9 @@ export function useProctoring(
    * `preventDefault`ed for show, because a handler that appears to block
    * Ctrl+T and does not is worse than no handler — it invites the reader to
    * believe the rest of this is airtight.
+   *
+   * F11 is the exception, and it earns its place: unlike Ctrl+T it arrives
+   * cancelable, so cancelling it is real rather than theatre.
    */
   useEffect(() => {
     if (!active || !armed) return;
@@ -528,6 +565,33 @@ export function useProctoring(
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       const mod = event.ctrlKey || event.metaKey;
+
+      /*
+       * F11 is redirected into *our* full screen rather than the browser's.
+       *
+       * The two are not the same thing, and the gap between them was a real
+       * hole. The browser's own F11 full screen leaves
+       * `document.fullscreenElement` null, and `keyboard.lock()` is tied by
+       * spec to Fullscreen API full screen — so it cannot arm against F11. A
+       * candidate who pressed Escape and then F11 got a screen that *looked*
+       * locked while Ctrl+T went on opening tabs: the worst of both, because it
+       * reads as secure and is not.
+       *
+       * So we take the key, cancel it, and spend the activation it carries on
+       * `requestFullscreen()` instead. The state it lands in is then identical
+       * to the one the "Return to full screen" button produces, lock included,
+       * which makes that button the only way in by construction rather than by
+       * asking the candidate to prefer it.
+       *
+       * Deliberately one-way: F11 no longer toggles back out. Escape still
+       * leaves (Chrome's press-and-hold, once the lock is on), so nobody is
+       * trapped — and leaving is the thing that gets recorded either way.
+       */
+      if (event.key === 'F11') {
+        event.preventDefault();
+        void enterFullscreen();
+        return;
+      }
 
       // Printing or saving the page is a copy of the question bank leaving.
       if (mod && (key === 'p' || key === 's')) event.preventDefault();
@@ -550,7 +614,7 @@ export function useProctoring(
       document.removeEventListener('copy', swallow);
       document.removeEventListener('cut', swallow);
     };
-  }, [active, armed]);
+  }, [active, armed, enterFullscreen]);
 
   // ── Multiple displays ──────────────────────────────────────────────────
 
@@ -786,6 +850,7 @@ export function useProctoring(
   return {
     connected,
     isFullscreen,
+    browserFullscreen,
     enterFullscreen,
     away,
     awayCount,
