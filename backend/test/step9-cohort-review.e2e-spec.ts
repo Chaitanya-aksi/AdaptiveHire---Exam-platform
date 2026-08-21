@@ -17,7 +17,10 @@ const PASSWORD = 'CohortView!2345';
 interface Attempt {
   sessionId: string;
   candidate: { fullName: string };
-  meanPercentile: number | null;
+  overallScore: number | null;
+  /** Position within this assessment's cohort, out of `cohortSize`. */
+  rank: number | null;
+  cohortSize: number;
   review: {
     decision: string | null;
     tags: string[];
@@ -480,12 +483,25 @@ describe('Step 9 — Cohort view and review', () => {
       .expect(400);
   });
 
-  it('reports a mean percentile once there is a distribution', async () => {
+  it('ranks the scored attempts and gives the rest no position at all', async () => {
     const rows = await cohort(tokenA, assessmentA);
 
-    // Null is legitimate here — it means no section had a cohort big enough to
-    // rank against. What must never happen is a zero standing in for that.
-    const standing = rows[0].meanPercentile;
-    expect(standing === null || (standing >= 1 && standing <= 99)).toBe(true);
+    // Most attempts here were inserted straight into the tables and never had a
+    // report built, so they carry no score. Null is the right answer for those:
+    // an unscored attempt is missing data, not last place. What must never
+    // happen is a 0 standing in for it.
+    const ranked = rows.filter((row) => row.rank !== null);
+    expect(ranked.length).toBeGreaterThan(0);
+
+    for (const row of rows) {
+      expect(row.rank === null).toBe(row.overallScore === null);
+      // The denominator is the population the rank is drawn from, so a position
+      // can never fall outside it — "1st of 0" is not a standing.
+      expect(row.cohortSize).toBe(ranked.length);
+      if (row.rank !== null) {
+        expect(row.rank).toBeGreaterThanOrEqual(1);
+        expect(row.rank).toBeLessThanOrEqual(row.cohortSize);
+      }
+    }
   });
 });
