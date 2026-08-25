@@ -163,8 +163,8 @@ export function Assessments() {
                 const names = a.modules
                   .map((m) => m.module?.name)
                   .filter((n): n is string => Boolean(n));
-                const minQ = a.modules.reduce((t, m) => t + m.minQuestions, 0);
-                const maxQ = a.modules.reduce((t, m) => t + m.maxQuestions, 0);
+                const minQ = a.modules.reduce((t, m) => t + m.questionCount, 0);
+                const maxQ = a.modules.reduce((t, m) => t + m.questionCount, 0);
                 const minutes = Math.round(
                   a.modules.reduce((t, m) => t + m.timeLimitSeconds, 0) / 60,
                 );

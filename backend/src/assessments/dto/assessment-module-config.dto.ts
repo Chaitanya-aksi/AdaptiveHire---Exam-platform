@@ -1,9 +1,12 @@
 import { IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 
 /**
- * One module's slice of an assessment: how many questions the adaptive engine
- * may ask and how long the candidate gets. `min`/`max` bound the stopping
- * engine — the service enforces min <= max, which class-validator can't.
+ * One module's slice of an assessment: how many questions it asks and how long
+ * the candidate gets.
+ *
+ * `questionCount` is exact. It replaced a `min`/`max` pair whose whole purpose
+ * was to let a section end early, so there is no longer a cross-field rule for
+ * the service to enforce on top of these annotations.
  */
 export class AssessmentModuleConfigDto {
   @IsUUID()
@@ -11,11 +14,7 @@ export class AssessmentModuleConfigDto {
 
   @IsInt()
   @Min(1)
-  minQuestions!: number;
-
-  @IsInt()
-  @Min(1)
-  maxQuestions!: number;
+  questionCount!: number;
 
   @IsInt()
   @Min(1)

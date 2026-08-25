@@ -19,8 +19,8 @@ export function Modules() {
         <div>
           <h1>Modules</h1>
           <p>
-            Subjects are reference data — new ones are rows, not code, as long as
-            they fit one of the two scoring types.
+            Subjects are reference data — new ones are rows, not code, as long
+            as they fit one of the two scoring types.
           </p>
         </div>
       </div>
@@ -45,7 +45,9 @@ export function Modules() {
                     ? 'objective · Elo-scored'
                     : 'trait · weighted'}
                 </span>
-                {!module.isActive && <span className="badge archived">inactive</span>}
+                {!module.isActive && (
+                  <span className="badge archived">inactive</span>
+                )}
               </div>
             </div>
 

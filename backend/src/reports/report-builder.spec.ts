@@ -25,7 +25,7 @@ function objectiveModule(
     score,
     questionsAnswered: 10,
     questionsCorrect: 6,
-    minQuestions: 8,
+    questionCount: 8,
     traits: [],
     consistency: null,
     probes: null,
@@ -53,7 +53,7 @@ function traitModule(
     score: null,
     questionsAnswered: 12,
     questionsCorrect: 0,
-    minQuestions: 8,
+    questionCount: 8,
     traits: traits.map((t) => ({ consistency: null, ...t })),
     consistency: null,
     probes: null,
@@ -382,7 +382,7 @@ describe('buildReport — recommendation', () => {
     const thin = buildReport(
       input({
         modules: [
-          objectiveModule(88, { questionsAnswered: 2, minQuestions: 10 }),
+          objectiveModule(88, { questionsAnswered: 2, questionCount: 10 }),
         ],
       }),
     );
@@ -395,7 +395,7 @@ describe('buildReport — recommendation', () => {
     const thin = buildReport(
       input({
         modules: [
-          objectiveModule(15, { questionsAnswered: 2, minQuestions: 10 }),
+          objectiveModule(15, { questionsAnswered: 2, questionCount: 10 }),
         ],
       }),
     );
@@ -465,7 +465,7 @@ describe('buildReport — strengths and weaknesses', () => {
     const report = buildReport(
       input({
         modules: [
-          objectiveModule(60, { questionsAnswered: 3, minQuestions: 8 }),
+          objectiveModule(60, { questionsAnswered: 3, questionCount: 8 }),
         ],
       }),
     );

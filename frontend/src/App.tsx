@@ -319,7 +319,9 @@ export default function App() {
                         people's history and in old links. */}
                     <Route
                       path="profile"
-                      element={<Navigate to="/admin/settings/account" replace />}
+                      element={
+                        <Navigate to="/admin/settings/account" replace />
+                      }
                     />
                   </Route>
 

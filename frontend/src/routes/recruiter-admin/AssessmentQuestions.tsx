@@ -12,8 +12,7 @@ const PAGE_SIZE = 200;
 interface ModuleGroup {
   moduleId: string;
   name: string;
-  minQuestions: number;
-  maxQuestions: number;
+  questionCount: number;
   questions: Question[];
 }
 
@@ -67,8 +66,7 @@ export function AssessmentQuestions() {
           found.modules.map((config, index) => ({
             moduleId: config.moduleId,
             name: config.module?.name ?? 'Section',
-            minQuestions: config.minQuestions,
-            maxQuestions: config.maxQuestions,
+            questionCount: config.questionCount,
             questions: perModule[index].items,
           })),
         );
@@ -121,7 +119,7 @@ export function AssessmentQuestions() {
       groups.some(
         (group) =>
           group.questions.filter((q) => selected.has(q.id)).length <
-          group.minQuestions,
+          group.questionCount,
       ),
     [curating, groups, selected],
   );
@@ -156,9 +154,9 @@ export function AssessmentQuestions() {
         <div>
           <h1>Questions for {assessment.title}</h1>
           <p>
-            Tick the questions the adaptive engine may draw from. It still chooses
-            question by question on how the candidate is doing — this only bounds
-            what it may choose.
+            Tick the questions the adaptive engine may draw from. It still
+            chooses question by question on how the candidate is doing — this
+            only bounds what it may choose.
           </p>
         </div>
         <Link to="/admin/assessments">Back to assessments</Link>
@@ -188,8 +186,7 @@ export function AssessmentQuestions() {
             name={group.name}
             questions={group.questions}
             selected={selected}
-            minQuestions={group.minQuestions}
-            maxQuestions={group.maxQuestions}
+            questionCount={group.questionCount}
             onToggle={toggle}
             onSetMany={setMany}
           />

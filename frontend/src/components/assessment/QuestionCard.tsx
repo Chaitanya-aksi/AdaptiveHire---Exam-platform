@@ -21,8 +21,7 @@ interface QuestionCardProps {
 const PATTERN_HINT: Record<string, string> = {
   situational:
     'There is no right answer. Choose what you would most likely actually do.',
-  forced_choice:
-    'Both are positive. Choose the one that describes you better.',
+  forced_choice: 'Both are positive. Choose the one that describes you better.',
   trade_off:
     'Neither is better than the other. Choose the one you would prefer.',
 };

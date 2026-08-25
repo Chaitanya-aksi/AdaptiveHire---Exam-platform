@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * back to whatever `SUPPORT_EMAIL` is configured, and if that is unset too the
  * UI shows nothing rather than a dead link.
  */
-export class OrganisationSupportEmail1786650000000
-  implements MigrationInterface
-{
+export class OrganisationSupportEmail1786650000000 implements MigrationInterface {
   name = 'OrganisationSupportEmail1786650000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

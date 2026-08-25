@@ -232,9 +232,7 @@ function AssessmentRuntime() {
               <span>Time limit for this section</span>
             </li>
             <li>
-              <strong>
-                {module.minQuestions}–{module.maxQuestions} questions
-              </strong>
+              <strong>{module.questionCount} questions</strong>
               <span>
                 {module.scoringType === 'objective'
                   ? 'The questions adapt to your answers, so the exact number varies'
@@ -355,8 +353,7 @@ function AssessmentRuntime() {
         modules={session.modules}
         currentIndex={session.currentModuleIndex}
         answered={step.moduleProgress.answered}
-        min={step.moduleProgress.min}
-        max={step.moduleProgress.max}
+        questionCount={step.moduleProgress.questionCount}
       />
 
       <ProctoringBar

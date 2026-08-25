@@ -61,9 +61,7 @@ describe('Step 14 — Organisation branding', () => {
       .set(auth(label))
       .send({
         title: `${name} assessment`,
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 3, timeLimitSeconds: 600 },
-        ],
+        modules: [{ moduleId, questionCount: 3, timeLimitSeconds: 600 }],
       })
       .expect(201);
     org[label].assessmentId = (assessment.body as { id: string }).id;

@@ -107,9 +107,7 @@ describe('Step 11 — Organisation roles', () => {
       .set(auth(OrgRole.OWNER))
       .send({
         title: 'Roles assessment',
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 5, timeLimitSeconds: 600 },
-        ],
+        modules: [{ moduleId, questionCount: 5, timeLimitSeconds: 600 }],
       })
       .expect(201);
     assessmentId = (assessment.body as { id: string }).id;
@@ -170,8 +168,7 @@ describe('Step 11 — Organisation roles', () => {
           modules: [
             {
               moduleId,
-              minQuestions: 1,
-              maxQuestions: 3,
+              questionCount: 3,
               timeLimitSeconds: 600,
             },
           ],
@@ -208,8 +205,7 @@ describe('Step 11 — Organisation roles', () => {
           modules: [
             {
               moduleId,
-              minQuestions: 1,
-              maxQuestions: 3,
+              questionCount: 3,
               timeLimitSeconds: 600,
             },
           ],

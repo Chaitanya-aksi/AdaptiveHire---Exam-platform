@@ -35,7 +35,6 @@ export function Login() {
         only now and refuses a recruiter with a 403, so offering that credential
         here would hand out one that cannot work.
       */}
-      
     </AuthShell>
   );
 }

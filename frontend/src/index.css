@@ -1,27 +1,271 @@
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+ *
+ * Light is the bare `:root`; dark redefines the same names under `.dark`,
+ * which a script in `index.html` puts on `<html>` before first paint.
+ *
+ * Class-based rather than `prefers-color-scheme` alone, deliberately: a media
+ * query cannot be overridden by a person who wants dark at noon, and the
+ * resolution order has to be *stored choice, then system* — which is a
+ * decision, not a match. `useTheme` resolves system into the same class, so
+ * this stylesheet only ever sees two states and nothing has to be written
+ * twice.
+ *
+ * **Every component styles through these names.** A colour written as a
+ * literal in a rule below is a colour that cannot follow the theme, and is the
+ * bug that leaves white text on a white card. The literals that remain are
+ * deliberate and marked: text on a filled accent is white in both themes, and
+ * the sign-in brand panel is a dark surface by design in either.
+ * ────────────────────────────────────────────────────────────────────────── */
+
 :root {
+  /* ── Elevation ladder ───────────────────────────────────────────────────
+   *
+   * Four steps, and they must stay ordered in *both* themes:
+   *
+   *   bg  →  recess  →  surface  →  surface-2
+   *
+   * `--recess` is the step that was missing, and its absence was a real bug.
+   * Anything meant to read as "stepped back" — a completed invitation, a
+   * disabled row — was written as `background: var(--bg)`, which in light mode
+   * is a grey card on a whiter page and reads correctly. In dark mode the page
+   * *is* `--bg`, so the card became exactly the colour it sat on: measured at
+   * a contrast ratio of 1.00, leaving a 1px border as the only thing saying a
+   * card was there at all. A receded thing has to stay a thing.
+   *
+   * So `--recess` is defined per theme as "one step away from the page towards
+   * the surface" — below the page in light, above it in dark — and never as
+   * `--bg`. Reach for it instead of `--bg` whenever the intent is to recede.
+   */
   --bg: #f6f7f9;
+  --recess: #eef0f5;
   --surface: #ffffff;
+  /* Inset surfaces: table heads, code, step headers, meter tracks. Was a
+     scattering of #F3F4F6 / #fafbfc literals before dark mode needed them. */
+  --surface-2: #f0f2f6;
+  /* Hover for a row or card that is not itself a control. */
+  --surface-hover: #f7f8fb;
+
   --border: #e2e5ea;
+  --border-strong: #cdd4e0;
+
+  /* ── Text ladder ────────────────────────────────────────────────────────
+   *
+   * Three levels, not two. Everything below a heading used to be one single
+   * `--text-muted`, so on an invitation card the description, the subject
+   * chips, the duration, the invite date and the status sentence all rendered
+   * in the same grey at nearly the same size — six kinds of information with
+   * one visual weight between them. That is what makes a page slow to read,
+   * and it is not a contrast failure: those greys measured 7.19:1. Contrast
+   * says a thing *can* be read; hierarchy is what says which to read first.
+   *
+   *   --text        headings, values, anything being asserted
+   *   --text-muted  supporting prose meant to be read
+   *   --text-faint  metadata that is scanned, not read: dates, counts, units
+   *
+   * All three clear 4.5:1 against every surface in the ladder — including
+   * `--recess`, which is the darkest ground in this theme and therefore the
+   * one that decides the floor. That constraint is what sets these values,
+   * and it is worth re-measuring rather than eyeballing if any of them
+   * change: the first pass at `--text-faint` looked right on a white card and
+   * came out at 3.0:1 on a receded one, which is where most of it is used.
+   * Quieter, not unreadable — do not lighten it to make a page calmer.
+   */
   --text: #16191d;
-  --text-muted: #646b76;
+  --text-muted: #4f5763;
+  --text-faint: #656d7a;
+
   --accent: #2f5bea;
   --accent-hover: #2449c4;
   --accent-soft: #eaf0ff;
   --danger: #c02b2b;
   --danger-soft: #fdecec;
+  --danger-border: #f3c9c9;
   --success: #16794a;
   --success-soft: #e6f5ee;
   --warn: #8a5a00;
   --warn-soft: #fdf3e0;
+  --warn-strong: #d99100;
+
+  /* Text that sits on a filled accent/success/danger/brand surface. White in
+     both themes — a blue button does not become dark-text in dark mode. */
+  --on-accent: #ffffff;
+
+  /* The plate a customer's own logo is drawn on.
+   *
+   * Transparent in light, because an uploaded logo is drawn for a white page
+   * and is already sitting on one. See the dark block for why this token has
+   * to exist at all. */
+  --logo-plate: transparent;
+  --logo-plate-pad: 0px;
+  --logo-plate-border: transparent;
+
+  /* The brand panel down the side of the candidate's pages.
+   *
+   * A token, and theme-dependent, because a full-height saturated gradient is
+   * only ever as loud as the thing next to it. Against a white working column
+   * this reads as the brand and gives the page its one piece of colour, which
+   * is the intent. Against a near-black one the same gradient is the
+   * brightest thing on the screen by a distance, so the eye is pulled to the
+   * decoration and away from the assessments — the opposite of what it is
+   * for. Dark therefore keeps the same hues and drops the top end. */
+  --brand-panel: linear-gradient(145deg,
+    #1A0F6E 0%,
+    #3420A8 28%,
+    #6235D5 62%,
+    #9255F0 100%);
+
+  /* Focus ring. One token so every ring in the app matches and neither theme
+     has to fall back to the UA default, which is invisible on dark. */
+  --ring: var(--accent);
+  /* The softer halo worn by a focused input, where the border already turns
+     accent and a solid ring on top of it would be two rings.
+
+     Deliberately the accent at low alpha rather than `--accent-soft`. Those
+     two look interchangeable in light — both are pale blue — but they are
+     opposites: `--accent-soft` is a *fill* for a tinted chip, so in dark it
+     is a near-black navy (#18213a). Used as a ring there it drew a dark
+     outline on a dark surface, which meant every input, icon button and
+     linked row in the app had a focus indicator that could not be seen.
+     Alpha keeps it a halo in both themes because it borrows the surface. */
+  --ring-soft: rgb(47 91 234 / 26%);
+
+  /* The scrim behind a modal. */
+  --overlay: rgb(16 24 40 / 45%);
+  /* A caption burned into the corner of a video frame. */
+  --scrim: rgb(16 19 26 / 72%);
+  /* Placeholder blocks while content loads. */
+  --skeleton: #eaedf2;
+  /* The sticky top bars, which sit over scrolling content with a blur. Needs
+     alpha, so it cannot just be --surface. */
+  --topbar: rgb(255 255 255 / 86%);
 
   --radius: 8px;
   --radius-sm: 5px;
   --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 4%);
+  --shadow-md: 0 1px 2px rgb(16 24 40 / 6%), 0 12px 32px -12px rgb(16 24 40 / 18%);
+  --shadow-lg: 0 1px 2px rgb(16 24 40 / 6%), 0 20px 44px -18px rgb(16 24 40 / 34%);
+  --shadow-pop: 0 2px 10px -4px rgb(16 24 40 / 22%);
+  /* The lift a card takes on hover. A token because dark needs a different
+     one entirely — see below. */
+  --shadow-hover: 0 10px 26px rgb(16 24 40 / 8%), 0 2px 6px rgb(16 24 40 / 5%);
 
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
+  color-scheme: light;
 }
+
+/*
+ * Dark. Chosen rather than inverted.
+ *
+ * The ground is a near-black with the same blue bias the light neutrals have,
+ * not #000 — pure black makes every shadow invisible and every edge harsh. The
+ * accent is *lightened*, because #2f5bea against #0f1216 fails contrast for
+ * body text and reads as a disabled control; the semantic colours are
+ * lightened for the same reason, and their soft variants become deep tints of
+ * themselves rather than the pale washes that only work on white.
+ *
+ * Shadows are much heavier here: an 6% black shadow over a dark ground is
+ * nothing at all, so elevation has to come from a darker, wider spread.
+ */
+:root.dark {
+  /* The ladder runs the other way here: the page is the darkest thing and
+     every step towards the reader is lighter. `--recess` is *above* `--bg`
+     for exactly the reason given in the light block. */
+  --bg: #0e1116;
+  --recess: #141920;
+  --surface: #171c24;
+  --surface-2: #1e242e;
+  --surface-hover: #1c222b;
+
+  /* Both borders are lifted a step. At #272d36 a card edge against a #161a20
+     card was under 1.3:1 and the card outline effectively disappeared, which
+     matters much more here than in light: dark surfaces are separated by
+     edges, because shadow — the thing that separates them in light — has
+     almost nothing to fall on. */
+  --border: #2b323d;
+  --border-strong: #414a59;
+
+  /* Secondary text is lighter than the light theme's is dark, deliberately.
+     Light text on a dark ground blooms, so a grey that reads as comfortably
+     secondary on white reads as *dimmer* than it measures here. */
+  --text: #e8ecf2;
+  --text-muted: #a7b1be;
+  /* The binding surface here is `--surface-2`, the lightest of the four, not
+     `--recess` as in light — the ladder runs the other way, so the floor is
+     set at the opposite end. */
+  --text-faint: #848f9e;
+
+  --accent: #7b9bff;
+  --accent-hover: #9ab2ff;
+  --accent-soft: #18213a;
+  --danger: #f2908f;
+  --danger-soft: #2c1719;
+  --danger-border: #5c2b2c;
+  --success: #54c793;
+  --success-soft: #10261c;
+  --warn: #dda94a;
+  --warn-soft: #2a2113;
+  --warn-strong: #dda94a;
+
+  --on-accent: #ffffff;
+
+  /* ── Why a customer's logo needs a plate ────────────────────────────────
+   *
+   * An uploaded logo is a PNG somebody drew for their own white website. Its
+   * ink is usually near-black and its background is transparent, so on a dark
+   * card it is black-on-black: on this page one company's mark rendered as a
+   * few stray red pixels and nothing else, while the same file was perfectly
+   * legible in light mode.
+   *
+   * Nothing about the image can be fixed from here — `filter: invert()` is
+   * the tempting one and it is wrong, because it wrecks every logo that was
+   * *already* light-on-transparent and turns brand colours into their
+   * complements, which is worse than dim: it misrepresents somebody's mark.
+   *
+   * So the plate gives the logo back the white page it was drawn for, at the
+   * size of the logo rather than the card. Every uploaded file then renders
+   * correctly regardless of its ink, which is the only property that holds
+   * for images we do not control.
+   */
+  --logo-plate: #f4f6f9;
+  --logo-plate-pad: 4px;
+  --logo-plate-border: rgb(255 255 255 / 10%);
+
+  /* Same hues, lower ceiling — see the light block. The bottom stop is the
+     one that mattered: at #9255F0 the panel's brightest corner was roughly
+     nine times the luminance of the column beside it. */
+  --brand-panel: linear-gradient(145deg,
+    #150B57 0%,
+    #281984 28%,
+    #4C2AA8 62%,
+    #6E3EC4 100%);
+
+  --ring: var(--accent);
+  /* Lifted well above the light theme's alpha: the halo has to read against a
+     dark surface, which gives it far less to contrast with. */
+  --ring-soft: rgb(123 155 255 / 38%);
+
+  --overlay: rgb(4 6 10 / 66%);
+  --scrim: rgb(4 6 10 / 78%);
+  --skeleton: #222833;
+  --topbar: rgb(23 28 36 / 86%);
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 44%), 0 1px 3px rgb(0 0 0 / 30%);
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 40%), 0 12px 32px -12px rgb(0 0 0 / 66%);
+  --shadow-lg: 0 1px 2px rgb(0 0 0 / 40%), 0 20px 44px -18px rgb(0 0 0 / 74%);
+  --shadow-pop: 0 2px 10px -4px rgb(0 0 0 / 60%);
+  /* Hover cannot be "a bigger shadow" here — a black shadow on a near-black
+     page is invisible however large. Elevation in dark reads as the surface
+     catching more light, so the lift is carried by --surface-hover and the
+     border, and the shadow only deepens the ground beneath it. */
+  --shadow-hover: 0 12px 30px -10px rgb(0 0 0 / 70%), 0 2px 6px rgb(0 0 0 / 40%);
+
+  /* Tells the browser to render form controls, scrollbars and the caret dark
+     too. Without it a native <select> or date picker stays blinding white. */
+  color-scheme: dark;
+}
+
 
 * {
   box-sizing: border-box;
@@ -46,6 +290,24 @@ h3 { font-size: 14px; }
 
 a { color: var(--accent); }
 
+/*
+ * A visible ring on anything focusable, as the floor rather than the finish.
+ *
+ * The rules further down give particular controls a better-placed ring; this
+ * only catches whatever they miss. It is worth stating once at the base
+ * because the fallback it replaces is the user agent's, and the UA ring is a
+ * thin dark outline — perfectly visible on a white page and very nearly
+ * invisible on a #0e1116 one. A keyboard user in dark mode was the person
+ * paying for that.
+ *
+ * `:focus-visible`, not `:focus`, so a mouse click on a button does not leave
+ * a ring behind it.
+ */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* ── App shell ─────────────────────────────────────────────────────────── */
 
 .shell { min-height: 100vh; }
@@ -58,7 +320,7 @@ a { color: var(--accent); }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgb(255 255 255 / 86%);
+  background: var(--topbar);
   backdrop-filter: saturate(180%) blur(10px);
   border-bottom: 1px solid var(--border);
 }
@@ -120,7 +382,7 @@ a { color: var(--accent); }
   white-space: nowrap;
   transition: color 0.14s ease, background 0.14s ease;
 }
-.topnav a:hover { color: var(--text); background: var(--bg); }
+.topnav a:hover { color: var(--text); background: var(--surface-hover); }
 .topnav a.active { color: var(--accent); background: var(--accent-soft); }
 
 /* ── Account menu ──────────────────────────────────────────────────────── */
@@ -140,7 +402,7 @@ a { color: var(--accent); }
 }
 .user-trigger:hover:not(:disabled),
 .user-trigger.open {
-  background: var(--bg);
+  background: var(--surface-hover);
   border-color: var(--border);
 }
 
@@ -188,7 +450,7 @@ a { color: var(--accent); }
   align-items: center;
   gap: 10px;
   padding: 12px 13px;
-  background: var(--bg);
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
 .user-dropdown-head strong { display: block; font-size: 13px; font-weight: 600; }
@@ -212,7 +474,7 @@ a { color: var(--accent); }
   text-align: left;
   font-weight: 500;
 }
-.user-dropdown-items button:hover:not(:disabled) { background: var(--bg); }
+.user-dropdown-items button:hover:not(:disabled) { background: var(--surface-hover); }
 .user-dropdown-items .mi { flex: none; width: 16px; text-align: center; color: var(--text-muted); }
 
 .user-dropdown-items .signout {
@@ -237,7 +499,7 @@ a { color: var(--accent); }
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: var(--on-accent);
   background: linear-gradient(135deg, var(--accent), #6b46e0);
 }
 .avatar-lg {
@@ -320,7 +582,7 @@ a { color: var(--accent); }
   letter-spacing: -0.02em;
   margin-top: 3px;
 }
-.stat .sub { color: var(--text-muted); font-size: 12px; }
+.stat .sub { color: var(--text-faint); font-size: 12px; }
 
 .stat-link {
   display: block;
@@ -342,7 +604,7 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
   text-align: left;
   padding: 9px 14px;
-  background: var(--bg);
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
@@ -358,7 +620,7 @@ td {
   vertical-align: top;
 }
 tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: #fafbfc; }
+tbody tr:hover { background: var(--surface-2); }
 
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -445,7 +707,7 @@ tr.row-link:hover .go { color: var(--accent); }
  * is the target either way. */
 .a-row:hover,
 .a-row:focus-within {
-  background: var(--bg);
+  background: var(--surface-hover);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -486,7 +748,7 @@ tr.row-link:hover .go { color: var(--accent); }
   color: var(--accent);
 }
 .a-title:focus-visible {
-  outline: 2px solid var(--accent-soft);
+  outline: 2px solid var(--ring-soft);
   outline-offset: 3px;
   border-radius: 3px;
 }
@@ -553,7 +815,7 @@ tr.row-link:hover .go { color: var(--accent); }
   gap: 5px 16px;
   margin-top: 9px;
   font-size: 12.5px;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 .a-meta span {
   display: inline-flex;
@@ -595,14 +857,14 @@ tr.row-link:hover .go { color: var(--accent); }
  * name states the intent and sidesteps a specificity fight that the next person
  * to touch either rule would have to re-solve. */
 
-.icon-button:hover { background: var(--bg); color: var(--text); }
+.icon-button:hover { background: var(--surface-hover); color: var(--text); }
 .icon-button.destructive:hover {
   background: var(--danger-soft);
   border-color: var(--danger-soft);
   color: var(--danger);
 }
 .icon-button:focus-visible {
-  outline: 2px solid var(--accent-soft);
+  outline: 2px solid var(--ring-soft);
   outline-offset: 1px;
 }
 
@@ -630,7 +892,7 @@ input, select, textarea {
   min-width: 0;
 }
 input:focus, select:focus, textarea:focus {
-  outline: 2px solid var(--accent-soft);
+  outline: 2px solid var(--ring-soft);
   border-color: var(--accent);
 }
 
@@ -646,13 +908,13 @@ button {
   color: var(--text);
   cursor: pointer;
 }
-button:hover:not(:disabled) { background: var(--bg); }
+button:hover:not(:disabled) { background: var(--surface-hover); }
 button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 button.primary:hover:not(:disabled) { background: var(--accent-hover); }
 
@@ -678,12 +940,12 @@ button.primary:hover:not(:disabled) { background: var(--accent-hover); }
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
-.button:hover { background: var(--bg); }
+.button:hover { background: var(--surface-hover); }
 
 .button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .button.primary:hover { background: var(--accent-hover); }
 
@@ -708,7 +970,7 @@ button.primary:hover:not(:disabled) { background: var(--accent-hover); }
   border-color: var(--accent);
   /* Pure white, not an off-white: anything tinted reads as muddy on a
      saturated fill. */
-  color: #fff;
+  color: var(--on-accent);
 }
 .button.soft:focus-visible {
   outline: 2px solid var(--accent);
@@ -734,7 +996,7 @@ button.link:hover:not(:disabled) { background: none; text-decoration: underline;
 button.danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 button.danger:hover:not(:disabled) { background: #a52323; }
 
@@ -768,7 +1030,7 @@ button.link.danger-link { color: var(--danger); }
   margin: 0;
   padding: 10px 12px;
   border-left: 3px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-2);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text);
   font-size: 13px;
@@ -801,7 +1063,7 @@ button.link.danger-link { color: var(--danger); }
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
-  background: var(--bg);
+  background: var(--surface-2);
   color: var(--text-muted);
 }
 .badge.active   { background: var(--success-soft); color: var(--success); }
@@ -818,7 +1080,7 @@ button.link.danger-link { color: var(--danger); }
   margin-bottom: 14px;
   font-size: 13px;
 }
-.alert.error   { background: var(--danger-soft);  border-color: #f3c9c9; color: var(--danger); }
+.alert.error   { background: var(--danger-soft);  border-color: var(--danger-border); color: var(--danger); }
 .alert.success { background: var(--success-soft); border-color: #bfe3d1; color: var(--success); }
 .alert.info    { background: var(--accent-soft);  border-color: #cfdcff; color: var(--accent); }
 /* Proctoring notices: has to read as a warning, not as a friendly tip. */
@@ -847,7 +1109,7 @@ button.link.danger-link { color: var(--danger); }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F0F1F7;
+  background: var(--surface-2);
   background-image: radial-gradient(ellipse 90% 90% at 50% 40%,
     rgba(100,70,255,0.055) 0%, transparent 65%);
   padding: 32px;
@@ -929,7 +1191,7 @@ button.link.danger-link { color: var(--danger); }
   justify-content: center;
   font-size: 17px;
   font-weight: 800;
-  color: #fff;
+  color: var(--on-accent);
   letter-spacing: -0.02em;
   flex-shrink: 0;
   box-shadow: 0 4px 14px rgba(94,68,255,0.45);
@@ -937,7 +1199,7 @@ button.link.danger-link { color: var(--danger); }
 .al-name {
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
   letter-spacing: -0.01em;
 }
 .al-tagline-sub {
@@ -1069,7 +1331,7 @@ button.link.danger-link { color: var(--danger); }
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 12px;
   font-size: 14px;
-  color: #fff;
+  color: var(--on-accent);
   outline: none;
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   -webkit-font-smoothing: antialiased;
@@ -1133,7 +1395,7 @@ button.link.danger-link { color: var(--danger); }
   width: 100%;
   height: 56px;
   background: linear-gradient(135deg, #4F46FF 0%, #7C3AED 100%);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 12px;
   font-size: 15px;
@@ -1396,7 +1658,7 @@ button.link.danger-link { color: var(--danger); }
   font-size: clamp(40px, 4.2vw, 62px);
   font-weight: 800;
   line-height: 0.97;
-  color: #fff;
+  color: var(--on-accent);
   letter-spacing: -0.04em;
   margin: 0 0 16px;
 }
@@ -1550,9 +1812,17 @@ button.link.danger-link { color: var(--danger); }
   color: #9CA3AF;
   font-weight: 500;
 }
+/* Literal, not `--surface-2`.
+ *
+ * Everything from `.ar-chrome` down is a *picture of the product* — a white
+ * browser window drawn in HTML on the sign-in panel — so it is deliberately
+ * light in both themes, like the screenshot it imitates. A theme token here
+ * flips with the app around it and paints a dark strip inside a white mock,
+ * which is why these three were the only rules in that block reading from the
+ * palette. */
 .ar-sm-track {
   height: 4px;
-  background: #F3F4F6;
+  background: #ECEDF1;
   border-radius: 99px;
   overflow: hidden;
 }
@@ -1583,8 +1853,9 @@ button.link.danger-link { color: var(--danger); }
   gap: 9px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #F9FAFB;
-  border: 1.5px solid #F3F4F6;
+  /* Literal for the same reason as `.ar-sm-track` above. */
+  background: #F4F5F8;
+  border: 1.5px solid #F4F5F8;
   font-size: 11.5px;
   color: #6B7280;
   position: relative;
@@ -1609,7 +1880,7 @@ button.link.danger-link { color: var(--danger); }
 }
 .ar-sm-key--on {
   background: #7C3AED;
-  color: #fff;
+  color: var(--on-accent);
 }
 .ar-sm-check {
   position: absolute;
@@ -1631,7 +1902,7 @@ button.link.danger-link { color: var(--danger); }
   display: flex;
   align-items: center;
   gap: 11px;
-  color: #fff;
+  color: var(--on-accent);
   box-shadow:
     0 8px 32px rgba(0,0,0,0.22),
     0 2px 0 rgba(255,255,255,0.07) inset;
@@ -1660,7 +1931,7 @@ button.link.danger-link { color: var(--danger); }
 .ar-ring span {
   font-size: 11.5px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
   position: relative;
   z-index: 1;
 }
@@ -1672,7 +1943,7 @@ button.link.danger-link { color: var(--danger); }
 .ar-chip-info strong {
   font-size: 12.5px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
   display: block;
 }
 .ar-chip-info span {
@@ -1700,7 +1971,7 @@ button.link.danger-link { color: var(--danger); }
 .ar-chip-tv {
   font-size: 14.5px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
@@ -1795,7 +2066,7 @@ button.link.danger-link { color: var(--danger); }
 .ar-micro-val {
   font-size: 13px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
 }
@@ -1999,7 +2270,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   margin-top: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .credential code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2011,7 +2282,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   margin-top: 16px;
   padding: 11px 13px;
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
@@ -2036,7 +2307,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(16 24 40 / 45%);
+  background: var(--overlay);
   display: grid;
   place-items: center;
   padding: 20px;
@@ -2049,7 +2320,10 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   max-width: 440px;
   background: var(--surface);
   border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgb(16 24 40 / 22%), 0 2px 6px rgb(16 24 40 / 12%);
+  /* Tokenised: a 22%-black shadow is what lifts a dialog off a white page and
+     is nothing at all over a dark one, where a modal needs the heavier drop
+     the dark token carries. */
+  box-shadow: var(--shadow-lg);
   animation: modal-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
@@ -2105,7 +2379,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--border);
-  box-shadow: 0 6px 18px rgb(16 24 40 / 14%);
+  box-shadow: var(--shadow-md);
   font-size: 13px;
   animation: toast-in 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
@@ -2119,7 +2393,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   place-items: center;
   font-size: 12px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
 }
 .toast.success .toast-icon { background: var(--success); }
 .toast.error   .toast-icon { background: var(--danger); }
@@ -2225,7 +2499,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   color: var(--text-muted);
 }
 .assess-timer.warning {
-  border-color: #f3c9c9;
+  border-color: var(--danger-border);
   background: var(--danger-soft);
 }
 .assess-timer.warning strong { color: var(--danger); }
@@ -2303,7 +2577,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   background: var(--surface);
   cursor: pointer;
 }
-.assess-option:hover { border-color: var(--accent); background: var(--bg); }
+.assess-option:hover { border-color: var(--accent); background: var(--surface-hover); }
 .assess-option.selected {
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -2323,7 +2597,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   place-items: center;
   border-radius: 50%;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-2);
   font-size: 11px;
   font-weight: 650;
   color: var(--text-muted);
@@ -2331,7 +2605,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .assess-option.selected .assess-option-key {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .assess-actions {
@@ -2458,9 +2732,13 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   box-shadow: var(--shadow);
   transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
 }
+/* The dashboard's main affordance. In dark the hardcoded shadow this used
+ * contributed nothing, so hovering a tile moved it 2px and changed one border
+ * — the lift has to come from the surface here, as it does on `.ci-card`. */
 .tile:hover {
   border-color: var(--accent);
-  box-shadow: 0 8px 22px rgb(16 24 40 / 10%);
+  background: var(--surface-hover);
+  box-shadow: var(--shadow-hover);
   transform: translateY(-2px);
 }
 .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -2603,7 +2881,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   justify-content: space-between;
   gap: 10px;
   padding: 9px 14px;
-  background: var(--bg);
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
 
@@ -2636,7 +2914,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   cursor: pointer;
 }
 
-.pool-list li:not(.on) label:hover { background: var(--bg); }
+.pool-list li:not(.on) label:hover { background: var(--surface-hover); }
 .pool-list input { margin-top: 3px; flex-shrink: 0; }
 
 .pool-text { flex: 1; min-width: 0; }
@@ -2692,7 +2970,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 /* A choice that counted against a trait reads differently from one that
    counted for it — otherwise the sign is easy to miss when scanning. */
 .report-weight.negative {
-  background: var(--bg);
+  background: var(--surface-2);
   color: var(--text-muted);
 }
 
@@ -2736,7 +3014,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 
 .qe-option-head { display: flex; align-items: center; gap: 12px; }
@@ -2813,7 +3091,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   place-items: center;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 650;
 }
@@ -2850,7 +3128,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 }
 .rank-choice:hover:not(:disabled) {
   border-color: var(--accent);
-  background: var(--bg);
+  background: var(--surface-hover);
 }
 
 /* Announced to screen readers, never painted. */
@@ -2879,9 +3157,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
      two screens of one flow, and a step change in finish between them reads as
      two different products. */
   border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgb(16 24 40 / 6%),
-    0 12px 32px -12px rgb(16 24 40 / 18%);
+  box-shadow: var(--shadow-md);
 }
 .assess-intro p, .assess-done p { margin: 0; }
 .assess-intro .alert { margin: 0; }
@@ -2898,7 +3174,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 11px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .assess-facts strong { display: block; font-size: 14px; }
 .assess-facts span { font-size: 12px; color: var(--text-muted); }
@@ -2917,7 +3193,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface-2);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2988,7 +3264,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 13px 15px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface-2);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -3057,14 +3333,13 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
    the bottom, or the column ends in a band of page background. Deliberately no
    `overflow` here: that would make it a scroll ancestor and the sticky box
    inside would stop sticking. `.cand-panel-bg` does its own clipping. */
+/* The gradient is a token because it is the one large coloured surface that
+ * has to be judged against what sits *beside* it, and that neighbour changes
+ * with the theme. See `--brand-panel` for the reasoning. */
 .cand-panel {
   position: relative;
-  background: linear-gradient(145deg,
-    #1A0F6E 0%,
-    #3420A8 28%,
-    #6235D5 62%,
-    #9255F0 100%);
-  color: #fff;
+  background: var(--brand-panel);
+  color: var(--on-accent);
 }
 
 .cand-panel-sticky {
@@ -3154,7 +3429,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, #5E44FF 0%, #9B5CFF 100%);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -3175,7 +3450,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   font-weight: 500;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgb(255 255 255 / 32%);
+  color: rgb(255 255 255 / 55%);
 }
 
 /* -- Greeting ----------------------------------------------------------- */
@@ -3198,7 +3473,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   line-height: 1.02;
   letter-spacing: -0.035em;
 }
-.cand-hello { display: block; color: rgb(255 255 255 / 50%); }
+.cand-hello { display: block; color: rgb(255 255 255 / 66%); }
 .cand-name {
   display: block;
   background: linear-gradient(96deg, #ffffff 0%, #D4BAFF 100%);
@@ -3215,7 +3490,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   max-width: 340px;
   font-size: 14.5px;
   line-height: 1.6;
-  color: rgb(255 255 255 / 62%);
+  color: rgb(255 255 255 / 80%);
 }
 
 .cand-stats { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -3243,7 +3518,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   font-weight: 550;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(255 255 255 / 55%);
+  color: rgb(255 255 255 / 74%);
 }
 
 /* -- Panel nav ---------------------------------------------------------- */
@@ -3256,7 +3531,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   gap: 10px;
   padding: 10px 12px;
   border-radius: 9px;
-  color: rgb(255 255 255 / 62%);
+  color: rgb(255 255 255 / 78%);
   font-weight: 550;
   text-decoration: none;
   transition: background 0.14s ease, color 0.14s ease;
@@ -3293,7 +3568,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   height: 62px;
   padding: 0 22px;
   border-bottom: 1px solid var(--border);
-  background: rgb(255 255 255 / 86%);
+  background: var(--topbar);
   backdrop-filter: saturate(180%) blur(10px);
   /*
    * Sticky for the same reason the recruiter's top bar is: the account button
@@ -3333,11 +3608,11 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 
 .ci-section {
   margin: 30px 0 12px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 .ci-card {
@@ -3350,10 +3625,15 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   box-shadow: var(--shadow);
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
+/* Elevation on hover has to be carried differently by theme. In light a bigger
+ * shadow does it; over a near-black page a black shadow of any size is
+ * invisible, so dark leans on the surface lightening instead. Both are behind
+ * tokens, so this rule states the intent once. */
 .ci-card:hover {
   transform: translateY(-1px);
-  border-color: #cfd6e4;
-  box-shadow: 0 10px 26px rgb(16 24 40 / 8%), 0 2px 6px rgb(16 24 40 / 5%);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  box-shadow: var(--shadow-hover);
 }
 
 /* The stripe is the status at a glance, before any text is read. */
@@ -3367,13 +3647,29 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .ci-card--completed .ci-stripe { background: var(--success); }
 
 /* Nothing can be done with these, so they recede rather than compete with the
-   invitation the candidate is meant to act on. */
+ * invitation the candidate is meant to act on.
+ *
+ * `--recess`, never `--bg`. Written as `--bg` this was the page's own colour,
+ * so in dark mode a finished attempt was a card-shaped hole with a hairline
+ * around it — and since a candidate's history is almost entirely finished
+ * attempts, that was most of the page. Receding means one step back, not
+ * disappearing. */
 .ci-card--expired,
 .ci-card--revoked,
-.ci-card--completed { background: var(--bg); box-shadow: none; }
+.ci-card--completed { background: var(--recess); box-shadow: none; }
+/* Still clickable — a finished attempt opens its record — so hover has to
+ * answer, but quietly: it keeps the receded surface and acknowledges the
+ * pointer with its edge alone. Without the background here the generic
+ * `.ci-card:hover` above would win on specificity and lift a finished attempt
+ * to the same surface as a live one. */
 .ci-card--expired:hover,
 .ci-card--revoked:hover,
-.ci-card--completed:hover { transform: none; }
+.ci-card--completed:hover {
+  transform: none;
+  background: var(--recess);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
 
 .ci-body {
   flex: 1;
@@ -3445,7 +3741,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 3px 9px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-2);
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
@@ -3463,16 +3759,25 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   margin-top: 2px;
 }
 
+/* Metadata — duration, section count, invite date. Scanned, not read, so it
+ * takes the faint level and leaves the description above it as the only grey
+ * prose on the card. These three used to be the same colour and size as the
+ * description, the subject chips and the status line below them. */
 .ci-facts {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 14px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 .ci-facts > span { display: inline-flex; align-items: center; gap: 5px; }
-.ci-fact-sent { opacity: 0.85; }
+/* The icons are the scannable part; the numbers beside them carry the meaning,
+   so the glyphs sit a step back rather than competing with them. */
+.ci-facts svg { opacity: 0.72; flex: none; }
+/* No opacity here any more. Stacking 0.85 on top of an already-quiet colour
+   was how this text ended up dimmer than anything else on the card without
+   any rule actually saying so. */
 
 .ci-go { text-decoration: none; flex: none; }
 .ci-go button {
@@ -3484,9 +3789,13 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   white-space: nowrap;
 }
 
-.ci-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+/* The status sentence under the fold of the card ("Submitted — sent to the
+   recruiting team for review"). It repeats what the pill already said, so it
+   is the quietest thing on the card rather than a fifth voice at the same
+   volume as the rest. */
+.ci-note { margin: 0; font-size: 12px; color: var(--text-faint); }
 
-.ci-closed-note { font-size: 12px; color: var(--text-muted); }
+.ci-closed-note { font-size: 12px; color: var(--text-faint); }
 
 /* -- Empty and loading -------------------------------------------------- */
 
@@ -3523,8 +3832,11 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   height: 128px;
   border-radius: 14px;
   border: 1px solid var(--border);
+  /* The sweep has to be *lighter* than the card in both themes — with `--bg`
+     in the middle it ran dark-on-dark and read as a dent travelling across
+     the placeholder rather than a shine. */
   background: linear-gradient(100deg,
-    var(--surface) 30%, var(--bg) 50%, var(--surface) 70%);
+    var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
   background-size: 260% 100%;
   animation: ci-shimmer 1.3s ease-in-out infinite;
 }
@@ -3683,7 +3995,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .at-step-when {
   font-size: 12px;
   font-weight: 550;
-  color: var(--text-muted);
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 .at-step-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
@@ -3697,28 +4009,38 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .at-step--current::before { background: var(--accent); }
 
 /* Where they are now: the one stage the eye should land on. */
+/* The halo marking which step the attempt has reached.
+ *
+ * `--ring-soft`, not `--accent-soft` — the same mix-up the focus rings had.
+ * As a fill token `--accent-soft` is #18213a in dark, which sits about 1.15:1
+ * from the card behind it, so the one marker on the timeline that says "you
+ * are here" was the one you could not see. */
 .at-step--current .at-step-marker {
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  box-shadow: 0 0 0 4px var(--ring-soft);
 }
 .at-step--current .at-step-text strong { color: var(--accent); }
 
 /* Still ahead — drawn, but plainly not yet. */
 .at-step--upcoming .at-step-text strong,
 .at-step--upcoming .at-step-when { color: var(--text-muted); }
-.at-step--upcoming .at-step-note { opacity: 0.75; }
+/* The note is already `--text-muted`; the 0.75 that used to sit here took it
+   to 3.9:1 in light. Step down the ladder instead of fading. */
+.at-step--upcoming .at-step-note { color: var(--text-faint); }
 
 /* Unreachable: the invitation lapsed or was withdrawn before this point. */
 .at-step--stopped .at-step-marker {
   border-style: dashed;
-  border-color: #c9cedb;
+  border-color: var(--border-strong);
 }
+/* `--text-faint` rather than muted-at-60%, for the reason spelled out on
+   `.cohort-rejected`: an opacity stacked on an already-quiet colour lands
+   around 2.9:1 and is not a step down the hierarchy, it is illegible. */
 .at-step--stopped .at-step-text strong,
 .at-step--stopped .at-step-when,
 .at-step--stopped .at-step-note {
-  color: var(--text-muted);
-  opacity: 0.6;
+  color: var(--text-faint);
 }
 
 @media (min-width: 660px) {
@@ -3786,7 +4108,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 13px 15px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .at-section-head {
   display: flex;
@@ -3800,7 +4122,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 /* ── Pace ──────────────────────────────────────────────────────────────── */
@@ -3834,7 +4156,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   min-width: 0;
   height: 8px;
   border-radius: 999px;
-  background: var(--bg);
+  background: var(--surface-2);
   overflow: hidden;
 }
 
@@ -3845,12 +4167,19 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   background: linear-gradient(90deg, #5E44FF 0%, #9B5CFF 100%);
 }
 /* A question the clock ran out on: it still took time, but there is no answer
-   behind the bar, so it must not read like one. */
+ * behind the bar, so it must not read like one.
+ *
+ * Tokens rather than the two light greys this used to hatch. Those were
+ * chosen to sit *below* the answered bars on a white page, and in dark mode a
+ * pale hatch on a near-black track is the brightest thing in the chart —
+ * exactly reversing the rule the comment above states. Both stops now move
+ * with the theme, so a skipped bar stays quieter than an answered one either
+ * way. */
 .at-pace-bar--skipped {
   background: repeating-linear-gradient(
     45deg,
-    #d3d8e3 0 4px,
-    #e6e9f0 4px 8px
+    var(--border-strong) 0 4px,
+    var(--border) 4px 8px
   );
 }
 
@@ -3874,7 +4203,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .at-footnote {
   margin: 2px 0 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 /* Where a candidate writes when the assessment went wrong for them.
@@ -3923,7 +4252,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   gap: 4px 16px;
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 .report-timing strong { color: var(--text); font-weight: 600; }
 
@@ -3932,7 +4261,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 /* The one thing to know before the first Reject click: it sends. Given weight
@@ -3941,8 +4270,8 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   margin: 0 0 8px;
   padding: 10px 14px;
   border-radius: 8px;
-  border-left: 3px solid var(--warn, #d99100);
-  background: var(--warn-soft, #fff8e6);
+  border-left: 3px solid var(--warn-strong);
+  background: var(--warn-soft, var(--warn-soft));
   font-size: 13px;
   line-height: 1.55;
   color: var(--text);
@@ -4007,8 +4336,8 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 }
 /* Only the states that mean something get a colour. A passing check is the
    expected case and should not compete for attention with a failing one. */
-.sc-row--fail { border-color: var(--danger); background: var(--danger-soft, #fff5f5); }
-.sc-row--warn { border-color: var(--warn, #d99100); }
+.sc-row--fail { border-color: var(--danger); background: var(--danger-soft, var(--danger-soft)); }
+.sc-row--warn { border-color: var(--warn-strong); }
 
 .sc-dot {
   flex: none;
@@ -4019,11 +4348,11 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   place-items: center;
   font-size: 12px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--text-muted);
 }
 .sc-dot--ok { background: var(--success); }
-.sc-dot--warn { background: var(--warn, #d99100); }
+.sc-dot--warn { background: var(--warn-strong); }
 .sc-dot--fail { background: var(--danger); }
 .sc-dot--pending {
   background: var(--border);
@@ -4068,9 +4397,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   padding: 0;
   overflow: hidden;
   border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgb(16 24 40 / 6%),
-    0 12px 32px -12px rgb(16 24 40 / 18%);
+  box-shadow: var(--shadow-md);
 }
 
 .pq-head {
@@ -4109,7 +4436,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   gap: 12px;
   font-size: 12.5px;
   font-weight: 550;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 /* Says these answers go nowhere, once, quietly. The candidate is entitled to
@@ -4182,7 +4509,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 
 .pq-option:hover {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  box-shadow: 0 2px 10px -4px rgb(16 24 40 / 22%);
+  box-shadow: var(--shadow-pop);
   transform: translateY(-1px);
 }
 .pq-option:active { transform: translateY(0); }
@@ -4207,7 +4534,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   font-size: 12px;
   font-weight: 700;
@@ -4217,7 +4544,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .pq-option--chosen .pq-key {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .pq-text { flex: 1; }
@@ -4244,7 +4571,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   top: 2.5px;
   width: 5px;
   height: 9px;
-  border: solid #fff;
+  border: solid var(--on-accent);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -4304,7 +4631,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   align-self: center;
   font-size: 13px;
   font-weight: 550;
-  color: var(--text-muted);
+  color: var(--text-faint);
   border: 1px dashed var(--border);
   border-radius: 8px;
   padding: 9px 14px;
@@ -4373,7 +4700,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   font: inherit;
   cursor: pointer;
 }
-.ia-head:hover { background: var(--bg); }
+.ia-head:hover { background: var(--surface-hover); }
 
 .ia-text {
   flex: 1;
@@ -4384,6 +4711,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
      stems would bury the figures this page exists for. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -4420,12 +4748,12 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 }
 .ia-flag--bad  { color: var(--danger);  background: var(--danger-soft); }
 .ia-flag--warn { color: var(--warn);    background: var(--warn-soft); }
-.ia-flag--info { color: var(--text-muted); background: var(--bg); }
+.ia-flag--info { color: var(--text-muted); background: var(--surface-2); }
 
 .ia-detail {
   padding: 14px 16px 16px;
   border-top: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-2);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -4438,7 +4766,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   flex-wrap: wrap;
   gap: 6px 18px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 .ia-meta strong { color: var(--text); font-variant-numeric: tabular-nums; }
 
@@ -4511,8 +4839,24 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
  * fights what they are trying to do.
  */
 
-.cohort-rejected { opacity: 0.55; }
-.cohort-rejected:hover { opacity: 1; }
+/*
+ * Receded with surface and colour, never `opacity`.
+ *
+ * This was `opacity: 0.55`, which dims the row's *content* rather than
+ * stepping the row back — and content dimmed that far stops being readable.
+ * Measured across both themes, no alpha below 1.0 keeps this row's secondary
+ * text above 4.5:1, and the values that came close (0.85+) barely read as
+ * dimmed at all, so there was no setting that was both legible and receded.
+ * Opacity is the wrong instrument for the job.
+ *
+ * A recessed background with the text one step down the ladder gets the same
+ * "this one is a no" reading and stays readable, and it leaves the status
+ * badge at its own colour instead of washing it out with everything else.
+ * `tbody tr:hover` outranks this on specificity, so hovering still restores
+ * the row's normal surface.
+ */
+.cohort-rejected { background: var(--recess); color: var(--text-faint); }
+.cohort-rejected:hover { color: var(--text); }
 
 .cohort-standing {
   font-size: 15px;
@@ -4536,7 +4880,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   border-left: 2px solid var(--border);
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--text-muted);
+  color: var(--text-faint);
   max-width: 380px;
 }
 
@@ -4564,13 +4908,13 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 .cohort-pick--on {
   background: var(--success);
   border-color: var(--success);
-  color: #fff;
+  color: var(--on-accent);
 }
 .cohort-pick--on:hover:not(:disabled) { background: var(--success); }
 .cohort-pick--off {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 .cohort-pick--off:hover:not(:disabled) { background: var(--danger); }
 
@@ -4683,10 +5027,25 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   border-bottom: 2px solid transparent;
 }
 
+/* A customer's uploaded logo.
+ *
+ * The plate is the whole point in dark mode — see `--logo-plate` for why
+ * inverting or brightening the image is not an option. In light mode all
+ * three plate tokens are transparent/zero, so the logo renders exactly as it
+ * always has and nothing shifts by a pixel.
+ *
+ * `box-sizing: content-box` keeps the *logo* 22px tall in both themes; with
+ * the border-box default the dark plate's padding would eat into the image
+ * and every logo would quietly shrink when the theme changed. */
 .ci-org-logo {
-  height: 20px;
-  max-width: 120px;
+  box-sizing: content-box;
+  height: 22px;
+  max-width: 124px;
   object-fit: contain;
+  padding: var(--logo-plate-pad);
+  border-radius: 5px;
+  background: var(--logo-plate);
+  box-shadow: inset 0 0 0 1px var(--logo-plate-border);
 }
 
 /* Fallback when no logo is set: the initial on the company's accent, or on the
@@ -4699,7 +5058,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
 }
@@ -4782,11 +5141,11 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
 /* Round state. Only rendered when it is not the ordinary "open" — see the
    note in Assessments.tsx. */
 .badge.al-scheduled {
-  background: var(--warn-soft, #fdf3e0);
+  background: var(--warn-soft, var(--warn-soft));
   color: var(--warn, #8a5a00);
 }
 .badge.al-closed {
-  background: var(--bg);
+  background: var(--surface-2);
   color: var(--text-muted);
 }
 
@@ -4822,7 +5181,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   align-items: flex-start;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .na-step-head h2 { margin: 0; font-size: 15px; }
 .na-step-head p { margin: 3px 0 0; max-width: 68ch; }
@@ -4835,7 +5194,7 @@ button.block { width: 100%; padding: 10px 14px; margin-top: 4px; }
   place-items: center;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
 }
@@ -4961,7 +5320,7 @@ body.assess-running .assess-shell {
 .assess-q--done {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* The one on screen. Ringed rather than filled, so it reads as "here" against
@@ -4973,12 +5332,9 @@ body.assess-running .assess-shell {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
-/* Past the section's guaranteed minimum — these may never be asked, and a
-   solid chip would promise a length the adaptive engine has not committed to. */
-.assess-q--maybe {
-  border-style: dashed;
-  opacity: 0.55;
-}
+/* `.assess-q--maybe` used to live here: dashed chips past the section's
+   minimum, for questions that might never be asked. Sections are a fixed
+   length since 2026-08-24, so every slot is a real one. */
 
 @media (max-width: 620px) {
   .assess-q { width: 27px; height: 27px; font-size: 12px; }
@@ -5004,9 +5360,7 @@ body.assess-running .assess-shell {
   padding: 0;
   overflow: hidden;
   border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgb(16 24 40 / 6%),
-    0 12px 32px -12px rgb(16 24 40 / 18%);
+  box-shadow: var(--shadow-md);
 }
 
 .rc-body { display: flex; align-items: stretch; }
@@ -5018,7 +5372,7 @@ body.assess-running .assess-shell {
   margin: 0;
   padding: 24px 0;
   border-right: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 
 .rc-rail-step {
@@ -5074,7 +5428,7 @@ body.assess-running .assess-shell {
 .rc-now .rc-rail-n {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 /* Passed and behind you. Green rather than accent, so "done" and "here" are
@@ -5082,7 +5436,7 @@ body.assess-running .assess-shell {
 .rc-done .rc-rail-n {
   background: var(--success);
   border-color: var(--success);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .rc-main {
@@ -5121,7 +5475,7 @@ body.assess-running .assess-shell {
   transition: box-shadow 0.3s ease;
 }
 .rc-preview--ok { box-shadow: 0 0 0 2px var(--success); }
-.rc-preview--bad { box-shadow: 0 0 0 2px var(--warn, #d99100); }
+.rc-preview--bad { box-shadow: 0 0 0 2px var(--warn-strong); }
 
 .rc-video {
   width: 100%;
@@ -5155,8 +5509,8 @@ body.assess-running .assess-shell {
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 650;
-  color: #fff;
-  background: rgb(16 19 26 / 72%);
+  color: var(--on-accent);
+  background: var(--scrim);
 }
 .rc-preview--ok .rc-frame-tag { background: var(--success); }
 .rc-preview--bad .rc-frame-tag { background: var(--warn, #8a5a00); }
@@ -5192,7 +5546,7 @@ body.assess-running .assess-shell {
 }
 .rc-result strong { font-weight: 550; }
 .rc-result--ok { border-color: var(--success); background: var(--success-soft); }
-.rc-result--warn { border-color: var(--warn, #d99100); background: var(--warn-soft, #fdf3e0); }
+.rc-result--warn { border-color: var(--warn-strong); background: var(--warn-soft, var(--warn-soft)); }
 .rc-result--fail { border-color: var(--danger); background: var(--danger-soft); }
 
 .rc-actions { margin-top: 16px; }
@@ -5249,7 +5603,7 @@ body.assess-running .assess-shell {
   /* The brand purple, not the app's page grey. This is the one screen that is
      the product introducing itself. */
   background: linear-gradient(150deg, #2c1a6b 0%, #4c2bb5 48%, #6a3ce0 100%);
-  color: #fff;
+  color: var(--on-accent);
   animation: splash-in 0.4s ease both;
 }
 
@@ -5495,4 +5849,92 @@ body.assess-running .assess-shell {
 
 @keyframes assess-cam-live {
   50% { opacity: 0.35; }
+}
+
+
+/* ── Theme toggle ─────────────────────────────────────────────────────────
+ *
+ * A three-way segmented control in the top bar, beside the account menu.
+ *
+ * Radios rather than buttons — one setting, three values — so arrow keys work
+ * without a keydown handler. The native inputs are hidden but never removed:
+ * `display: none` would take them out of the tab order and off the
+ * accessibility tree, so they are clipped instead and the visible chrome is
+ * driven from `:checked` and `:focus-visible` on them.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* Groups the toggle with the account menu so they read as one cluster. */
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.theme-opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+/* Clipped, not removed — see the note above. */
+.theme-opt input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.theme-opt:hover { color: var(--text); }
+
+.theme-opt--on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* The ring belongs on the label, because the input it comes from is clipped to
+   a pixel and would draw an outline nobody can see. */
+.theme-opt:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.theme-opt svg { flex: none; }
+
+@media (max-width: 900px) {
+  /* Icons alone below this — three words plus an account name is more than the
+     bar can hold, and the icons are the part that still reads at a glance. */
+  .theme-opt-label { display: none; }
+  .theme-opt { padding: 6px 8px; }
 }

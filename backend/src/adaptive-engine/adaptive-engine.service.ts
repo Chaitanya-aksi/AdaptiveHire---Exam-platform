@@ -40,8 +40,8 @@ export interface ModuleRunConfig {
   description: string | null;
   scoringType: ScoringType;
   traits: TraitDefinition[];
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
 }
 

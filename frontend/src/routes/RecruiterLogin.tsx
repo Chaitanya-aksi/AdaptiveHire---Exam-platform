@@ -27,8 +27,6 @@ export function RecruiterLogin() {
       }
     >
       <SignInForm portal="recruiter" />
-
-      
     </AuthShell>
   );
 }

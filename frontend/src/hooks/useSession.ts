@@ -93,12 +93,14 @@ export function useSession(invitationId: string | undefined): UseSession {
   );
 
   const startModule = useCallback(
-    () => run((id) => sessionsApi.startModule(id), 'Could not start this section.'),
+    () =>
+      run((id) => sessionsApi.startModule(id), 'Could not start this section.'),
     [run],
   );
 
   const refresh = useCallback(
-    () => run((id) => sessionsApi.current(id), 'Could not reach the assessment.'),
+    () =>
+      run((id) => sessionsApi.current(id), 'Could not reach the assessment.'),
     [run],
   );
 

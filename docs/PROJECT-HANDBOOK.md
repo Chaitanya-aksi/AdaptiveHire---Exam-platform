@@ -546,6 +546,23 @@ platform never learns what was said, only that it was loud. That is also why
 the event is called `background_noise` and not "talking": it cannot tell a
 voice from a television, and the report says so.
 
+### What is actually blocked
+
+| Keystroke | During a module | Mechanism |
+|---|---|---|
+| Ctrl+T / Ctrl+W / Ctrl+N | **Blocked** — Chrome/Edge, full screen only | `keyboard.lock()` captures the key |
+| F11 | **Redirected** into our own full screen | Cancelable; handler calls `requestFullscreen()` |
+| Alt+Tab / Cmd+Tab / Win | Not blocked, and cannot be | OS consumes it; no event reaches the page |
+| Tab past the last control | Blocked | Focus trap inside `.assess-shell` |
+| Ctrl+P/S/C/X/A, right-click | Blocked everywhere | Page-owned, `preventDefault` works |
+| Anything, in Firefox/Safari | Only the page-owned list | `navigator.keyboard` does not exist there |
+
+Browser-reserved combinations are deliberately **not** `preventDefault`ed — a
+handler that appears to block Ctrl+T and does not invites the reader to trust
+the rest. The lock is what blocks them, by capturing the key rather than by
+cancelling the event. F11 is the one exception in the keydown handler, and only
+because it is genuinely cancelable.
+
 ### The philosophy: gates before, never penalties during
 
 This is the single most important rule in the proctoring design.
@@ -976,26 +993,59 @@ a face near a threshold does not strobe the step between pass and fail.
 
 ---
 
-### 19.4 Tab switching cannot be blocked
+### 19.4 Tab switching — half unreachable, half blocked
 
 **The ask.** "Disable tab switching completely."
 
-**The finding — recorded so nobody re-derives it.** It is **not achievable in a
-browser**:
+**The finding.** Not one problem but two, and only one of them is impossible.
+There are three tiers of keystroke and the page owns a different amount of each:
 
-- Alt+Tab, Cmd+Tab, the Windows key and Mission Control are handled by the
-  **operating system** and never reach the page.
-- Ctrl+T, Ctrl+W, Ctrl+N and Ctrl+Tab are **browser-reserved**;
-  `preventDefault` on them does nothing in Chrome.
-- `navigator.keyboard.lock()` is limited *by spec* to "keys granted access by
-  the underlying operating system" — which excludes the window switcher.
-  Fullscreen does not change this.
-- Real prevention needs a native lockdown client (SEB-style), which is out of
-  scope for v1.
+| Tier | Keys | Reaches the page? | Can we stop it? |
+|---|---|---|---|
+| OS | Alt+Tab, Cmd+Tab, Win, Mission Control | **No event at all** | Never |
+| Browser | Ctrl+T, Ctrl+W, Ctrl+N, Ctrl+Tab | Yes, but `preventDefault` cancels only the *page's* default, not the *browser's* | Yes — via `keyboard.lock()` |
+| Page | Ctrl+P/S/C/X/A, right-click, copy, cut | Yes | Yes, ordinarily |
 
-**What shipped instead.** Detect, warn hard, record. Leaving raises a warning
-with **no dismiss button** — it stands for the rest of the section and its
-count rises inline. An acknowledge button is only ever pressed to make the
+The middle tier is the one that fools people: you can log the event, cancel it,
+and a new tab opens anyway. The cancel was real — it just applied to the wrong
+layer.
+
+**What closes the middle tier.** `navigator.keyboard.lock()`, which routes those
+keys to the page so the browser never acts on them. It is held only while a
+module runs and the page is in Fullscreen-API full screen — both conditions of
+the API, not choices — and is absent entirely in Firefox and Safari. It cannot
+touch the OS tier, because the spec limits it to keys the operating system
+grants.
+
+**The trap that cost us: F11 is a different fullscreen.** There are two, and
+only one can be locked:
+
+```
+"Return to full screen" → requestFullscreen() → fullscreenElement set  → lock arms
+F11                     → browser fullscreen  → fullscreenElement NULL → lock cannot arm
+```
+
+A candidate who pressed Escape and then F11 got a screen that *looked* locked
+while Ctrl+T went on opening tabs — the worst state available, because it reads
+as secure and is not. Reported from real use, not theory.
+
+**The fix.** Unlike Ctrl+T, **F11 arrives `cancelable: true`** — verified in
+Chrome. So the handler cancels it and spends the user activation it carries on
+`requestFullscreen()` instead. The state it lands in is identical to the
+button's, lock included, which makes that button the only route *into a locked
+state* by construction rather than by asking the candidate to prefer it.
+Deliberately one-way: F11 no longer toggles back out, and Escape still leaves,
+so nobody is trapped.
+
+A `browserFullscreen` flag (from `matchMedia('(display-mode: fullscreen)')`,
+which fires no `fullscreenchange` and needs its own listener) exists purely so
+the warning can be worded for what the candidate can see. Telling somebody
+staring at a full-screen window that they are "not in full screen" reads as a
+broken app.
+
+**What the OS tier gets instead.** Detect, warn hard, record. Leaving raises a
+warning with **no dismiss button** — it stands for the rest of the section and
+its count rises inline. An acknowledge button is only ever pressed to make the
 message go away.
 
 Because there is no acknowledgement, the "currently away" latch resets on
@@ -1012,9 +1062,12 @@ transient focus change — an OS notification, a permission dialog, a keyboard
 user tabbing one control too far — and hiding the question in those cases takes
 the test away from a candidate who did nothing wrong while their clock runs.
 
-> **Lesson.** When a request is impossible, say so plainly, write down *why*,
-> and ship the honest alternative. And a mitigation that fires on false
-> positives is worse than the problem.
+> **Lesson.** "Impossible" was too coarse an answer. The honest one was
+> "impossible for these keys, achievable for those" — and the half we had
+> written off as impossible turned out to be the half that matters most for a
+> demo. A mitigation that fires on false positives is still worse than the
+> problem, but so is an impossibility claim that quietly covers work you could
+> have done.
 
 ---
 
@@ -1376,10 +1429,17 @@ single moment sells the "live, not once" design better than any slide.
 splash between stages. Start a section and answer 3–4 questions. Point out the
 question queue is display-only, and that answers are final.
 
-**6. Proctoring, honestly (1 min).** Switch tabs. The warning appears, has no
-dismiss button, and the count rises. Say plainly: *this does not end the test —
-it is recorded for the recruiter to weigh.* Then say what cannot be done: a
-browser cannot block Alt+Tab, and here is what we built instead.
+**6. Proctoring, honestly (2 min).** This beat is stronger than it reads.
+
+Press **Ctrl+T — nothing happens.** Then press Escape and **F11**: you land back
+in *our* locked full screen, not the browser's, and Ctrl+T is dead again. Then
+**Alt+Tab**, which does work — the warning appears, has no dismiss button, and
+the count rises.
+
+Say plainly: *this does not end the test — it is recorded for the recruiter to
+weigh.* Then the honest line, which lands better than a claim of total lockdown:
+*the operating system owns Alt+Tab, so we record it rather than pretend to block
+it. Everything the browser will hand us, we take.*
 
 **7. The report (2 min).** Open a completed report. Walk the summary → the five
 composites → the detail view with a repeat-probe pair side by side. Download

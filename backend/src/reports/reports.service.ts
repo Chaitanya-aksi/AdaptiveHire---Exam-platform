@@ -1330,9 +1330,9 @@ export class ReportsService {
     return ordered.map((result) => {
       const ability = toNumber(result.abilityScore);
       const isObjective = result.module.scoringType === ScoringType.OBJECTIVE;
-      const minQuestions =
+      const questionCount =
         configs.find((config) => config.moduleId === result.moduleId)
-          ?.minQuestions ?? 0;
+          ?.questionCount ?? 0;
       const { traits, legacyTraitModel } = this.buildTraits(result);
 
       return {
@@ -1345,7 +1345,7 @@ export class ReportsService {
           isObjective && ability !== null ? normaliseAbility(ability) : null,
         questionsAnswered: result.questionsAnswered,
         questionsCorrect: result.questionsCorrect,
-        minQuestions,
+        questionCount,
         traits,
         consistency: this.moduleConsistency(traits),
         probes: this.buildProbes(result),

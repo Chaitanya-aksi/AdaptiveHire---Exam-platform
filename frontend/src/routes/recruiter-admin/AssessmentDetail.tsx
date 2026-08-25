@@ -176,8 +176,8 @@ export function AssessmentDetail() {
   if (error) return <div className="alert error">{error}</div>;
   if (!assessment) return null;
 
-  const minQ = assessment.modules.reduce((t, m) => t + m.minQuestions, 0);
-  const maxQ = assessment.modules.reduce((t, m) => t + m.maxQuestions, 0);
+  const minQ = assessment.modules.reduce((t, m) => t + m.questionCount, 0);
+  const maxQ = assessment.modules.reduce((t, m) => t + m.questionCount, 0);
   const minutes = Math.round(
     assessment.modules.reduce((t, m) => t + m.timeLimitSeconds, 0) / 60,
   );
@@ -208,10 +208,16 @@ export function AssessmentDetail() {
       </div>
 
       <div className="row" style={{ marginBottom: 16 }}>
-        <Link className="button" to={`/admin/assessments/${assessment.id}/questions`}>
+        <Link
+          className="button"
+          to={`/admin/assessments/${assessment.id}/questions`}
+        >
           Questions{curated && ` (${assessment.questionPool.length})`}
         </Link>
-        <Link className="button" to={`/admin/assessments/${assessment.id}/invite`}>
+        <Link
+          className="button"
+          to={`/admin/assessments/${assessment.id}/invite`}
+        >
           Invite candidates
         </Link>
         <Link
@@ -297,11 +303,7 @@ export function AssessmentDetail() {
                       {m.module?.scoringType ?? '—'}
                     </span>
                   </td>
-                  <td>
-                    {m.minQuestions === m.maxQuestions
-                      ? m.minQuestions
-                      : `${m.minQuestions}–${m.maxQuestions}`}
-                  </td>
+                  <td>{m.questionCount}</td>
                   <td>{Math.round(m.timeLimitSeconds / 60)} min</td>
                 </tr>
               ))}
@@ -344,7 +346,9 @@ export function AssessmentDetail() {
                         <div className="muted small">{person.email}</div>
                       </td>
                       <td>
-                        <span className={`badge ${SESSION_BADGE[attempt.status]}`}>
+                        <span
+                          className={`badge ${SESSION_BADGE[attempt.status]}`}
+                        >
                           {SESSION_LABEL[attempt.status]}
                         </span>
                       </td>
@@ -378,7 +382,11 @@ export function AssessmentDetail() {
                           to={`/admin/reports/${attempt.sessionId}`}
                         >
                           Open report
-                          <IconArrow className="button-go" width={15} height={15} />
+                          <IconArrow
+                            className="button-go"
+                            width={15}
+                            height={15}
+                          />
                         </Link>
                       </td>
                     </tr>
@@ -443,7 +451,9 @@ export function AssessmentDetail() {
                         ? 'Registered'
                         : 'Has not registered yet'}
                     </td>
-                    <td className="muted small">{formatDay(person.invitedAt)}</td>
+                    <td className="muted small">
+                      {formatDay(person.invitedAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

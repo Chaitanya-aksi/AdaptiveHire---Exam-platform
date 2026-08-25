@@ -8,8 +8,8 @@ interface QuestionPoolPickerProps {
   questions: Question[];
   /** Ids currently chosen, from this module only. */
   selected: Set<string>;
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   onToggle: (questionId: string) => void;
   /** Bulk include/exclude, used by each column's All / None. */
   onSetMany: (questionIds: string[], include: boolean) => void;
@@ -40,8 +40,7 @@ export function QuestionPoolPicker({
   name,
   questions,
   selected,
-  minQuestions,
-  maxQuestions,
+  questionCount,
   onToggle,
   onSetMany,
   collapsible = false,
@@ -59,8 +58,8 @@ export function QuestionPoolPicker({
 
   const chosen = questions.filter((q) => selected.has(q.id)).length;
   const curating = chosen > 0;
-  const belowMinimum = curating && chosen < minQuestions;
-  const belowMaximum = curating && chosen >= minQuestions && chosen < maxQuestions;
+  // A pool thinner than the section is a section that runs out of questions.
+  const tooFew = curating && chosen < questionCount;
 
   return (
     <div className="card pool-card">
@@ -71,12 +70,12 @@ export function QuestionPoolPicker({
             {curating
               ? `${chosen} of ${questions.length} chosen`
               : `all ${questions.length} questions`}{' '}
-            · asks {minQuestions}–{maxQuestions}
-            {belowMinimum && (
-              <span className="error-note"> · needs at least {minQuestions}</span>
-            )}
-            {belowMaximum && (
-              <span> · fewer than the {maxQuestions} maximum, so runs end early</span>
+            · asks {questionCount}
+            {tooFew && (
+              <span className="error-note">
+                {' '}
+                · needs {questionCount} to fill the section
+              </span>
             )}
           </div>
         </div>
@@ -188,7 +187,10 @@ function PoolColumn({
       ) : (
         <ul className="pool-list">
           {questions.map((question) => (
-            <li key={question.id} className={selected.has(question.id) ? 'on' : ''}>
+            <li
+              key={question.id}
+              className={selected.has(question.id) ? 'on' : ''}
+            >
               <label>
                 <input
                   type="checkbox"
@@ -197,7 +199,9 @@ function PoolColumn({
                 />
                 <span className="pool-text">
                   {question.questionText}
-                  <span className="pool-meta muted small">{metaFor(question)}</span>
+                  <span className="pool-meta muted small">
+                    {metaFor(question)}
+                  </span>
                 </span>
               </label>
             </li>

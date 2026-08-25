@@ -59,7 +59,9 @@ export class Organisations1786540000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "assessments" ADD "organisationId" uuid`,
     );
-    await queryRunner.query(`ALTER TABLE "questions" ADD "organisationId" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "questions" ADD "organisationId" uuid`,
+    );
     await queryRunner.query(
       `CREATE INDEX "IDX_questions_organisation" ON "questions" ("organisationId")`,
     );

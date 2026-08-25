@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 import { homeFor } from './ProtectedRoute';
 
@@ -56,7 +57,10 @@ export function AppLayout() {
             ))}
           </nav>
 
-          <UserMenu />
+          <div className="topbar-end">
+            <ThemeToggle />
+            <UserMenu />
+          </div>
         </div>
       </header>
 

@@ -151,9 +151,7 @@ describe('Step 8 — Item analysis', () => {
       .set(auth())
       .send({
         title: 'Item analysis assessment',
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 5, timeLimitSeconds: 600 },
-        ],
+        modules: [{ moduleId, questionCount: 5, timeLimitSeconds: 600 }],
       })
       .expect(201);
     assessmentId = (assessment.body as { id: string }).id;

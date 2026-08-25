@@ -14,15 +14,12 @@ const SEED_TITLE = 'Graduate Aptitude & Personality Screen';
 
 const MODULE_CONFIG: Record<
   string,
-  { minQuestions: number; maxQuestions: number; timeLimitSeconds: number }
+  { questionCount: number; timeLimitSeconds: number }
 > = {
-  aptitude: { minQuestions: 5, maxQuestions: 12, timeLimitSeconds: 600 },
-  'logical-reasoning': {
-    minQuestions: 5,
-    maxQuestions: 12,
-    timeLimitSeconds: 600,
-  },
-  personality: { minQuestions: 8, maxQuestions: 15, timeLimitSeconds: 480 },
+  aptitude: { questionCount: 12, timeLimitSeconds: 600 },
+  'logical-reasoning': { questionCount: 12, timeLimitSeconds: 600 },
+  // Personality carries the platform default — see MODULE_DEFAULTS.
+  personality: { questionCount: 40, timeLimitSeconds: 1800 },
 };
 
 async function run(): Promise<void> {
@@ -62,8 +59,7 @@ async function run(): Promise<void> {
     assessmentModules.push(
       Object.assign(new AssessmentModule(), {
         moduleId: module.id,
-        minQuestions: config.minQuestions,
-        maxQuestions: config.maxQuestions,
+        questionCount: config.questionCount,
         timeLimitSeconds: config.timeLimitSeconds,
         displayOrder: order++,
       }),

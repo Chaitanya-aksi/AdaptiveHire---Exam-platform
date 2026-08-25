@@ -277,8 +277,7 @@ describe('Step 2 — Question Bank', () => {
             modules: [
               {
                 moduleId: moduleBySlug('aptitude').id,
-                minQuestions: 1,
-                maxQuestions: 3,
+                questionCount: 3,
                 timeLimitSeconds: 600,
               },
             ],

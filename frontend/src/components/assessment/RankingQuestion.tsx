@@ -146,7 +146,11 @@ export function RankingQuestion({
               Start over
             </button>
           )}
-          <button type="submit" className="primary" disabled={!complete || busy}>
+          <button
+            type="submit"
+            className="primary"
+            disabled={!complete || busy}
+          >
             {busy ? 'Saving…' : 'Save & continue'}
           </button>
         </div>

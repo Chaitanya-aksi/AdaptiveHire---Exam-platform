@@ -216,8 +216,8 @@ export type InvitationStatus =
 export interface AssessmentModuleConfig {
   id: string;
   moduleId: string;
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
   displayOrder: number;
   module?: ModuleCatalogEntry;
@@ -515,8 +515,8 @@ export interface RuntimeModule {
   description: string | null;
   scoringType: ScoringType;
   status: ModuleRunStatus;
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
   answered: number;
 }
@@ -545,7 +545,7 @@ export type SessionStep =
       module: RuntimeModule;
       question: RuntimeQuestion;
       sequenceNumber: number;
-      moduleProgress: { answered: number; min: number; max: number };
+      moduleProgress: { answered: number; questionCount: number };
       moduleRemainingMs: number;
     }
   | { state: 'completed'; session: RuntimeSession };
@@ -638,7 +638,7 @@ export interface ReportModuleSummary {
   score: number | null;
   questionsAnswered: number;
   questionsCorrect: number;
-  minQuestions: number;
+  questionCount: number;
   traits: ReportedTrait[];
   /** Mean consistency across the traits with enough evidence. */
   consistency: number | null;

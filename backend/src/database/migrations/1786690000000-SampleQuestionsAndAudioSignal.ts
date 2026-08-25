@@ -14,9 +14,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * is recorded, buffered or transmitted, so what reaches this database is the
  * same shape of fact as `face_absent`: that it happened, and when.
  */
-export class SampleQuestionsAndAudioSignal1786690000000
-  implements MigrationInterface
-{
+export class SampleQuestionsAndAudioSignal1786690000000 implements MigrationInterface {
   name = 'SampleQuestionsAndAudioSignal1786690000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -36,8 +36,8 @@ export interface ModuleView {
   scoringType: ScoringType;
   status: ModuleRunStatus;
   description: string | null;
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
   answered: number;
 }
@@ -74,7 +74,7 @@ export type SessionStep =
       /** 1-based position within the whole session. */
       sequenceNumber: number;
       /** Answered so far in this module, and the configured bounds. */
-      moduleProgress: { answered: number; min: number; max: number };
+      moduleProgress: { answered: number; questionCount: number };
       moduleRemainingMs: number;
     }
   | {

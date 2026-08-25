@@ -159,7 +159,9 @@ export function RecruiterRegister() {
             required
           />
           {mismatch && (
-            <p className="field-note error-note">Passwords don&rsquo;t match.</p>
+            <p className="field-note error-note">
+              Passwords don&rsquo;t match.
+            </p>
           )}
         </div>
 

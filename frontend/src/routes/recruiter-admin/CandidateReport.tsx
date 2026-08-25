@@ -186,8 +186,8 @@ function ModuleCard({ module }: { module: ReportModuleSummary }) {
             {module.scoringType === 'objective' &&
               ` · ${module.questionsCorrect} correct`}
             {module.questionsAnswered > 0 &&
-              module.questionsAnswered < module.minQuestions &&
-              ` · below the ${module.minQuestions} this section asks for`}
+              module.questionsAnswered < module.questionCount &&
+              ` · below the ${module.questionCount} this section asks for`}
           </div>
         </div>
         {module.score !== null && (

@@ -92,7 +92,7 @@ export interface ModuleSummary {
   questionsAnswered: number;
   questionsCorrect: number;
   /** What the assessment asked for, so under-answering is visible. */
-  minQuestions: number;
+  questionCount: number;
   traits: ReportedTrait[];
   /** Mean consistency across the traits with enough evidence to measure. */
   consistency: number | null;
@@ -303,7 +303,7 @@ function recommend(
 /** How much of what the assessment asked for the candidate actually answered. */
 function coverageRatio(modules: ModuleSummary[]): number {
   const expected = modules.reduce(
-    (total, module) => total + module.minQuestions,
+    (total, module) => total + module.questionCount,
     0,
   );
   if (expected === 0) return 1;
@@ -360,10 +360,10 @@ function collectWeaknesses(
     }
     if (
       module.questionsAnswered > 0 &&
-      module.questionsAnswered < module.minQuestions
+      module.questionsAnswered < module.questionCount
     ) {
       weaknesses.push(
-        `${module.name} — answered only ${module.questionsAnswered} of the ${module.minQuestions} questions this section asks for`,
+        `${module.name} — answered only ${module.questionsAnswered} of the ${module.questionCount} questions this section asks for`,
       );
     }
   }

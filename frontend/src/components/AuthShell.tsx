@@ -7,20 +7,25 @@ interface AuthShellProps {
   footer?: ReactNode;
 }
 
-export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
+export function AuthShell({
+  title,
+  subtitle,
+  children,
+  footer,
+}: AuthShellProps) {
   return (
     <div className="auth-page">
       <div className="auth-container">
-
         {/* ══ LEFT — premium dark login panel ══════════════════════════════ */}
         <section className="auth-left">
-
           <div className="al-glow al-glow--top" aria-hidden="true" />
           <div className="al-glow al-glow--bottom" aria-hidden="true" />
 
           <header className="al-logo">
             <div className="al-logo-row">
-              <div className="al-mark" aria-hidden="true">A</div>
+              <div className="al-mark" aria-hidden="true">
+                A
+              </div>
               <span className="al-name">AdaptiveHire</span>
             </div>
             <p className="al-tagline-sub">Assess · Adapt · Achieve</p>
@@ -34,12 +39,10 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
             {children}
             {footer && <div className="al-links">{footer}</div>}
           </div>
-
         </section>
 
         {/* ══ RIGHT — premium hero + assessment world ════════════════════════ */}
         <section className="auth-right" aria-hidden="true">
-
           {/* ── Layer 1: Background atmosphere ─────────────────────────────── */}
           <div className="ar-bg">
             <div className="ar-orb ar-orb--1" />
@@ -56,7 +59,6 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
           </div>
 
           <div className="ar-inner">
-
             {/* Hero copy */}
             <div className="ar-hero">
               <h2>
@@ -65,14 +67,13 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
                 <span className="ar-l">Your opportunity.</span>
               </h2>
               <p>
-                AdaptiveHire delivers a secure, fair and adaptive
-                assessment experience for every candidate.
+                AdaptiveHire delivers a secure, fair and adaptive assessment
+                experience for every candidate.
               </p>
             </div>
 
             {/* ── Layer 5: Product illustration ──────────────────────────────── */}
             <div className="ar-illus">
-
               {/* Aptitude calculation fragments — decorative, atmospheric */}
               <span className="ar-calc ar-calc--1">3, 6, 12, 24 → 48</span>
               <span className="ar-calc ar-calc--2">√144 = 12</span>
@@ -85,9 +86,12 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
               {/* Assessment device */}
               <div className="ar-device">
                 <div className="ar-device-frame">
-
                   <div className="ar-chrome">
-                    <div className="ar-dots"><span /><span /><span /></div>
+                    <div className="ar-dots">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
                     <div className="ar-url">adaptivehire.app/assessment</div>
                     <div className="ar-live" />
                   </div>
@@ -95,7 +99,9 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
                   <div className="ar-screen-body">
                     <div className="ar-sm-top">
                       <div className="ar-sm-module">
-                        <span className="ar-sm-mod-label">Logical Reasoning</span>
+                        <span className="ar-sm-mod-label">
+                          Logical Reasoning
+                        </span>
                         <span className="ar-sm-qn">Question 08 / 15</span>
                       </div>
                       <div className="ar-sm-track">
@@ -117,9 +123,16 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
                         <span className="ar-sm-key ar-sm-key--on">B</span>
                         <span>Dynamic difficulty based on responses</span>
                         <span className="ar-sm-check">
-                          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor"
-                            strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
-                            width={10} height={10}>
+                          <svg
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2.5}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            width={10}
+                            height={10}
+                          >
                             <polyline points="2,6 5,9 10,3" />
                           </svg>
                         </span>
@@ -130,7 +143,6 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
                       </div>
                     </div>
                   </div>
-
                 </div>
               </div>
 
@@ -138,13 +150,26 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
               <div className="ar-chip ar-chip--score">
                 <div className="ar-ring">
                   <svg viewBox="0 0 40 40" width="44" height="44">
-                    <circle cx="20" cy="20" r="17" fill="none"
-                      stroke="rgba(255,255,255,0.10)" strokeWidth="3.5" />
-                    <circle cx="20" cy="20" r="17" fill="none"
-                      stroke="rgba(196,181,253,0.9)" strokeWidth="3.5"
-                      strokeDasharray="90.7 16.3" strokeDashoffset="24"
+                    <circle
+                      cx="20"
+                      cy="20"
+                      r="17"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.10)"
+                      strokeWidth="3.5"
+                    />
+                    <circle
+                      cx="20"
+                      cy="20"
+                      r="17"
+                      fill="none"
+                      stroke="rgba(196,181,253,0.9)"
+                      strokeWidth="3.5"
+                      strokeDasharray="90.7 16.3"
+                      strokeDashoffset="24"
                       strokeLinecap="round"
-                      transform="rotate(-90 20 20)" />
+                      transform="rotate(-90 20 20)"
+                    />
                   </svg>
                   <span>85%</span>
                 </div>
@@ -156,9 +181,16 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
 
               {/* Timer chip — bottom-left */}
               <div className="ar-chip ar-chip--timer">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-                  width={15} height={15}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  width={15}
+                  height={15}
+                >
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 6v6l4 2" />
                 </svg>
@@ -198,11 +230,9 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
                 <span className="ar-engine-dot" />
                 <span className="ar-engine-label">Adaptive engine active</span>
               </div>
-
             </div>
           </div>
         </section>
-
       </div>
     </div>
   );

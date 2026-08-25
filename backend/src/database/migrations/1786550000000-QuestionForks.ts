@@ -32,9 +32,7 @@ export class QuestionForks1786550000000 implements MigrationInterface {
   name = 'QuestionForks1786550000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "questions" ADD "forkedFromId" uuid`,
-    );
+    await queryRunner.query(`ALTER TABLE "questions" ADD "forkedFromId" uuid`);
     await queryRunner.query(`
       ALTER TABLE "questions"
         ADD CONSTRAINT "FK_questions_forked_from"

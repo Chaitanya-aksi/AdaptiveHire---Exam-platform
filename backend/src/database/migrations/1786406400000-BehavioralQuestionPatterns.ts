@@ -19,9 +19,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * vocabulary and rewriting the legacy questions' weights is a separate,
  * reviewable migration.
  */
-export class BehavioralQuestionPatterns1786406400000
-  implements MigrationInterface
-{
+export class BehavioralQuestionPatterns1786406400000 implements MigrationInterface {
   name = 'BehavioralQuestionPatterns1786406400000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -31,7 +29,9 @@ export class BehavioralQuestionPatterns1786406400000
     await queryRunner.query(
       `ALTER TABLE "personality_question_details" ADD "pattern" "public"."personality_question_details_pattern_enum"`,
     );
-    await queryRunner.query(`ALTER TABLE "responses" ADD "selectedOptions" jsonb`);
+    await queryRunner.query(
+      `ALTER TABLE "responses" ADD "selectedOptions" jsonb`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

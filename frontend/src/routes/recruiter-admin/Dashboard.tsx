@@ -235,8 +235,8 @@ export function Dashboard() {
 
       <section>
         <div className="section-head">
-          <h2>Everything else</h2>
-          <p>The rest of the platform, one click away.</p>
+          <h2>Explore</h2>
+          <p>Look out for other features as well.</p>
         </div>
         <div className="tile-grid">
           {EXPLORE.map((destination) => (

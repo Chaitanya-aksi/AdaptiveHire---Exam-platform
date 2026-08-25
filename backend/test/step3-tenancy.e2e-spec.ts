@@ -108,8 +108,7 @@ describe('Step 3 — Tenancy isolation', () => {
         modules: [
           {
             moduleId,
-            minQuestions: 1,
-            maxQuestions: 3,
+            questionCount: 3,
             timeLimitSeconds: 600,
           },
         ],

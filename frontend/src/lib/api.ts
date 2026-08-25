@@ -61,7 +61,12 @@ api.interceptors.response.use(
     const original = error.config as RetriableConfig | undefined;
     const isAuthCall = original?.url?.includes('/auth/');
 
-    if (error.response?.status !== 401 || !original || original._retried || isAuthCall) {
+    if (
+      error.response?.status !== 401 ||
+      !original ||
+      original._retried ||
+      isAuthCall
+    ) {
       throw error;
     }
 

@@ -22,7 +22,7 @@ import { Assessment } from './entities/assessment.entity';
  */
 interface PoolModuleConfig {
   moduleId: string;
-  minQuestions: number;
+  questionCount: number;
   /** Recruiter-facing name, for the error message. */
   name: string;
 }
@@ -62,7 +62,7 @@ export class AssessmentsService {
       await this.assertPoolIsUsable(
         assessment.modules.map((config) => ({
           moduleId: config.moduleId,
-          minQuestions: config.minQuestions,
+          questionCount: config.questionCount,
           name: config.module?.name ?? 'A section',
         })),
         unique,
@@ -147,9 +147,9 @@ export class AssessmentsService {
           q.moduleId === config.moduleId && q.status === QuestionStatus.ACTIVE,
       ).length;
 
-      if (usable < config.minQuestions) {
+      if (usable < config.questionCount) {
         throw new BadRequestException(
-          `${config.name} asks for at least ${config.minQuestions} questions but ` +
+          `${config.name} asks for at least ${config.questionCount} questions but ` +
             `only ${usable} active question${usable === 1 ? '' : 's'} ` +
             `${usable === 1 ? 'was' : 'were'} chosen for it.`,
         );
@@ -186,14 +186,6 @@ export class AssessmentsService {
       );
     }
 
-    for (const m of dto.modules) {
-      if (m.maxQuestions < m.minQuestions) {
-        throw new BadRequestException(
-          'maxQuestions must be greater than or equal to minQuestions',
-        );
-      }
-    }
-
     const opensAt = dto.opensAt ? new Date(dto.opensAt) : null;
     const closesAt = dto.closesAt ? new Date(dto.closesAt) : null;
 
@@ -215,8 +207,7 @@ export class AssessmentsService {
       closesAt,
       modules: dto.modules.map((m, index) => ({
         moduleId: m.moduleId,
-        minQuestions: m.minQuestions,
-        maxQuestions: m.maxQuestions,
+        questionCount: m.questionCount,
         timeLimitSeconds: m.timeLimitSeconds,
         displayOrder: m.displayOrder ?? index,
       })),
@@ -231,7 +222,7 @@ export class AssessmentsService {
       await this.assertPoolIsUsable(
         dto.modules.map((m) => ({
           moduleId: m.moduleId,
-          minQuestions: m.minQuestions,
+          questionCount: m.questionCount,
           name: found.find((f) => f.id === m.moduleId)?.name ?? 'A section',
         })),
         pool,

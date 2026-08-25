@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
+import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 import { useAuth } from '../lib/auth';
 import { invitationsApi } from '../lib/endpoints';
@@ -169,7 +170,10 @@ export function CandidateLayout() {
             </span>
             AdaptiveHire
           </span>
-          <UserMenu />
+          <div className="topbar-end">
+            <ThemeToggle />
+            <UserMenu />
+          </div>
         </header>
 
         <main className="cand-content">

@@ -42,7 +42,8 @@ const PATTERN_EXAMPLE: Record<
 > = {
   situational: {
     stem: 'A teammate is going to miss an important deadline and has told nobody. What would you most likely do?',
-    option: 'Work through the blocker with them so they can finish it themselves',
+    option:
+      'Work through the blocker with them so they can finish it themselves',
   },
   forced_choice: {
     stem: 'Which of these is more true of you?',
@@ -107,7 +108,9 @@ export function QuestionEditor({
   const [moduleId, setModuleId] = useState(
     question?.moduleId ?? modules[0]?.id ?? '',
   );
-  const [questionText, setQuestionText] = useState(question?.questionText ?? '');
+  const [questionText, setQuestionText] = useState(
+    question?.questionText ?? '',
+  );
   const [status, setStatus] = useState<QuestionStatus>(
     question?.status ?? 'draft',
   );
@@ -150,7 +153,9 @@ export function QuestionEditor({
 
   /** Answered questions carry history that editing silently rewrites. */
   const timesUsed =
-    question?.mcqDetails?.timesUsed ?? question?.personalityDetails?.timesUsed ?? 0;
+    question?.mcqDetails?.timesUsed ??
+    question?.personalityDetails?.timesUsed ??
+    0;
 
   const patch = (index: number, changes: Partial<DraftOption>) =>
     setOptions((current) =>
@@ -243,7 +248,10 @@ export function QuestionEditor({
           }
         : {
             mcq: {
-              options: options.map((o) => ({ key: o.key, text: o.text.trim() })),
+              options: options.map((o) => ({
+                key: o.key,
+                text: o.text.trim(),
+              })),
               correctOption,
               difficultyScore: Number(difficulty),
             },
@@ -354,7 +362,10 @@ export function QuestionEditor({
                 current.length > max
                   ? current.slice(0, max)
                   : current.length < min
-                    ? [...current, ...blankOptions(min - current.length, current)]
+                    ? [
+                        ...current,
+                        ...blankOptions(min - current.length, current),
+                      ]
                     : current,
               );
             }}
@@ -408,7 +419,8 @@ export function QuestionEditor({
         <h3 style={{ margin: 0, fontSize: 15 }}>
           Options{' '}
           <span className="muted small">
-            ({bounds.min === bounds.max
+            (
+            {bounds.min === bounds.max
               ? `exactly ${bounds.min}`
               : `${bounds.min}–${bounds.max}`}
             )
@@ -462,7 +474,9 @@ export function QuestionEditor({
               rows={2}
               value={option.text}
               placeholder={
-                index === 0 && example ? `e.g. ${example.option}` : 'Option text'
+                index === 0 && example
+                  ? `e.g. ${example.option}`
+                  : 'Option text'
               }
               onChange={(e) => patch(index, { text: e.target.value })}
             />
@@ -511,10 +525,11 @@ export function QuestionEditor({
         />
         <span className="muted small">
           Give two questions in this module the same group and the engine will
-          serve one, wait about eight questions, then serve the other and compare
-          the answers. Write the second one as a genuinely different scenario
-          with differently worded options — if the candidate spots the repeat,
-          they will just answer it the same way and the check proves nothing.
+          serve one, wait about eight questions, then serve the other and
+          compare the answers. Write the second one as a genuinely different
+          scenario with differently worded options — if the candidate spots the
+          repeat, they will just answer it the same way and the check proves
+          nothing.
         </span>
       </label>
 

@@ -9,6 +9,7 @@ import {
   type AssessmentModulePayload,
 } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
+import { defaultsFor } from '../../lib/module-defaults';
 import { fromLocalInput } from '../../lib/schedule';
 import type { ModuleCatalogEntry, Question } from '../../lib/types';
 
@@ -32,15 +33,22 @@ const QUESTION_PAGE_SIZE = 200;
 
 interface ModuleRow {
   included: boolean;
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
 }
 
+/**
+ * What an unticked row shows.
+ *
+ * Ticking a subject replaces this with that subject's own default — see
+ * `patchRow`. Personality is the one that matters: it comes back 40 questions
+ * over 30 minutes, because a ten-trait profile built on a short section is not
+ * worth reading.
+ */
 const DEFAULT_ROW: ModuleRow = {
   included: false,
-  minQuestions: 5,
-  maxQuestions: 12,
+  questionCount: 12,
   timeLimitSeconds: 600,
 };
 
@@ -137,10 +145,24 @@ export function NewAssessment() {
   }, []);
 
   const patchRow = (id: string, patch: Partial<ModuleRow>) => {
-    setRows((current) => ({
-      ...current,
-      [id]: { ...rowFor(id), ...patch },
-    }));
+    setRows((current) => {
+      const row = { ...rowFor(id), ...patch };
+
+      /*
+       * Ticking a subject fills in that subject's own default.
+       *
+       * Only on the way in, and only if the recruiter has not already typed
+       * something: re-applying it on every keystroke would make the fields
+       * impossible to edit, and re-applying on a re-tick would quietly discard
+       * numbers somebody had chosen.
+       */
+      if (patch.included && !current[id]) {
+        const module = modules.find((m) => m.id === id);
+        if (module) Object.assign(row, defaultsFor(module.scoringType));
+      }
+
+      return { ...current, [id]: row };
+    });
 
     if (patch.included && !available[id] && !fetching[id]) {
       void loadQuestions(id);
@@ -180,8 +202,10 @@ export function NewAssessment() {
     selected.reduce((total, m) => total + rowFor(m.id).timeLimitSeconds, 0) /
       60,
   );
-  const minQ = selected.reduce((t, m) => t + rowFor(m.id).minQuestions, 0);
-  const maxQ = selected.reduce((t, m) => t + rowFor(m.id).maxQuestions, 0);
+  const totalQuestions = selected.reduce(
+    (total, m) => total + rowFor(m.id).questionCount,
+    0,
+  );
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -194,33 +218,22 @@ export function NewAssessment() {
       const row = rowFor(m.id);
       return {
         moduleId: m.id,
-        minQuestions: row.minQuestions,
-        maxQuestions: row.maxQuestions,
+        questionCount: row.questionCount,
         timeLimitSeconds: row.timeLimitSeconds,
         displayOrder: i,
       };
     });
-
-    // Cheap client-side guard; the server enforces this too.
-    const badRange = payloadModules.find(
-      (m) => m.maxQuestions < m.minQuestions,
-    );
-    if (badRange) {
-      setError('Each module needs max questions ≥ min questions.');
-      setBusy(false);
-      return;
-    }
 
     // A module with *some* questions chosen but fewer than its own minimum would
     // end every attempt early with an exhausted pool. Choosing none is fine —
     // that means no restriction.
     const starved = selected.find((m) => {
       const chosen = poolFor(m.id).size;
-      return chosen > 0 && chosen < rowFor(m.id).minQuestions;
+      return chosen > 0 && chosen < rowFor(m.id).questionCount;
     });
     if (starved) {
       setError(
-        `${starved.name}: choose at least ${rowFor(starved.id).minQuestions} ` +
+        `${starved.name}: choose at least ${rowFor(starved.id).questionCount} ` +
           'questions, or none at all to use every question you can see.',
       );
       setBusy(false);
@@ -343,7 +356,7 @@ export function NewAssessment() {
         <Step
           n={2}
           title="Subjects"
-          note="Tick what to include, and how far the adaptive engine may go in each."
+          note="Tick what to include, how many questions each asks, and how long the candidate gets. Personality is filled in at 40 questions over 30 minutes — the length a ten-trait profile needs to be worth reading."
         >
           <div className="table-wrap">
             <table>
@@ -351,8 +364,7 @@ export function NewAssessment() {
                 <tr>
                   <th style={{ width: 40 }} />
                   <th>Subject</th>
-                  <th style={{ width: 100 }}>Min</th>
-                  <th style={{ width: 100 }}>Max</th>
+                  <th style={{ width: 110 }}>Questions</th>
                   <th style={{ width: 130 }}>Time (s)</th>
                 </tr>
               </thead>
@@ -379,26 +391,12 @@ export function NewAssessment() {
                         <input
                           type="number"
                           min={1}
-                          value={row.minQuestions}
+                          value={row.questionCount}
                           disabled={!row.included}
-                          aria-label={`${m.name} minimum questions`}
+                          aria-label={`${m.name} questions`}
                           onChange={(e) =>
                             patchRow(m.id, {
-                              minQuestions: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={1}
-                          value={row.maxQuestions}
-                          disabled={!row.included}
-                          aria-label={`${m.name} maximum questions`}
-                          onChange={(e) =>
-                            patchRow(m.id, {
-                              maxQuestions: Number(e.target.value),
+                              questionCount: Number(e.target.value),
                             })
                           }
                         />
@@ -441,8 +439,7 @@ export function NewAssessment() {
                 questions={available[m.id] ?? []}
                 loading={fetching[m.id] ?? false}
                 selected={poolFor(m.id)}
-                minQuestions={rowFor(m.id).minQuestions}
-                maxQuestions={rowFor(m.id).maxQuestions}
+                questionCount={rowFor(m.id).questionCount}
                 onToggle={(questionId) => togglePooled(m.id, questionId)}
                 onSetMany={(questionIds, include) =>
                   setManyPooled(m.id, questionIds, include)
@@ -465,8 +462,8 @@ export function NewAssessment() {
             <>
               <strong>{selected.length}</strong> subject
               {selected.length === 1 ? '' : 's'} ·{' '}
-              <strong>{minQ === maxQ ? minQ : `${minQ}–${maxQ}`}</strong>{' '}
-              questions · <strong>{totalMinutes}</strong> min
+              <strong>{totalQuestions}</strong> questions ·{' '}
+              <strong>{totalMinutes}</strong> min
             </>
           )}
         </div>

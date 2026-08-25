@@ -73,17 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const register = useCallback(
-    async (payload: RegisterPayload) => {
-      const { accessToken, user: created } = await authApi.register(payload);
-      // Registration returns the same token pair as login, so there is no
-      // reason to make someone sign in again straight after signing up.
-      setAccessToken(accessToken);
-      setUser(created);
-      return created;
-    },
-    [],
-  );
+  const register = useCallback(async (payload: RegisterPayload) => {
+    const { accessToken, user: created } = await authApi.register(payload);
+    // Registration returns the same token pair as login, so there is no
+    // reason to make someone sign in again straight after signing up.
+    setAccessToken(accessToken);
+    setUser(created);
+    return created;
+  }, []);
 
   const logout = useCallback(async () => {
     try {

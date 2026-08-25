@@ -77,27 +77,19 @@ export class ConsistencyProbeService {
     return [...touched];
   }
 
-  /**
-   * Whether a pair is open and its twin has not yet had its turn.
+  /*
+   * `awaitingTwin` used to live here.
    *
-   * The stopping engine uses this to hold a module open when it would otherwise
-   * finish on confidence: a pair that opened has already spent one of the
-   * candidate's questions, and stopping one question before its twin throws that
-   * away and reports nothing.
+   * It answered "is a pair open with its twin still to come?", and the stopping
+   * engine used it to hold a settled module open a question or two so the pair
+   * could close rather than being abandoned half-measured. Sections became a
+   * fixed length in 2026-08-24, which removed the early confidence stop — so
+   * there is nothing left to defer and nothing left to ask.
    *
-   * Deliberately bounded. It stays true only up to the answer on which the twin
-   * comes due, so a pair whose twin cannot be found — archived since, or deleted
-   * — holds the module open for exactly one extra selection and then stops
-   * asking. A module can never be extended past `maxQuestions` or its clock,
-   * because both of those outrank confidence in the stopping order.
+   * The pairs still land. A fixed section is far longer than the eight-question
+   * gap a pair needs, where the 12-question modules this was written for left
+   * only three slots to open one in.
    */
-  awaitingTwin(state: ModuleRunState): boolean {
-    return state.probes.some(
-      (pair) =>
-        pair.secondQuestionId === null &&
-        state.answered <= pair.askedAtAnswered + PROBE_GAP_QUESTIONS,
-    );
-  }
 
   /** Notes that a probe group has been put in front of the candidate. */
   markServed(state: ModuleRunState, group: string): void {
@@ -118,7 +110,7 @@ export class ConsistencyProbeService {
    */
   canOpenPair(state: ModuleRunState): boolean {
     if (state.probes.length >= PROBE_MAX_PAIRS) return false;
-    return state.answered + PROBE_GAP_QUESTIONS < state.maxQuestions;
+    return state.answered + PROBE_GAP_QUESTIONS < state.questionCount;
   }
 
   /**

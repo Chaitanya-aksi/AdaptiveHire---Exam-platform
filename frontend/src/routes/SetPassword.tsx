@@ -119,7 +119,11 @@ export function SetPassword() {
             )}
           </div>
 
-          <button className="primary block" type="submit" disabled={!ready || busy}>
+          <button
+            className="primary block"
+            type="submit"
+            disabled={!ready || busy}
+          >
             {busy ? 'Saving…' : 'Save and continue'}
           </button>
         </form>

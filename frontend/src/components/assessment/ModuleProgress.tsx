@@ -4,26 +4,28 @@ interface ModuleProgressProps {
   modules: RuntimeModule[];
   currentIndex: number;
   answered: number;
-  min: number;
-  max: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
 }
 
 /**
  * Sections done / in progress / still to come, plus how far through the
  * current one the candidate is.
  *
- * The bar is deliberately drawn against the *maximum* and never labelled with
- * a total: an adaptive module can end anywhere between the minimum and the
- * maximum, and promising "12 questions" would be a lie for most candidates.
+ * The bar and the count can now both be stated outright. They used to be
+ * deliberately vague — sections ended anywhere between a minimum and a maximum
+ * once the estimate settled, so "12 questions" would have been a lie for most
+ * candidates. Sections are a fixed length since 2026-08-24, so the honest thing
+ * is to say the number.
  */
 export function ModuleProgress({
   modules,
   currentIndex,
   answered,
-  min,
-  max,
+  questionCount,
 }: ModuleProgressProps) {
-  const percent = max > 0 ? Math.min(100, (answered / max) * 100) : 0;
+  const percent =
+    questionCount > 0 ? Math.min(100, (answered / questionCount) * 100) : 0;
 
   return (
     <div className="assess-progress">
@@ -49,11 +51,10 @@ export function ModuleProgress({
         <span style={{ width: `${percent}%` }} />
       </div>
 
-      <QuestionQueue answered={answered} min={min} max={max} />
+      <QuestionQueue answered={answered} questionCount={questionCount} />
 
       <p className="muted small assess-progress-note">
-        {answered} answered in this section — it ends somewhere between {min}{' '}
-        and {max} questions, depending on your answers.
+        {answered} of {questionCount} answered in this section.
       </p>
     </div>
   );
@@ -68,37 +69,32 @@ export function ModuleProgress({
  * server, which would refuse a jump anyway. Rendering a clickable-looking chip
  * that then does nothing is worse than rendering a label, so they are labels.
  *
- * Drawn against `max`, like the bar above it, because the module is adaptive
- * and has no fixed length. The slots past `min` are dimmed further: they are
- * the ones that may never be asked, and showing them at full strength would
- * promise a number of questions nobody can promise.
+ * Every slot is now a real one. There used to be a third state — dashed chips
+ * past the section's minimum, for questions that might never be asked — which
+ * a fixed-length section no longer has.
  */
 function QuestionQueue({
   answered,
-  min,
-  max,
+  questionCount,
 }: {
   answered: number;
-  min: number;
-  max: number;
+  questionCount: number;
 }) {
-  if (max <= 0) return null;
+  if (questionCount <= 0) return null;
 
   return (
     <ol className="assess-queue" aria-label="Questions in this section">
-      {Array.from({ length: max }, (_, i) => {
+      {Array.from({ length: questionCount }, (_, i) => {
         const number = i + 1;
         const done = number <= answered;
         const current = number === answered + 1;
-        // Past the guaranteed minimum, so it may never be reached.
-        const beyondMin = number > min;
 
         return (
           <li
             key={number}
             className={`assess-q${done ? ' assess-q--done' : ''}${
               current ? ' assess-q--now' : ''
-            }${!done && !current && beyondMin ? ' assess-q--maybe' : ''}`}
+            }`}
             aria-current={current ? 'step' : undefined}
           >
             <span aria-hidden="true">{number}</span>

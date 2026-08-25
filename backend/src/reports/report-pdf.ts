@@ -447,8 +447,8 @@ function moduleBlock(module: ModuleSummary): Content {
     // Under-answering is always visible: a score from three answers and one
     // from twelve are not the same claim.
     module.questionsAnswered > 0 &&
-    module.questionsAnswered < module.minQuestions
-      ? `below the ${module.minQuestions} this section asks for`
+    module.questionsAnswered < module.questionCount
+      ? `below the ${module.questionCount} this section asks for`
       : null,
   ].filter((part): part is string => part !== null);
 

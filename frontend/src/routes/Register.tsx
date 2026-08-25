@@ -137,11 +137,17 @@ export function Register() {
             required
           />
           {mismatch && (
-            <p className="field-note error-note">Passwords don&rsquo;t match.</p>
+            <p className="field-note error-note">
+              Passwords don&rsquo;t match.
+            </p>
           )}
         </div>
 
-        <button className="primary block" type="submit" disabled={!canSubmit || busy}>
+        <button
+          className="primary block"
+          type="submit"
+          disabled={!canSubmit || busy}
+        >
           {busy ? 'Creating account…' : 'Create account'}
         </button>
       </form>

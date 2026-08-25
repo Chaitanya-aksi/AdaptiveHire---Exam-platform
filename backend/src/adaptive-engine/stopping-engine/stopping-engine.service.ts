@@ -37,25 +37,26 @@ export class StoppingEngineService {
       return { stop: true, reason: ModuleStopReason.TIME_EXPIRED };
     }
 
-    if (state.answered >= state.maxQuestions) {
+    /*
+     * The only ordinary way a section ends.
+     *
+     * There used to be a second: once the ability estimate was settled enough,
+     * the module stopped early, somewhere between a configured minimum and
+     * maximum. That is gone (2026-08-24) — sections are a fixed length now, so
+     * every candidate answers the same number of questions and two results are
+     * directly comparable. `CONFIDENCE_REACHED` is therefore no longer
+     * produced; it stays in the enum because completed attempts still carry it.
+     *
+     * The test is still adaptive. `thresholdMet` below still measures how
+     * settled a result is, and the selector still matches each question to the
+     * running estimate — what changed is that being settled no longer buys the
+     * candidate an early finish.
+     */
+    if (state.answered >= state.questionCount) {
       return { stop: true, reason: ModuleStopReason.MAX_QUESTIONS };
     }
 
-    if (state.answered < state.minQuestions) return CONTINUE;
-
-    if (!this.thresholdMet(state)) return CONTINUE;
-
-    // Confidence is met, but a repeat probe is still waiting on its twin.
-    // Finishing here would discard a question already spent and report nothing
-    // for it, so the module stays open just long enough to close the check.
-    //
-    // This is the one place a probe touches the stopping decision, and it can
-    // only ever extend a module by a question or two: the clock and
-    // `maxQuestions` are both checked above and neither can be deferred, and no
-    // probe *answer* is consulted — only the fact that a check is outstanding.
-    if (this.probes.awaitingTwin(state)) return CONTINUE;
-
-    return { stop: true, reason: ModuleStopReason.CONFIDENCE_REACHED };
+    return CONTINUE;
   }
 
   /**
@@ -67,7 +68,7 @@ export class StoppingEngineService {
    * ended because it was finished, not because the bank ran out.
    */
   thresholdMet(state: ModuleRunState): boolean {
-    if (state.answered < state.minQuestions) return false;
+    if (state.answered === 0) return false;
     return this.confidence(state) >= this.threshold(state);
   }
 

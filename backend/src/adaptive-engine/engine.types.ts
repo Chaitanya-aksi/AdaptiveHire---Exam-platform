@@ -34,8 +34,8 @@ export interface ModuleRunState {
   scoringType: ScoringType;
   /** Copied from `assessment_modules` at session start so mid-run config
    * changes can't alter a paper already in progress. */
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
   /** Trait definitions from the module catalogue; empty for objective modules. */
   traits: TraitDefinition[];

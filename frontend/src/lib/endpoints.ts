@@ -279,8 +279,8 @@ function filenameFromHeaders(headers: unknown): string | null {
 
 export interface AssessmentModulePayload {
   moduleId: string;
-  minQuestions: number;
-  maxQuestions: number;
+  /** Exactly how many questions this section asks. */
+  questionCount: number;
   timeLimitSeconds: number;
   displayOrder?: number;
 }

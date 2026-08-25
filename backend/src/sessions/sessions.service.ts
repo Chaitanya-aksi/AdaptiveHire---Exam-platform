@@ -255,8 +255,7 @@ export class SessionsService {
           description: config.module.description,
           scoringType: config.module.scoringType,
           traits: config.module.traits ?? [],
-          minQuestions: config.minQuestions,
-          maxQuestions: config.maxQuestions,
+          questionCount: config.questionCount,
           timeLimitSeconds: config.timeLimitSeconds,
         }),
       ),
@@ -733,8 +732,7 @@ export class SessionsService {
         description: config.module.description,
         scoringType: config.module.scoringType,
         traits: config.module.traits ?? [],
-        minQuestions: config.minQuestions,
-        maxQuestions: config.maxQuestions,
+        questionCount: config.questionCount,
         timeLimitSeconds: config.timeLimitSeconds,
       }),
     );
@@ -926,8 +924,7 @@ export class SessionsService {
       sequenceNumber: state.answeredTotal + 1,
       moduleProgress: {
         answered: module.answered,
-        min: module.minQuestions,
-        max: module.maxQuestions,
+        questionCount: module.questionCount,
       },
       moduleRemainingMs:
         remaining ??
@@ -964,8 +961,7 @@ export class SessionsService {
       description: module.description,
       scoringType: module.scoringType,
       status: module.status,
-      minQuestions: module.minQuestions,
-      maxQuestions: module.maxQuestions,
+      questionCount: module.questionCount,
       timeLimitSeconds: module.timeLimitSeconds,
       answered: module.answered,
     };
@@ -1019,8 +1015,7 @@ export class SessionsService {
         description: config.module.description,
         scoringType: config.module.scoringType,
         status: 'completed' as const,
-        minQuestions: config.minQuestions,
-        maxQuestions: config.maxQuestions,
+        questionCount: config.questionCount,
         timeLimitSeconds: config.timeLimitSeconds,
         answered:
           results.find((r) => r.moduleId === config.moduleId)

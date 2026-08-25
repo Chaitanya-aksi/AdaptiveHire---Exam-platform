@@ -5,6 +5,38 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AdaptiveHire</title>
+
+    <!--
+      Resolves the theme before the first paint.
+
+      This has to run here, synchronously in <head>, rather than in React: by
+      the time a component mounts the browser has already painted the document
+      once, and a candidate on a dark theme would see a white flash on every
+      cold load — worst of all on the assessment runtime, which is the one
+      screen nobody should be startled by.
+
+      The storage key and the `dark` class are shared with `lib/theme.tsx`.
+      They are duplicated here on purpose — this cannot import from the bundle
+      it runs ahead of — so a change to either has to be made in both places in
+      the same commit.
+
+      Wrapped in try/catch because localStorage throws outright in some
+      privacy modes, and a theme preference is never worth a blank page.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('adaptivehire.theme');
+          var dark =
+            stored === 'dark' ||
+            ((stored === 'system' || stored === null) &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* No stored choice reachable — light is a safe first paint. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

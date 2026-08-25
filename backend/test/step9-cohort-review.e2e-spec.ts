@@ -65,9 +65,7 @@ describe('Step 9 — Cohort view and review', () => {
       .set(auth(token))
       .send({
         title: 'Cohort assessment',
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 5, timeLimitSeconds: 600 },
-        ],
+        modules: [{ moduleId, questionCount: 5, timeLimitSeconds: 600 }],
       })
       .expect(201);
     return (res.body as { id: string }).id;

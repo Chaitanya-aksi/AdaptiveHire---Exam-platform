@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * blend, which gives a missing half no weight. Reports regenerate on demand,
  * so a recruiter opening an old attempt gets the composites then.
  */
-export class BehavioralCompositeScores1786520000000
-  implements MigrationInterface
-{
+export class BehavioralCompositeScores1786520000000 implements MigrationInterface {
   name = 'BehavioralCompositeScores1786520000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -129,9 +129,7 @@ async function rewriteLegacyOptions(
   }
 }
 
-export class WorkplaceTraitVocabulary1786410000000
-  implements MigrationInterface
-{
+export class WorkplaceTraitVocabulary1786410000000 implements MigrationInterface {
   name = 'WorkplaceTraitVocabulary1786410000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

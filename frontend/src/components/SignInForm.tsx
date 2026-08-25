@@ -30,7 +30,8 @@ function landing(user: AuthUser): { title: string; subtitle: string } {
   if (user.mustChangePassword) {
     return {
       title,
-      subtitle: 'One thing first — the password we emailed you needs replacing.',
+      subtitle:
+        'One thing first — the password we emailed you needs replacing.',
     };
   }
 

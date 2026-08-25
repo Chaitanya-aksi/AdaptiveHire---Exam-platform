@@ -16,7 +16,10 @@ function actionFor(status: InvitationStatus): {
       // The session is resumable: /sessions/start rejoins rather than restarts.
       return { label: 'Resume', note: 'You have an attempt in progress' };
     case 'completed':
-      return { label: null, note: 'Submitted — sent to the recruiting team for review.' };
+      return {
+        label: null,
+        note: 'Submitted — sent to the recruiting team for review.',
+      };
     case 'expired':
       return { label: null, note: 'This invitation has expired' };
     case 'revoked':

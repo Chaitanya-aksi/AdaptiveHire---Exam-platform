@@ -42,8 +42,7 @@ function objectiveState(
     name: 'Aptitude',
     description: null,
     scoringType: ScoringType.OBJECTIVE,
-    minQuestions: 8,
-    maxQuestions: 15,
+    questionCount: 15,
     timeLimitSeconds: 900,
     traits: [],
     status: 'in_progress',
@@ -70,8 +69,7 @@ function traitState(overrides: Partial<ModuleRunState> = {}): ModuleRunState {
     slug: 'personality',
     name: 'Personality',
     scoringType: ScoringType.TRAIT,
-    minQuestions: 10,
-    maxQuestions: 20,
+    questionCount: 20,
     traits: [
       { key: 'openness', label: 'Adaptability' },
       { key: 'conscientiousness', label: 'Reliability' },
@@ -253,14 +251,14 @@ describe('AbilityEstimatorService', () => {
 
 describe('StoppingEngineService', () => {
   it('never stops before the configured minimum, however confident', () => {
-    const state = objectiveState({ minQuestions: 8 });
+    const state = objectiveState({ questionCount: 8 });
     answer(state, 1000, true, 7);
 
     expect(stopping.shouldStop(state).stop).toBe(false);
   });
 
   it('stops at the maximum even if the estimate has not settled', () => {
-    const state = objectiveState({ minQuestions: 8, maxQuestions: 10 });
+    const state = objectiveState({ questionCount: 10 });
     // Alternating answers keep the estimate unsettled.
     for (let i = 0; i < 10; i += 1) answer(state, 1000, i % 2 === 0);
 
@@ -270,24 +268,38 @@ describe('StoppingEngineService', () => {
     });
   });
 
-  it('stops once the estimate is settled enough', () => {
-    const state = objectiveState({ minQuestions: 5, maxQuestions: 40 });
+  it('keeps going once settled — a section runs to its full length', () => {
+    const state = objectiveState({ questionCount: 40 });
     answer(state, 1000, true, 30);
 
+    // The measurement survives the change: the engine still knows how settled
+    // the estimate is. What it no longer does is end the section over it.
     expect(stopping.confidence(state)).toBeGreaterThanOrEqual(
       ABILITY_CONFIDENCE_THRESHOLD,
     );
+    expect(stopping.thresholdMet(state)).toBe(true);
+    expect(stopping.shouldStop(state)).toEqual({ stop: false, reason: null });
+  });
+
+  it('stops exactly at the configured count', () => {
+    const state = objectiveState({ questionCount: 12 });
+    answer(state, 1000, true, 11);
+    expect(stopping.shouldStop(state)).toEqual({ stop: false, reason: null });
+
+    answer(state, 1000, true, 1);
     expect(stopping.shouldStop(state)).toEqual({
       stop: true,
-      reason: ModuleStopReason.CONFIDENCE_REACHED,
+      reason: ModuleStopReason.MAX_QUESTIONS,
     });
   });
 
-  it('gives different candidates different-length modules', () => {
-    // Same difficulties, same number available — only the answer pattern
-    // differs. This is the "not everyone gets the same paper length" rule.
-    const steady = objectiveState({ minQuestions: 5, maxQuestions: 40 });
-    const streaky = objectiveState({ minQuestions: 5, maxQuestions: 40 });
+  it('gives every candidate the same length, whatever they answer', () => {
+    // This asserts the inverse of the rule it replaced. Sections used to end
+    // early once the estimate settled, so two candidates sat the same section
+    // and answered a different number of questions; they are fixed length now,
+    // which is what makes two results comparable on the same number of items.
+    const steady = objectiveState({ questionCount: 40 });
+    const streaky = objectiveState({ questionCount: 40 });
 
     const lengthOf = (
       state: ModuleRunState,
@@ -301,19 +313,24 @@ describe('StoppingEngineService', () => {
       return asked;
     };
 
-    // Alternating right/wrong at your own level is equilibrium — the estimate
-    // has found you. Answering everything right means it is still climbing,
-    // so the module keeps going.
+    // Alternating right/wrong at your own level, versus answering everything
+    // right: two completely different runs through the section.
     const steadyLength = lengthOf(steady, (i) => i % 2 === 0);
     const climbingLength = lengthOf(streaky, () => true);
 
-    expect(steadyLength).toBeLessThan(climbingLength);
-    expect(steadyLength).toBeGreaterThanOrEqual(steady.minQuestions);
+    expect(steadyLength).toBe(40);
+    expect(climbingLength).toBe(40);
+
+    // The lengths match; the *estimates* do not. That is the whole point — the
+    // section adapts in difficulty rather than in length, so a candidate who
+    // answered everything correctly still ends up rated far above one who
+    // alternated, on the same number of questions.
+    expect(streaky.ability).toBeGreaterThan(steady.ability);
   });
 
   it('lets the clock override everything', () => {
     const state = objectiveState({
-      minQuestions: 8,
+      questionCount: 8,
       deadlineAt: 1_000,
     });
 
@@ -324,7 +341,7 @@ describe('StoppingEngineService', () => {
   });
 
   it('holds a trait module open until its weakest trait is covered', () => {
-    const state = traitState({ minQuestions: 2, maxQuestions: 20 });
+    const state = traitState({ questionCount: 20 });
 
     for (let i = 0; i < TRAIT_TARGET_QUESTIONS; i += 1) {
       estimator.applyTraitWeights(state.traitTallies, { openness: 1 });
@@ -338,22 +355,26 @@ describe('StoppingEngineService', () => {
       });
       state.answered += 1;
     }
-    expect(stopping.shouldStop(state)).toEqual({
-      stop: true,
-      reason: ModuleStopReason.CONFIDENCE_REACHED,
-    });
+    // Settled, and still going: the trait profile keeps collecting answers to
+    // the end of the section like everything else.
+    expect(stopping.thresholdMet(state)).toBe(true);
+    expect(stopping.shouldStop(state).stop).toBe(false);
   });
 
   /**
-   * A module that stops the question before a repeat probe's twin is due has
-   * spent one of the candidate's questions and reported nothing for it. This is
-   * the only place a probe reaches the stopping decision, so the bounds matter
-   * as much as the behaviour.
+   * Repeat probes no longer reach the stopping decision at all.
+   *
+   * They used to: a settled module was held open a question or two so a pair
+   * already opened could close, because stopping first would have spent a
+   * question and reported nothing for it. With sections at a fixed length there
+   * is no early stop left to defer, so the deferral went with it — and the
+   * pairs land anyway, because a fixed section is far longer than the eight-
+   * question gap a pair needs.
    */
-  describe('holding a module open to close a repeat probe', () => {
+  describe('repeat probes and the stopping decision', () => {
     /** A settled objective module with one probe pair open at `openedAt`. */
-    function settledWithOpenPair(openedAt: number, maxQuestions = 40) {
-      const state = objectiveState({ minQuestions: 5, maxQuestions });
+    function settledWithOpenPair(openedAt: number, questionCount = 40) {
+      const state = objectiveState({ questionCount });
       answer(state, 1000, true, 30);
       state.probes.push({
         group: 'ratio-1',
@@ -371,37 +392,9 @@ describe('StoppingEngineService', () => {
       return state;
     }
 
-    it('defers a confidence stop while the twin is still to come', () => {
-      // Opened at 30, so the twin is due at 38 and the module is 30 in.
-      const state = settledWithOpenPair(30);
-
-      expect(stopping.thresholdMet(state)).toBe(true);
-      expect(stopping.shouldStop(state).stop).toBe(false);
-    });
-
-    it('stops as soon as the pair closes', () => {
-      const state = settledWithOpenPair(30);
-      state.probes[0].secondQuestionId = 'q2';
-      state.probes[0].second = { kind: 'objective', isCorrect: true };
-
-      expect(stopping.shouldStop(state)).toEqual({
-        stop: true,
-        reason: ModuleStopReason.CONFIDENCE_REACHED,
-      });
-    });
-
-    it('gives up on a twin that never arrives instead of holding forever', () => {
-      // Opened at 20, so the twin came due at 28 and this module is 30 in — the
-      // question was served and was not the twin, so it is not coming.
-      const state = settledWithOpenPair(20);
-
-      expect(stopping.shouldStop(state)).toEqual({
-        stop: true,
-        reason: ModuleStopReason.CONFIDENCE_REACHED,
-      });
-    });
-
-    it('never defers past the configured maximum', () => {
+    it('an open pair does not keep a full section running', () => {
+      // Thirty answers into a thirty-question section with a pair still open.
+      // The old engine held on for the twin; this one is simply finished.
       const state = settledWithOpenPair(30, 30);
 
       expect(state.answered).toBe(30);
@@ -409,6 +402,26 @@ describe('StoppingEngineService', () => {
         stop: true,
         reason: ModuleStopReason.MAX_QUESTIONS,
       });
+    });
+
+    it('an open pair does not end a section early either', () => {
+      // Settled, pair open, and well short of the count: neither fact matters
+      // any more. The section runs on because it has questions left.
+      const state = settledWithOpenPair(30);
+
+      expect(stopping.thresholdMet(state)).toBe(true);
+      expect(stopping.shouldStop(state)).toEqual({ stop: false, reason: null });
+    });
+
+    it('leaves room for the twin at a realistic section length', () => {
+      // The reason the deferral is no longer needed. A pair opened at question
+      // 30 of a 40-question section has its twin due at 38, comfortably inside
+      // the section — where the old 12-question modules had three slots.
+      const state = settledWithOpenPair(30, 40);
+
+      expect(state.questionCount - state.answered).toBeGreaterThan(
+        PROBE_GAP_QUESTIONS,
+      );
     });
 
     it('never defers past the clock', () => {
@@ -424,7 +437,7 @@ describe('StoppingEngineService', () => {
     it('does not let a probe drag a module past its minimum question count', () => {
       // Below the minimum nothing has been earned yet, so the answer is the
       // same "continue" it always was — not a probe-driven deferral.
-      const state = objectiveState({ minQuestions: 8 });
+      const state = objectiveState({ questionCount: 8 });
       answer(state, 1000, true, 3);
 
       expect(stopping.thresholdMet(state)).toBe(false);
@@ -726,7 +739,7 @@ describe('ConsistencyProbeService', () => {
 
     it('declines a pair that could not close before the module ends', () => {
       const state = objectiveState({
-        maxQuestions: 10,
+        questionCount: 10,
         answered: 10 - PROBE_GAP_QUESTIONS,
       });
 
@@ -743,18 +756,18 @@ describe('ConsistencyProbeService', () => {
 
   /**
    * The selector asks for a probe question rather than waiting for one to turn
-   * up. The window is only as wide as `maxQuestions - PROBE_GAP_QUESTIONS`, so
+   * up. The window is only as wide as `questionCount - PROBE_GAP_QUESTIONS`, so
    * left to chance most runs never opened a pair at all.
    */
   describe('asking for an opener', () => {
     it('wants one straight away, while there is room to close it', () => {
-      expect(probes.wantsNewPair(objectiveState({ maxQuestions: 12 }))).toBe(
+      expect(probes.wantsNewPair(objectiveState({ questionCount: 12 }))).toBe(
         true,
       );
     });
 
     it('stops wanting one while a pair is already open', () => {
-      const state = objectiveState({ maxQuestions: 12 });
+      const state = objectiveState({ questionCount: 12 });
       probeAnswer(state, 'ratio-1', 'q1', correct);
 
       // A second pair is welcome if it appears naturally, but chasing one would
@@ -763,7 +776,7 @@ describe('ConsistencyProbeService', () => {
     });
 
     it('wants another once the open pair has closed', () => {
-      const state = objectiveState({ maxQuestions: 30 });
+      const state = objectiveState({ questionCount: 30 });
       probeAnswer(state, 'ratio-1', 'q1', correct);
       state.answered = PROBE_GAP_QUESTIONS + 1;
       probeAnswer(state, 'ratio-1', 'q2', correct);
@@ -773,7 +786,7 @@ describe('ConsistencyProbeService', () => {
 
     it('stops asking once the module is too far along to close one', () => {
       const state = objectiveState({
-        maxQuestions: 12,
+        questionCount: 12,
         answered: 12 - PROBE_GAP_QUESTIONS,
       });
 
@@ -781,7 +794,7 @@ describe('ConsistencyProbeService', () => {
     });
 
     it('stops asking at the pair quota', () => {
-      const state = objectiveState({ maxQuestions: 40 });
+      const state = objectiveState({ questionCount: 40 });
       for (let i = 0; i < PROBE_MAX_PAIRS; i += 1) {
         probeAnswer(state, `group-${i}`, `q${i}a`, correct);
         state.answered += PROBE_GAP_QUESTIONS;

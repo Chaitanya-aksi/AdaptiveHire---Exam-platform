@@ -81,9 +81,7 @@ describe('Step 5 — Audit log', () => {
       .set(auth())
       .send({
         title: 'Audit assessment',
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 3, timeLimitSeconds: 600 },
-        ],
+        modules: [{ moduleId, questionCount: 3, timeLimitSeconds: 600 }],
       })
       .expect(201);
     assessmentId = (assessment.body as { id: string }).id;
@@ -225,9 +223,7 @@ describe('Step 5 — Audit log', () => {
       .set(auth())
       .send({
         title: secret,
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 2, timeLimitSeconds: 300 },
-        ],
+        modules: [{ moduleId, questionCount: 2, timeLimitSeconds: 300 }],
       })
       .expect(201);
 

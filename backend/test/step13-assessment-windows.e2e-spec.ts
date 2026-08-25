@@ -40,9 +40,7 @@ describe('Step 13 — Assessment windows', () => {
       .set(auth())
       .send({
         title: 'Windowed assessment',
-        modules: [
-          { moduleId, minQuestions: 1, maxQuestions: 3, timeLimitSeconds: 600 },
-        ],
+        modules: [{ moduleId, questionCount: 3, timeLimitSeconds: 600 }],
         ...window,
       })
       .expect(201);

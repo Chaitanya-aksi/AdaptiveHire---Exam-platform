@@ -35,12 +35,17 @@ export class AssessmentModule {
   @JoinColumn({ name: 'moduleId' })
   module!: ModuleCatalogEntry;
 
-  /** Floor enforced by the stopping engine before confidence can end a module. */
+  /**
+   * Exactly how many questions this section asks.
+   *
+   * One number, not a range. It replaced `minQuestions`/`maxQuestions`, which
+   * let the stopping engine end a section early once confidence was reached —
+   * so two candidates sat the same section and answered a different number of
+   * questions. Sections are now fixed length; the *difficulty* still adapts
+   * question by question, which is what makes it an adaptive test.
+   */
   @Column({ type: 'integer' })
-  minQuestions!: number;
-
-  @Column({ type: 'integer' })
-  maxQuestions!: number;
+  questionCount!: number;
 
   @Column({ type: 'integer' })
   timeLimitSeconds!: number;
