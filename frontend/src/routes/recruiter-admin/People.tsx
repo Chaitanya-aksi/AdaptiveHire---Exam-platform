@@ -499,8 +499,8 @@ export function People() {
                   organisation immediately.
                 </p>
                 <p className="muted small" style={{ marginBottom: 0 }}>
-                  Assessments and questions they created are kept — they simply
-                  stop showing an author. This cannot be undone.
+                  Note: This can't be undone!
+                  This user will be deleted permanently and the assessments, questions they created are kept. Delete them manually if you want to.
                 </p>
               </>
             ) : (

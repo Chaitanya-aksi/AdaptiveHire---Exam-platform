@@ -85,14 +85,14 @@ const EXPLORE: Destination[] = [
   {
     to: '/admin/people',
     Icon: IconPeople,
-    title: 'People',
-    body: 'Everyone with an account in your organisation.',
+    title: 'People in your organization.',
+    body: 'View people who are present in your organization.',
   },
   {
     to: '/admin/assessments',
     Icon: IconShield,
     title: 'Proctoring signals',
-    body: 'Recorded per attempt and shown as evidence — never an automatic fail.',
+    body: 'Recorded per attempt and shown as evidence so that recruiter can decide the honesty and behavior of the candidate.',
   },
 ];
 
