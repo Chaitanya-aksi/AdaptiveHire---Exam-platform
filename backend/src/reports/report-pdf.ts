@@ -439,10 +439,17 @@ function probeBlock(probes: ProbeSummary): Content {
 }
 
 function moduleBlock(module: ModuleSummary): Content {
+  const objective = module.scoringType === ScoringType.OBJECTIVE;
+
   const facts = [
-    `${module.questionsAnswered} answered`,
-    module.scoringType === ScoringType.OBJECTIVE
-      ? `${module.questionsCorrect} correct`
+    objective
+      ? `${module.questionsCorrect} of ${module.questionsAnswered} correct`
+      : `${module.questionsAnswered} answered`,
+    // What the questions were worth to a guesser, stated every time rather than
+    // only when the score is low — shown selectively it would read as an
+    // accusation, and this is evidence for the reader to weigh, not a verdict.
+    objective && module.expectedByChance !== null
+      ? `${module.expectedByChance} expected by guessing alone`
       : null,
     // Under-answering is always visible: a score from three answers and one
     // from twelve are not the same claim.

@@ -14,7 +14,7 @@ import {
   TRAIT_WEIGHT_MAX,
   TRAIT_WEIGHT_MIN,
 } from '../adaptive-engine.constants';
-import type { ModuleRunState, TraitTally } from '../engine.types';
+import type { ModuleRunState, TraitRange, TraitTally } from '../engine.types';
 
 export interface AbilityUpdate {
   /** The candidate's estimate after this answer. */
@@ -145,10 +145,29 @@ export class AbilityEstimatorService {
     }
   }
 
-  /** Folds one answered trait question into the running tallies (in place). */
+  /**
+   * Folds one answered trait question into the running tallies (in place).
+   *
+   * `weights` is what the candidate's answer expressed. `ranges` is what the
+   * question made possible, and covers every trait the question *could* have
+   * expressed — a wider set, because an option that stays silent on a trait is
+   * still one of the answers on offer. Passing up the chance to express a trait
+   * has to move that trait's scale, or only the options that mention a trait
+   * ever reach its score, which is the authoring skew this exists to remove.
+   *
+   * Omit `ranges` for an answer with no choice behind it (a question the clock
+   * ran out on): there was no chance to take, and charging the candidate the
+   * chance value for it would read as having answered it badly.
+   *
+   * `count` and `sumSquares` deliberately move only with `weights`. They
+   * measure how often the candidate actually expressed the trait and how
+   * steadily — which is what confidence, coverage and consistency each ask, and
+   * none of those questions changed. Only the score's scale did.
+   */
   applyTraitWeights(
     tallies: Record<string, TraitTally>,
     weights: Record<string, number>,
+    ranges?: Record<string, TraitRange>,
   ): void {
     for (const [trait, weight] of Object.entries(weights)) {
       const tally = (tallies[trait] ??= { sum: 0, count: 0, sumSquares: 0 });
@@ -158,6 +177,13 @@ export class AbilityEstimatorService {
       // has no sumSquares; treating it as zero degrades the signal rather
       // than producing NaN.
       tally.sumSquares = (tally.sumSquares ?? 0) + weight * weight;
+    }
+
+    for (const [trait, range] of Object.entries(ranges ?? {})) {
+      const tally = (tallies[trait] ??= { sum: 0, count: 0, sumSquares: 0 });
+      tally.chanceSum = (tally.chanceSum ?? 0) + range.chance;
+      tally.bestSum = (tally.bestSum ?? 0) + range.best;
+      tally.worstSum = (tally.worstSum ?? 0) + range.worst;
     }
   }
 
@@ -211,14 +237,12 @@ export class AbilityEstimatorService {
   }
 
   /**
-   * Final per-trait scores. The raw mean weight (-2..+2) is rescaled onto
-   * 0..100; a trait with no answers is reported at the neutral midpoint with
-   * zero confidence rather than being dropped, so the report can say
-   * "not enough signal" instead of silently omitting it.
+   * Final per-trait scores. A trait with no answers is reported at the neutral
+   * midpoint with zero confidence rather than being dropped, so the report can
+   * say "not enough signal" instead of silently omitting it.
    */
   traitScores(state: ModuleRunState): Record<string, TraitScore> {
     const scores: Record<string, TraitScore> = {};
-    const range = TRAIT_WEIGHT_MAX - TRAIT_WEIGHT_MIN;
 
     const keys = state.traits.length
       ? state.traits.map((trait) => trait.key)
@@ -226,11 +250,8 @@ export class AbilityEstimatorService {
 
     for (const key of keys) {
       const tally = state.traitTallies[key];
-      const mean = tally && tally.count > 0 ? tally.sum / tally.count : 0;
       scores[key] = {
-        // Clamped: a weight authored outside the declared range would
-        // otherwise report as e.g. 125/100, which reads as a real score.
-        score: round1(clamp01((mean - TRAIT_WEIGHT_MIN) / range) * 100),
+        score: round1(this.traitScore(tally)),
         confidence: round2(this.traitConfidence(tally)),
         consistency: this.traitConsistency(tally),
       };
@@ -238,6 +259,75 @@ export class AbilityEstimatorService {
 
     return scores;
   }
+
+  /**
+   * One trait on the 0-100 reporting scale, measured against what the questions
+   * this candidate was actually served made possible.
+   *
+   * 50 is what answering at random earns, 100 is picking the most indicative
+   * option every time and 0 the least. Anchoring on the questions rather than
+   * on the fixed authoring range is the whole point: option sets are written
+   * positive-skewed — across the starter bank the mean option weight is about
+   * +0.6 rather than 0, because most questions offer several reasonable
+   * behaviours and one poor one — so a fixed -3..+3 scale handed a random
+   * responder about 59/100 and presented it as a result.
+   *
+   * One straight line, scaled by whichever side of `chance` has more room in
+   * it. Scaling each side to its own half separately is the obvious
+   * alternative and is wrong: `best` and `worst` are rarely symmetric about
+   * `chance`, so two slopes make the mapping non-linear, and a non-linear
+   * mapping does not carry the mean through it — a random responder comes out
+   * at 56 rather than 50, which is the one number this exists to fix. A single
+   * slope keeps the transform linear, and a linear transform of `sum` puts
+   * `E[random]` exactly on 50 whatever the bank looks like.
+   *
+   * The price is that the far end of the narrower side stops short of its
+   * extreme: on a question offering +3/+2/0/-3 there is more room to answer
+   * badly than well, so answering it as well as possible scores below 100.
+   * That is the honest reading — the scale says how far from chance the
+   * answers went, and that question does not offer as far up as it does down.
+   */
+  traitScore(tally: TraitTally | undefined): number {
+    if (
+      tally?.chanceSum === undefined ||
+      tally.bestSum === undefined ||
+      tally.worstSum === undefined
+    ) {
+      return this.legacyTraitScore(tally);
+    }
+
+    const { sum, chanceSum, bestSum, worstSum } = tally;
+    const spread = Math.max(bestSum - chanceSum, chanceSum - worstSum);
+
+    // Questions that offered no choice on this trait at all: every answer led
+    // to the same contribution, so there is nothing to place on a scale.
+    if (spread <= 0) return 50;
+
+    // `sum` cannot leave `worstSum..bestSum`, so this cannot leave 0..100.
+    // Clamped anyway: a hand-edited stored tally should not surface as 108.
+    return clamp(50 + 50 * ((sum - chanceSum) / spread), 0, 100);
+  }
+
+  /**
+   * The pre-normalisation scale: the mean weight rescaled from the fixed
+   * authoring range.
+   *
+   * Kept for tallies recorded before per-item normalisation existed — a stored
+   * result or an in-flight Redis session carries no `chanceSum`, and rescoring
+   * it on a scale its questions were never measured against would change
+   * numbers a recruiter has already read. New runs never reach this.
+   */
+  private legacyTraitScore(tally: TraitTally | undefined): number {
+    const mean = tally && tally.count > 0 ? tally.sum / tally.count : 0;
+    const range = TRAIT_WEIGHT_MAX - TRAIT_WEIGHT_MIN;
+    // Clamped: a weight authored outside the declared range would otherwise
+    // report as e.g. 125/100, which reads as a real score.
+    return clamp01((mean - TRAIT_WEIGHT_MIN) / range) * 100;
+  }
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
 }
 
 function clamp01(value: number): number {

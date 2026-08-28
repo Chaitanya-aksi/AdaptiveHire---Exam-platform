@@ -638,6 +638,12 @@ export interface ReportModuleSummary {
   score: number | null;
   questionsAnswered: number;
   questionsCorrect: number;
+  /**
+   * Objective only: how many of the questions served would be expected right by
+   * guessing alone, summed as `1 / options` over them. Null on a trait module,
+   * which has no right answer to guess at.
+   */
+  expectedByChance: number | null;
   questionCount: number;
   traits: ReportedTrait[];
   /** Mean consistency across the traits with enough evidence. */

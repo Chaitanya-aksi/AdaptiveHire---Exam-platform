@@ -33,6 +33,7 @@
     "seed:samples": "ts-node src/database/seeds/seed-sample-questions.ts",
     "seed": "npm run seed:users && npm run seed:modules && npm run seed:assessments && npm run seed:questions && npm run seed:samples",
     "reports:regenerate": "ts-node src/database/seeds/regenerate-reports.ts",
+    "check:random-baseline": "ts-node src/database/seeds/check-random-baseline.ts",
     "e2e:clean": "ts-node test/clean-e2e-data.ts"
   },
   "overrides": {

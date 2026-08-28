@@ -11,17 +11,27 @@ import {
 } from '../lib/socket';
 import type { Socket } from 'socket.io-client';
 
-/** How often the webcam is sampled. Often enough to notice, cheap enough to run. */
-const FACE_POLL_MS = 5000;
+/**
+ * How often the webcam is sampled.
+ *
+ * Was 5000, which put a departure 5-10s behind the candidate and took just as
+ * long to notice them coming back — long enough that testing it reads as
+ * broken. One detection is a single TinyFaceDetector pass at `inputSize: 224`
+ * on a 320x240 stream, and the readiness check already runs the same detector
+ * at 700ms alongside a live preview, so a second between reads is affordable
+ * with room to spare. The loop skips a tick rather than stacking if a slow
+ * machine ever takes longer than this to detect.
+ */
+const FACE_POLL_MS = 1000;
 
 /**
- * Consecutive bad reads before a framing problem is logged.
+ * Consecutive agreeing reads before a framing verdict is logged.
  *
- * The readiness check can be strict because it is a setup step with a preview
- * to look at. This is a person sitting an assessment for forty minutes, and
- * "leaned out of frame at 14:32" is noise that buries the events a recruiter
- * should actually read. Two reads at `FACE_POLL_MS` is ten seconds of being
- * genuinely out of position, which is a signal; a glance at the desk is not.
+ * Stays at two. The tiny detector does miss a face that is plainly there, and
+ * one dropped read must never be able to write "no face visible" into somebody's
+ * hiring record — an event here has to be true before it has to be fast. At the
+ * poll rate above, two reads is 1-2s rather than the 5-10s it used to be, so
+ * this no longer costs what it used to.
  */
 const SUSTAINED_FRAMES = 2;
 
@@ -716,64 +726,112 @@ export function useProctoring(
      * see the note at the top of this file. What changed is that the events
      * are now true.
      */
-    let lastState: FramingCode | null = null;
+    let reported: FramingCode | null = null;
     let pending: FramingCode | null = null;
+    /** Consecutive reads agreeing on whether the candidate is framed at all. */
     let runs = 0;
+    /** Consecutive reads of the identical verdict — a stricter count. */
+    let codeRuns = 0;
+    let busy = false;
+    let stopped = false;
 
     const id = window.setInterval(async () => {
-      const found = await monitorRef.current?.faces();
-      if (found === null || found === undefined) return;
+      // One detection at a time. At a one-second cadence a slow machine could
+      // otherwise start a second pass before the first returned and stack them
+      // up; skipping a tick degrades the rate, which is the right way to lose.
+      if (busy) return;
+      busy = true;
+      try {
+        const found = await monitorRef.current?.faces();
+        if (stopped || found === null || found === undefined) return;
 
-      const verdict = framing(found, RUNTIME_RULE);
-      const state = verdict.code;
+        const verdict = framing(found, RUNTIME_RULE);
+        const state = verdict.code;
 
-      // A momentary lean is not a finding. The state has to hold for
-      // `SUSTAINED_FRAMES` reads before it is allowed to become the truth.
-      if (state === pending) {
-        runs += 1;
-      } else {
+        // A momentary lean is not a finding. A verdict has to hold for
+        // `SUSTAINED_FRAMES` reads before it is allowed to become the truth.
+        //
+        // What counts as "holding" is whether the candidate is properly framed,
+        // not which specific problem it is. Two *different* problems continue
+        // the run rather than restarting it.
+        //
+        // This, not the poll rate, was the bulk of the lag. Real movement is
+        // never a clean `ok` -> `absent` step: walking out of shot reads
+        // `too_far` and then `absent`, and coming back reads `too_far`, then
+        // `off_centre`, then `ok`. Restarting the count on each of those made a
+        // measured walk-away take 25s to log and a return take 30s to clear the
+        // warning, against the 10s the constants implied. The same two
+        // sequences are now 4s and 6s.
+        runs =
+          pending !== null && (pending === 'ok') === (state === 'ok')
+            ? runs + 1
+            : 1;
+        codeRuns = state === pending ? codeRuns + 1 : 1;
         pending = state;
-        runs = 1;
-      }
-      if (runs < SUSTAINED_FRAMES) return;
 
-      // Only transitions are reported — a candidate who steps away for a
-      // minute should produce one `face_absent`, not twelve.
-      if (state === lastState) return;
-      lastState = state;
+        if (runs < SUSTAINED_FRAMES) return;
 
-      if (state === 'absent') {
-        emit('face_absent', { faceCount: 0 });
-        showNotice(
-          'No face visible to the camera. This has been recorded.',
-          'face',
-        );
-      } else if (state === 'multiple') {
-        emit('multiple_faces', { faceCount: verdict.faceCount });
-        showNotice(
-          'More than one person is visible to the camera. This has been recorded.',
-          'face',
-        );
-      } else if (state !== 'ok') {
-        // Named for what was measured. This is a face that *is* visible but is
-        // not properly in shot, which is a different thing from an empty
-        // chair — logging it as `face_absent` would put a claim in somebody's
-        // report that the measurement does not support.
-        emit('face_not_framed', { reason: state });
-        showNotice(
-          'Your face is not properly in view of the camera. This has been recorded.',
-          'face',
-        );
-      } else if (noticeSourceRef.current === 'face') {
-        // The candidate is back in frame — clear our own notice so it doesn't
-        // read as a stuck/glitched warning. Only clear one we set ourselves;
-        // an unrelated tab-switch or full-screen notice stays put.
-        noticeSourceRef.current = null;
-        setNotice(null);
+        // Only transitions are reported — a candidate who steps away for a
+        // minute should produce one `face_absent`, not sixty. Swapping one
+        // framing problem for another is the same finding and earns no second
+        // row, which is also what keeps a face hovering on the edge of the
+        // detector's threshold from flickering out a stream of events.
+        //
+        // The exception is a problem becoming no face at all, or becoming a
+        // second person: those are different claims, not the same one reworded,
+        // and a second person appearing is the finding this whole check exists
+        // for. Those need the identical verdict twice — `runs` alone is already
+        // satisfied mid-problem, so without `codeRuns` an oscillation between
+        // `absent` and `multiple` would emit on every read.
+        const framedChanged =
+          reported === null || (reported === 'ok') !== (state === 'ok');
+        const worsened =
+          (state === 'absent' || state === 'multiple') &&
+          state !== reported &&
+          codeRuns >= SUSTAINED_FRAMES;
+        if (!framedChanged && !worsened) return;
+        reported = state;
+
+        if (state === 'absent') {
+          emit('face_absent', { faceCount: 0 });
+          showNotice(
+            'No face visible to the camera. This has been recorded.',
+            'face',
+          );
+        } else if (state === 'multiple') {
+          emit('multiple_faces', { faceCount: verdict.faceCount });
+          showNotice(
+            'More than one person is visible to the camera. This has been recorded.',
+            'face',
+          );
+        } else if (state !== 'ok') {
+          // Named for what was measured. This is a face that *is* visible but
+          // is not properly in shot, which is a different thing from an empty
+          // chair — logging it as `face_absent` would put a claim in somebody's
+          // report that the measurement does not support.
+          emit('face_not_framed', { reason: state });
+          showNotice(
+            'Your face is not properly in view of the camera. This has been recorded.',
+            'face',
+          );
+        } else if (noticeSourceRef.current === 'face') {
+          // The candidate is back in frame — clear our own notice so it doesn't
+          // read as a stuck/glitched warning. Only clear one we set ourselves;
+          // an unrelated tab-switch or full-screen notice stays put.
+          noticeSourceRef.current = null;
+          setNotice(null);
+        }
+      } finally {
+        busy = false;
       }
     }, FACE_POLL_MS);
 
-    return () => window.clearInterval(id);
+    return () => {
+      // A detection already in flight resolves after this runs. `stopped` is
+      // what stops it emitting against a module that has ended.
+      stopped = true;
+      window.clearInterval(id);
+    };
   }, [active, camera, emit, showNotice]);
 
   // ── Ambient noise ──────────────────────────────────────────────────────

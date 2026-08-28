@@ -113,6 +113,44 @@ export interface TraitTally {
    * object is serialised into Redis on every answer.
    */
   sumSquares: number;
+
+  /*
+   * The three below scale `sum` onto 0-100. They accumulate over every
+   * question that *could* express this trait, which is a wider set than the
+   * answers that actually did — see `applyTraitWeights` for why that
+   * difference is the whole point.
+   *
+   * All optional: a tally serialised before per-item normalisation existed has
+   * no value for them, and those results fall back to the fixed authoring
+   * range. A missing scale must not read as a measured one.
+   */
+
+  /**
+   * Sum of what a uniformly random answer would have contributed. This is the
+   * 50-point of the reporting scale: `sum` landing here means the answers
+   * carried no information about the trait either way.
+   */
+  chanceSum?: number;
+  /** Sum of the most this trait could have been expressed — the 100-point. */
+  bestSum?: number;
+  /** Sum of the least it could have been — the 0-point. */
+  worstSum?: number;
+}
+
+/**
+ * What one question made possible for one trait, over every answer a candidate
+ * could have given it.
+ *
+ * `chance` is the mean of those outcomes rather than the midpoint of
+ * `worst..best`, and the two are rarely the same number: a question offering
+ * +3/+2/0/-3 on a trait has a midpoint of 0 but a chance value of +0.5. Only
+ * the mean is what a random answer actually earns, so only the mean can anchor
+ * the middle of the scale.
+ */
+export interface TraitRange {
+  chance: number;
+  best: number;
+  worst: number;
 }
 
 /**

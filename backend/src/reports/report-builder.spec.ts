@@ -6,6 +6,7 @@ import {
 } from '../common/enums';
 import {
   buildReport,
+  expectedCorrectByChance,
   normaliseAbility,
   type ModuleSummary,
   type ReportInput,
@@ -25,6 +26,8 @@ function objectiveModule(
     score,
     questionsAnswered: 10,
     questionsCorrect: 6,
+    // Ten four-option questions: two and a half right by guessing alone.
+    expectedByChance: 2.5,
     questionCount: 8,
     traits: [],
     consistency: null,
@@ -53,6 +56,8 @@ function traitModule(
     score: null,
     questionsAnswered: 12,
     questionsCorrect: 0,
+    // Null on a trait module: there is no right answer to guess at.
+    expectedByChance: null,
     questionCount: 8,
     traits: traits.map((t) => ({ consistency: null, ...t })),
     consistency: null,
@@ -83,6 +88,32 @@ describe('normaliseAbility', () => {
   it('clamps rather than reporting an impossible score', () => {
     expect(normaliseAbility(200)).toBe(0);
     expect(normaliseAbility(2000)).toBe(100);
+  });
+});
+
+describe('expectedCorrectByChance', () => {
+  it('counts a four-option question as a quarter of a right answer', () => {
+    expect(expectedCorrectByChance([4, 4, 4, 4])).toBe(1);
+    expect(expectedCorrectByChance(Array<number>(12).fill(4))).toBe(3);
+  });
+
+  it('sums per question rather than assuming the option floor', () => {
+    // The bank allows four to six options. Six-option items are worth far less
+    // to a guesser, and quoting a flat quarter would tell a recruiter that a
+    // candidate did no better than chance when they plainly did.
+    expect(expectedCorrectByChance([6, 6, 6])).toBe(0.5);
+    expect(expectedCorrectByChance([4, 6])).toBe(0.4);
+  });
+
+  it('reports nothing rather than zero when no question could be read', () => {
+    // Zero would be a claim — that every correct answer was earned. Null says
+    // the chance level is unknown, which is what an unreadable question means.
+    expect(expectedCorrectByChance([])).toBeNull();
+    expect(expectedCorrectByChance([0, 0])).toBeNull();
+  });
+
+  it('ignores an unreadable question without penalising the rest', () => {
+    expect(expectedCorrectByChance([4, 0, 4, 4, 4])).toBe(1);
   });
 });
 

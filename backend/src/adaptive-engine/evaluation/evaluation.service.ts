@@ -3,7 +3,7 @@ import { ScoringType } from '../../common/enums';
 import type { McqQuestionDetails } from '../../question-bank/entities/mcq-question-details.entity';
 import type { PersonalityQuestionDetails } from '../../question-bank/entities/personality-question-details.entity';
 import { rankingPositionFactor } from '../adaptive-engine.constants';
-import type { EvaluationResult } from '../engine.types';
+import type { EvaluationResult, TraitRange } from '../engine.types';
 
 /**
  * Scores one submitted answer. Deliberately knows nothing about the running
@@ -115,6 +115,54 @@ export class EvaluationService {
   }
 
   /**
+   * What this question made possible, per trait — the scale its answer is
+   * scored against.
+   *
+   * Derived by running every answer a candidate could have given through the
+   * evaluators above and looking at what came out, rather than by reading the
+   * weights and reasoning about them. A ranking answer's contribution depends
+   * on the position of every option, so a second formula for "what was the best
+   * possible ordering" would be a second scoring model, free to drift from the
+   * real one. Enumerating cannot drift: it *is* the real one.
+   *
+   * The cost is bounded by `MAX_OPTIONS` (6): at most six evaluations for a
+   * single choice and 720 for a ranking, once per submitted answer.
+   */
+  achievableTraitRange(
+    details: PersonalityQuestionDetails,
+    isRanking: boolean,
+  ): Record<string, TraitRange> {
+    const keys = details.options.map((option) => option.key);
+    if (keys.length === 0) return {};
+
+    const outcomes = isRanking
+      ? permutations(keys).map(
+          (order) => this.evaluateRanking(details, order).traitWeights,
+        )
+      : keys.map((key) => this.evaluatePersonality(details, key).traitWeights);
+
+    const traits = new Set(
+      details.options.flatMap((option) => Object.keys(option.traitWeights)),
+    );
+
+    const ranges: Record<string, TraitRange> = {};
+    for (const trait of traits) {
+      // An outcome that never mentions the trait contributed zero to it, not
+      // "no sample". Staying silent on a trait is one of the answers on offer,
+      // and leaving it out of the range would hide the option a candidate can
+      // hedge with.
+      const values = outcomes.map((weights) => weights[trait] ?? 0);
+      ranges[trait] = {
+        chance: values.reduce((sum, value) => sum + value, 0) / values.length,
+        best: Math.max(...values),
+        worst: Math.min(...values),
+      };
+    }
+
+    return ranges;
+  }
+
+  /**
    * Skipped/unanswered question (module timed out with one on screen). Counts
    * as a wrong answer for objective modules and contributes nothing to traits.
    */
@@ -136,4 +184,19 @@ export class EvaluationService {
       )})`,
     );
   }
+}
+
+/**
+ * Every ordering of `items`. Only ever called on a question's option keys,
+ * which `MAX_OPTIONS` caps at six — 720 orderings, the largest this can return.
+ */
+function permutations<T>(items: T[]): T[][] {
+  if (items.length <= 1) return [items.slice()];
+
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i++) {
+    const rest = [...items.slice(0, i), ...items.slice(i + 1)];
+    for (const tail of permutations(rest)) result.push([items[i], ...tail]);
+  }
+  return result;
 }

@@ -16,7 +16,10 @@ import {
 } from '../adaptive-engine/adaptive-engine.service';
 import { AbilityEstimatorService } from '../adaptive-engine/ability-estimator/ability-estimator.service';
 import { effectiveWindow, windowState } from '../assessments/assessment-window';
-import type { ModuleRunState } from '../adaptive-engine/engine.types';
+import type {
+  ModuleRunState,
+  TraitRange,
+} from '../adaptive-engine/engine.types';
 import { EvaluationService } from '../adaptive-engine/evaluation/evaluation.service';
 import type { SelectedQuestion } from '../adaptive-engine/question-selector/question-selector.service';
 import { PersonalityQuestionDetails } from '../question-bank/entities/personality-question-details.entity';
@@ -787,7 +790,11 @@ export class SessionsService {
           ? this.replayTraitAnswer(details, answer)
           : null;
         if (replayed) {
-          this.estimator.applyTraitWeights(module.traitTallies, replayed);
+          this.estimator.applyTraitWeights(
+            module.traitTallies,
+            replayed.weights,
+            replayed.ranges,
+          );
         }
         if (details?.pattern) {
           module.patternCounts[details.pattern] =
@@ -801,7 +808,7 @@ export class SessionsService {
           // An answer whose weights could not be replayed is uncomparable
           // rather than a disagreement — same treatment as a timeout.
           wasAnswered && replayed
-            ? { kind: 'trait', weights: replayed }
+            ? { kind: 'trait', weights: replayed.weights }
             : { kind: 'unanswered' },
         );
       }
@@ -864,20 +871,37 @@ export class SessionsService {
    * swallowed rather than thrown: a question edited since it was answered
    * should cost that one answer's contribution, not the candidate's session.
    */
+  /**
+   * One stored trait answer, replayed into what the estimator needs: the
+   * weights it expressed and the scale the question is scored against.
+   *
+   * The two are returned together because they must always be applied together
+   * — the score is `weights` measured against `ranges`, so folding one in
+   * without the other silently rescales the trait. Null means the answer had no
+   * choice behind it (the clock ran out), which contributes neither.
+   */
   private replayTraitAnswer(
     details: PersonalityQuestionDetails,
     answer: ResponseRow,
-  ): Record<string, number> | null {
+  ): {
+    weights: Record<string, number>;
+    ranges: Record<string, TraitRange>;
+  } | null {
     try {
-      if (answer.selectedOptions?.length) {
-        return this.evaluation.evaluateRanking(details, answer.selectedOptions)
-          .traitWeights;
-      }
-      if (answer.selectedOption) {
-        return this.evaluation.evaluatePersonality(
-          details,
-          answer.selectedOption,
-        ).traitWeights;
+      const isRanking = Boolean(answer.selectedOptions?.length);
+      const weights = isRanking
+        ? this.evaluation.evaluateRanking(details, answer.selectedOptions!)
+            .traitWeights
+        : answer.selectedOption
+          ? this.evaluation.evaluatePersonality(details, answer.selectedOption)
+              .traitWeights
+          : null;
+
+      if (weights) {
+        return {
+          weights,
+          ranges: this.evaluation.achievableTraitRange(details, isRanking),
+        };
       }
     } catch (error) {
       this.logger.warn(

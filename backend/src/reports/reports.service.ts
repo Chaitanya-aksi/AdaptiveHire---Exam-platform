@@ -50,6 +50,7 @@ import {
 } from './attempt-timing';
 import {
   buildReport,
+  expectedCorrectByChance,
   normaliseAbility,
   type ModuleSummary,
   type ProbeSummary,
@@ -1321,6 +1322,8 @@ export class ReportsService {
       order: { displayOrder: 'ASC' },
     });
 
+    const chance = await this.expectedByChance(session.id);
+
     // Ordered by the assessment's own display order so the report reads in the
     // order the candidate actually sat the sections.
     const ordered = configs
@@ -1345,6 +1348,9 @@ export class ReportsService {
           isObjective && ability !== null ? normaliseAbility(ability) : null,
         questionsAnswered: result.questionsAnswered,
         questionsCorrect: result.questionsCorrect,
+        expectedByChance: isObjective
+          ? (chance.get(result.moduleId) ?? null)
+          : null,
         questionCount,
         traits,
         consistency: this.moduleConsistency(traits),
@@ -1352,6 +1358,43 @@ export class ReportsService {
         legacyTraitModel,
       };
     });
+  }
+
+  /**
+   * Per module, how many of the questions actually served this session the
+   * candidate would be expected to answer correctly by guessing alone.
+   *
+   * Summed per question as `1 / options` rather than assumed from the option
+   * floor: the bank allows four to six options, so a module of six-option items
+   * puts chance well below a quarter, and quoting a quarter would overstate what
+   * guessing was worth to them.
+   *
+   * A question with no stored MCQ details contributes nothing — it is a trait
+   * item, or a row whose details were removed. Nothing here treats a missing
+   * question as a free one.
+   */
+  private async expectedByChance(
+    sessionId: string,
+  ): Promise<Map<string, number>> {
+    const answers = await this.responses.find({
+      where: { sessionId },
+      relations: { question: { mcqDetails: true } },
+    });
+
+    const byModule = new Map<string, number[]>();
+    for (const answer of answers) {
+      const options = answer.question?.mcqDetails?.options?.length ?? 0;
+      const counts = byModule.get(answer.moduleId) ?? [];
+      counts.push(options);
+      byModule.set(answer.moduleId, counts);
+    }
+
+    const expected = new Map<string, number>();
+    for (const [moduleId, counts] of byModule) {
+      const total = expectedCorrectByChance(counts);
+      if (total !== null) expected.set(moduleId, total);
+    }
+    return expected;
   }
 
   /**

@@ -176,15 +176,24 @@ function signed(weight: number): string {
 }
 
 function ModuleCard({ module }: { module: ReportModuleSummary }) {
+  const objective = module.scoringType === 'objective';
+
   return (
     <div className="report-module">
       <div className="spread">
         <div>
           <strong>{module.name}</strong>
           <div className="muted small">
-            {module.questionsAnswered} answered
-            {module.scoringType === 'objective' &&
-              ` · ${module.questionsCorrect} correct`}
+            {objective
+              ? `${module.questionsCorrect} of ${module.questionsAnswered} correct`
+              : `${module.questionsAnswered} answered`}
+            {/* What the questions were worth to a guesser, stated on every
+                objective section rather than only the weak ones. Shown
+                selectively it would read as an accusation; shown always it is
+                the scale the score sits on, and the reader decides. */}
+            {objective &&
+              module.expectedByChance !== null &&
+              ` · ${module.expectedByChance} expected by guessing alone`}
             {module.questionsAnswered > 0 &&
               module.questionsAnswered < module.questionCount &&
               ` · below the ${module.questionCount} this section asks for`}

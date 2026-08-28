@@ -91,6 +91,24 @@ export interface ModuleSummary {
   score: number | null;
   questionsAnswered: number;
   questionsCorrect: number;
+  /**
+   * Objective only: how many of the questions this module actually served the
+   * candidate would be expected to get right by guessing alone — the sum of
+   * `1 / options` over them. Null for trait modules, which have no right answer,
+   * and null for an objective module whose served questions could not be read.
+   *
+   * Shown next to `questionsCorrect` so a score is never read without the
+   * evidence underneath it. Four-option questions put chance at a quarter, but
+   * the bank allows up to six, so this is summed per question rather than
+   * assumed — telling a recruiter that 25% is chance when the candidate was
+   * served six-option items would understate what they actually did.
+   *
+   * Deliberately a count and not a verdict. Nothing here corrects the score,
+   * caps the recommendation or flags the attempt; it states what the questions
+   * were worth so the person reading can weigh it. That is the same division of
+   * labour as the proctoring signals.
+   */
+  expectedByChance: number | null;
   /** What the assessment asked for, so under-answering is visible. */
   questionCount: number;
   traits: ReportedTrait[];
@@ -176,6 +194,27 @@ const VIOLATION_LABEL: Record<ProctoringEventType, [string, string]> = {
     'multi-display detections',
   ],
 };
+
+/**
+ * How many of the questions served the candidate would be expected to answer
+ * correctly by guessing alone, given how many options each one carried.
+ *
+ * Summed as `1 / options` per question rather than assumed from the option
+ * floor. `MIN_OPTIONS` is four, so four-option items put chance at a quarter,
+ * but the bank allows six — and quoting a quarter to a recruiter whose
+ * candidate was served six-option items overstates what guessing was worth.
+ *
+ * Null when nothing could be read: an objective module that served no MCQ
+ * details has no chance level to state, and stating zero would claim that every
+ * correct answer was earned.
+ */
+export function expectedCorrectByChance(optionCounts: number[]): number | null {
+  const usable = optionCounts.filter((count) => count > 0);
+  if (usable.length === 0) return null;
+
+  const total = usable.reduce((sum, count) => sum + 1 / count, 0);
+  return round1(total);
+}
 
 /** Elo estimate onto the 0-100 reporting scale, clamped to the bank's range. */
 export function normaliseAbility(ability: number): number {

@@ -249,6 +249,199 @@ describe('AbilityEstimatorService', () => {
   });
 });
 
+describe('per-item trait normalisation', () => {
+  /**
+   * A deliberately skewed question, of the shape the whole starter bank turned
+   * out to have: three creditable options and one poor one, so picking blind
+   * still averages well above zero on the authoring scale.
+   */
+  const skewed = personalityDetails(BehavioralPattern.SITUATIONAL, [
+    { key: 'A', text: 'Best', traitWeights: { openness: 3 } },
+    { key: 'B', text: 'Good', traitWeights: { openness: 2 } },
+    { key: 'C', text: 'Silent', traitWeights: { conscientiousness: 1 } },
+    { key: 'D', text: 'Poor', traitWeights: { openness: -3 } },
+  ]);
+
+  /** Every ordering of `items` — the spec's own, so it checks the real one. */
+  function permute<T>(items: T[]): T[][] {
+    if (items.length <= 1) return [items.slice()];
+    return items.flatMap((item, i) =>
+      permute([...items.slice(0, i), ...items.slice(i + 1)]).map((tail) => [
+        item,
+        ...tail,
+      ]),
+    );
+  }
+
+  /** Answers `details` with `key`, applying the weights and the scale together. */
+  function choose(
+    state: ModuleRunState,
+    details: PersonalityQuestionDetails,
+    key: string,
+    isRanking = false,
+  ): void {
+    const { traitWeights } = isRanking
+      ? evaluation.evaluateRanking(details, key.split(''))
+      : evaluation.evaluatePersonality(details, key);
+
+    estimator.applyTraitWeights(
+      state.traitTallies,
+      traitWeights,
+      evaluation.achievableTraitRange(details, isRanking),
+    );
+  }
+
+  it('measures the range against every answer, silence included', () => {
+    const range = evaluation.achievableTraitRange(skewed, false);
+
+    // Option C says nothing about openness, which is a contribution of zero and
+    // one of the four answers on offer — so it sits inside the range and pulls
+    // the chance point down. (3 + 2 + 0 - 3) / 4 = 0.5.
+    expect(range.openness).toEqual({ chance: 0.5, best: 3, worst: -3 });
+  });
+
+  it('puts a random responder at exactly 50 where the old scale put them at 58', () => {
+    // The whole reason this exists, and the one property that has to hold
+    // exactly. Averaged over the four answers the question offers, a blind
+    // choice contributes +0.5 on the -3..+3 authoring scale, which the old
+    // fixed rescaling reported as 58.3/100 — a pass mark for answering at
+    // random. Against what the question actually made possible it is 50.
+    const scores = ['A', 'B', 'C', 'D'].map((key) => {
+      const state = traitState();
+      choose(state, skewed, key);
+      return estimator.traitScores(state).openness.score;
+    });
+
+    const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    expect(mean).toBeCloseTo(50, 5);
+
+    // And the same four answers on the pre-change scale, for the contrast.
+    const legacy = ['A', 'B', 'C', 'D'].map((key) => {
+      const state = traitState();
+      const { traitWeights } = evaluation.evaluatePersonality(skewed, key);
+      estimator.applyTraitWeights(state.traitTallies, traitWeights);
+      return estimator.traitScores(state).openness.score;
+    });
+    expect(
+      legacy.reduce((sum, score) => sum + score, 0) / legacy.length,
+    ).toBeCloseTo(58.3, 1);
+  });
+
+  it('reaches both extremes on a question with symmetric options', () => {
+    const balanced = personalityDetails(BehavioralPattern.SITUATIONAL, [
+      { key: 'A', text: 'Best', traitWeights: { openness: 3 } },
+      { key: 'B', text: 'Good', traitWeights: { openness: 1 } },
+      { key: 'C', text: 'Poor', traitWeights: { openness: -1 } },
+      { key: 'D', text: 'Worst', traitWeights: { openness: -3 } },
+    ]);
+
+    const best = traitState();
+    const worst = traitState();
+    for (let i = 0; i < 4; i += 1) {
+      choose(best, balanced, 'A');
+      choose(worst, balanced, 'D');
+    }
+
+    expect(estimator.traitScores(best).openness.score).toBe(100);
+    expect(estimator.traitScores(worst).openness.score).toBe(0);
+  });
+
+  it('stops short of 100 where a question has more room down than up', () => {
+    // `skewed` runs +3 to -3 around a chance point of +0.5, so there is 2.5 of
+    // room above chance and 3.5 below. One slope has to serve both, and it is
+    // sized by the wider one — otherwise the mapping bends and the 50-point
+    // stops meaning chance. Answering as well as the question allows therefore
+    // reads as 85.7, and that is the honest number: this question does not
+    // offer as far up as it does down.
+    const best = traitState();
+    for (let i = 0; i < 4; i += 1) choose(best, skewed, 'A');
+
+    expect(estimator.traitScores(best).openness.score).toBeCloseTo(85.7, 1);
+    // The bad end is the wider one, so it still lands exactly on the floor.
+    const worst = traitState();
+    for (let i = 0; i < 4; i += 1) choose(worst, skewed, 'D');
+    expect(estimator.traitScores(worst).openness.score).toBe(0);
+  });
+
+  it('holds the 50-point for a ranking question too', () => {
+    // Every ordering is equally likely under a blind answer, so the mean across
+    // all 24 of them has to land on 50 — the position factors are symmetric
+    // about zero, which is what makes a ranking's chance value exactly zero.
+    const ranked = personalityDetails(BehavioralPattern.RANKING, [
+      { key: 'A', text: 'a', traitWeights: { openness: 3 } },
+      { key: 'B', text: 'b', traitWeights: { openness: 2 } },
+      { key: 'C', text: 'c', traitWeights: { openness: 1 } },
+      { key: 'D', text: 'd', traitWeights: { openness: 3 } },
+    ]);
+
+    const orders = ['ABCD', 'ABDC', 'ACBD', 'ACDB', 'ADBC', 'ADCB'];
+    const scores = orders.map((order) => {
+      const state = traitState();
+      choose(state, ranked, order, true);
+      return estimator.traitScores(state).openness.score;
+    });
+
+    expect(Math.max(...scores)).toBeGreaterThan(50);
+    expect(Math.min(...scores)).toBeLessThan(50);
+    expect(
+      evaluation.achievableTraitRange(ranked, true).openness.chance,
+    ).toBeCloseTo(0, 10);
+
+    // Averaged over every one of the 24 orderings, not just the six above.
+    const all = permute(['A', 'B', 'C', 'D']).map((order) => {
+      const state = traitState();
+      choose(state, ranked, order.join(''), true);
+      return estimator.traitScores(state).openness.score;
+    });
+    expect(all.reduce((sum, s) => sum + s, 0) / all.length).toBeCloseTo(50, 5);
+  });
+
+  it('leaves count, confidence and consistency exactly where they were', () => {
+    // The scale changed; what counts as evidence did not. Confidence drives
+    // trait coverage in the selector and the trait module's stop condition, so
+    // a drifting count here would quietly change how long a section runs.
+    const withRange = traitState();
+    const without = traitState();
+    for (const key of ['A', 'B', 'D']) {
+      choose(withRange, skewed, key);
+      const { traitWeights } = evaluation.evaluatePersonality(skewed, key);
+      estimator.applyTraitWeights(without.traitTallies, traitWeights);
+    }
+
+    expect(withRange.traitTallies.openness.count).toBe(
+      without.traitTallies.openness.count,
+    );
+    expect(estimator.traitScores(withRange).openness.confidence).toBe(
+      estimator.traitScores(without).openness.confidence,
+    );
+    expect(estimator.traitScores(withRange).openness.consistency).toBe(
+      estimator.traitScores(without).openness.consistency,
+    );
+  });
+
+  it('charges nothing for a question the clock took away', () => {
+    // An unanswered question passes no range, so it moves neither the score nor
+    // its scale. Holding a candidate to the chance value of a question they
+    // never saw the end of would read as having answered it badly.
+    const state = traitState();
+    choose(state, skewed, 'A');
+    const answered = estimator.traitScores(state).openness.score;
+
+    estimator.applyTraitWeights(state.traitTallies, {}, undefined);
+    expect(estimator.traitScores(state).openness.score).toBe(answered);
+  });
+
+  it('keeps scoring a tally recorded before the scale existed', () => {
+    // A stored result or an in-flight Redis session carries no chanceSum.
+    // Rescoring it against a scale its questions were never measured on would
+    // change a number a recruiter may already have read.
+    const state = traitState();
+    state.traitTallies.openness = { sum: 2, count: 1, sumSquares: 4 };
+
+    expect(estimator.traitScores(state).openness.score).toBe(83.3);
+  });
+});
+
 describe('StoppingEngineService', () => {
   it('never stops before the configured minimum, however confident', () => {
     const state = objectiveState({ questionCount: 8 });

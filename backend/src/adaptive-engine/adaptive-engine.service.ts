@@ -311,7 +311,18 @@ export class AdaptiveEngineService {
           ? this.evaluation.evaluateRanking(details, answer.selectedOptions)
           : this.evaluation.evaluatePersonality(details, answer.selectedOption);
 
-    this.estimator.applyTraitWeights(state.traitTallies, result.traitWeights);
+    // No range for a question the clock took away — the candidate never had
+    // the choice, so there is no chance value to hold them to.
+    this.estimator.applyTraitWeights(
+      state.traitTallies,
+      result.traitWeights,
+      answer.kind === 'unanswered'
+        ? undefined
+        : this.evaluation.achievableTraitRange(
+            details,
+            details.pattern === BehavioralPattern.RANKING,
+          ),
+    );
     state.answered += 1;
     // Counted even when unanswered: the pattern was put to the candidate, and
     // serving the same shape again would not balance the coverage.
