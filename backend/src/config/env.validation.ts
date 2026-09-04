@@ -13,8 +13,14 @@ export const envValidationSchema = Joi.object({
 
   // Defaults to debug in development and info in production; set explicitly to
   // turn the volume down on a noisy environment.
+  //
+  // Empty is allowed and means the same as unset — `configuration.ts` maps ''
+  // to undefined. Without this the app refuses to boot on a verbatim copy of
+  // `.env.example`, which ships the key with no value, and on any hosting
+  // dashboard where the field was added and left blank.
   LOG_LEVEL: Joi.string()
     .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
+    .allow('')
     .optional(),
 
   // Optional throughout: with no DSN, error tracking is simply off, so a local

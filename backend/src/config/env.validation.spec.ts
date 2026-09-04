@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type * as Joi from 'joi';
 import { envValidationSchema } from './env.validation';
 
@@ -88,5 +90,36 @@ describe('envValidationSchema', () => {
     it.each(['0', '99'])('refuses %s', (max) => {
       expect(validate({ POSTGRES_POOL_MAX: max }).error).toBeDefined();
     });
+  });
+
+  /**
+   * Copying `.env.example` is the documented way to start, so every value it
+   * ships has to be accepted. It shipped `LOG_LEVEL=` against a schema that
+   * allowed the named levels but not an empty string, which meant a verbatim
+   * copy refused to boot — and the same applies to any hosting dashboard where
+   * the field is added and left blank.
+   */
+  it('accepts .env.example exactly as shipped', () => {
+    const text = readFileSync(
+      resolve(__dirname, '../../../.env.example'),
+      'utf8',
+    );
+
+    const env: Record<string, string> = {};
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+      if (match) env[match[1]] = match[2];
+    }
+
+    expect(Object.keys(env).length).toBeGreaterThan(20);
+
+    // `allowUnknown` mirrors @nestjs/config's own default: the shared root .env
+    // legitimately carries VITE_* keys the backend never reads.
+    const { error } = envValidationSchema.validate(env, {
+      abortEarly: false,
+      allowUnknown: true,
+    });
+
+    expect(error?.message).toBeUndefined();
   });
 });
