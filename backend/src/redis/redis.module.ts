@@ -8,6 +8,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { connectionErrorReporter } from './connection-error-log';
+import {
+  describeRedisTarget,
+  redisConnectionOptions,
+} from './redis-connection';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
@@ -29,17 +33,14 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
       provide: REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const host = config.getOrThrow<string>('redis.host');
-        const port = config.getOrThrow<number>('redis.port');
+        // Shared with BullMQ via `app.module.ts` so credentials and TLS cannot
+        // be configured for one connection and missed on the other.
+        const options = redisConnectionOptions(config);
+        const target = describeRedisTarget(options);
+        const managed = Boolean(options.password || options.tls);
         const logger = new Logger('Redis');
 
-        const client = new Redis({
-          host,
-          port,
-          // Matches what BullMQ requires of its own connections, so both
-          // behave the same way when Redis goes away mid-request.
-          maxRetriesPerRequest: null,
-        });
+        const client = new Redis(options);
 
         // Without an 'error' listener ioredis prints a bare
         // "Unhandled error event" stack that names neither Redis nor the
@@ -47,14 +48,20 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
         const errors = connectionErrorReporter(
           logger,
           (code) =>
-            `Cannot reach Redis at ${host}:${port} (${code}). ` +
-            `Is it running? \`docker compose up -d redis\``,
+            `Cannot reach Redis at ${target} (${code}). ` +
+            // Pointing at docker compose is actively misleading once the host
+            // is a managed provider, which is exactly when this fires.
+            (managed
+              ? 'Check REDIS_URL — host, credentials, and rediss:// for TLS.'
+              : 'Is it running? `docker compose up -d redis`'),
         );
         client.on('error', errors.report);
 
         client.on('ready', () => {
           errors.reset();
-          logger.log(`Connected to Redis at ${host}:${port}`);
+          logger.log(
+            `Connected to Redis at ${target}${options.tls ? ' (TLS)' : ''}`,
+          );
         });
 
         return client;

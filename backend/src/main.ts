@@ -6,13 +6,14 @@ const sentryEnabled = initSentry();
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // Holds start-up logs until the pino logger is attached below, so the first
     // few lines of every boot are not in a different format from the rest.
     bufferLogs: true,
@@ -22,6 +23,18 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
   const logger = app.get(Logger);
+
+  // A hosting platform terminates TLS in front of the app and forwards the real
+  // client address in `X-Forwarded-For`. Without this the throttler reads the
+  // proxy's address for every request, so one shared bucket rate-limits the
+  // whole room and candidates starting together 429 each other.
+  //
+  // `1`, not `true`: trusting every hop lets a client prepend its own
+  // `X-Forwarded-For` and opt out of the rate limit entirely.
+  if (config.get<boolean>('trustProxy')) {
+    app.set('trust proxy', 1);
+    logger.log('Trusting one proxy hop for the client address');
+  }
 
   app.setGlobalPrefix('api');
   app.use(helmet());

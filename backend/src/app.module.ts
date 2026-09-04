@@ -24,6 +24,7 @@ import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
 import { ProctoringModule } from './proctoring/proctoring.module';
 import { QuestionBankModule } from './question-bank/question-bank.module';
 import { QueueErrorsModule } from './queues/queue-errors.module';
+import { redisConnectionOptions } from './redis/redis-connection';
 import { RedisModule } from './redis/redis.module';
 import { ReportsModule } from './reports/reports.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -44,18 +45,33 @@ import { UsersModule } from './users/users.module';
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres' as const,
-        host: config.getOrThrow<string>('database.host'),
-        port: config.getOrThrow<number>('database.port'),
-        username: config.getOrThrow<string>('database.username'),
-        password: config.getOrThrow<string>('database.password'),
-        database: config.getOrThrow<string>('database.database'),
-        entities,
-        // Schema changes go through migrations, always.
-        synchronize: false,
-        migrationsRun: false,
-      }),
+      useFactory: (config: ConfigService) => {
+        const caCert = config.get<string>('database.caCert');
+
+        return {
+          type: 'postgres' as const,
+          host: config.getOrThrow<string>('database.host'),
+          port: config.getOrThrow<number>('database.port'),
+          username: config.getOrThrow<string>('database.username'),
+          password: config.getOrThrow<string>('database.password'),
+          database: config.getOrThrow<string>('database.database'),
+          ssl: config.get<boolean>('database.ssl')
+            ? // With the CA pinned the certificate is actually verified.
+              // Without one the link is still encrypted, but the server is
+              // unauthenticated — fine over a trusted network, not over the
+              // public internet, so this mirrors whichever you supplied.
+              { ca: caCert || undefined, rejectUnauthorized: Boolean(caCert) }
+            : false,
+          // Managed free plans cap connections server-side and offer no
+          // pooler. The cap leaves room for a migration or psql session to
+          // connect alongside the running app rather than being refused.
+          extra: { max: config.getOrThrow<number>('database.poolMax') },
+          entities,
+          // Schema changes go through migrations, always.
+          synchronize: false,
+          migrationsRun: false,
+        };
+      },
     }),
     // Registered at the root because the audit interceptor is global — it has
     // no module of its own to hang the repository off.
@@ -79,10 +95,9 @@ import { UsersModule } from './users/users.module';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.getOrThrow<string>('redis.host'),
-          port: config.getOrThrow<number>('redis.port'),
-        },
+        // Same factory as the application's own client in `RedisModule`, so
+        // credentials and TLS cannot be set for one and forgotten on the other.
+        connection: redisConnectionOptions(config),
       }),
     }),
     RedisModule,

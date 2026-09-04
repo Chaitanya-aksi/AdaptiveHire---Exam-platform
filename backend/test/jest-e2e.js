@@ -28,4 +28,20 @@ module.exports = {
    * one line, and the whole e2e run is well under a minute either way.
    */
   maxWorkers: 1,
+
+  /*
+   * Jest's default is 5s, and it applies to hooks as well as tests.
+   *
+   * Every test in this suite finishes well inside that, but `afterAll`'s
+   * `app.close()` does not always: closing a Nest app drains the TypeORM pool,
+   * the ioredis client and three BullMQ workers, and under load that
+   * occasionally runs past five seconds. The result was a run reporting one or
+   * two failed *suites* while still reporting 196 of 196 tests passed, landing
+   * on a different suite each time — which reads as a real, moving bug and is
+   * not one.
+   *
+   * Raised rather than removed: a teardown that genuinely hangs should still
+   * fail the run rather than block it forever.
+   */
+  testTimeout: 30_000,
 };
