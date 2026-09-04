@@ -123,11 +123,15 @@ describe('Step 10 — Cohort export', () => {
   it('honours the order it was given', async () => {
     // The file has to match the table it came from, and the table's order is
     // whatever the recruiter sorted it into.
-    const ada = await download([sessionOne, sessionTwo]);
-    const grace = await download([sessionTwo, sessionOne]);
+    const johnFirst = await download([sessionOne, sessionTwo]);
+    const graceFirst = await download([sessionTwo, sessionOne]);
 
-    expect(ada.indexOf('Ada')).toBeLessThan(ada.indexOf('Grace'));
-    expect(grace.indexOf('Grace')).toBeLessThan(grace.indexOf('Ada'));
+    expect(johnFirst.indexOf('John Doe')).toBeLessThan(
+      johnFirst.indexOf('Grace Hopper'),
+    );
+    expect(graceFirst.indexOf('Grace Hopper')).toBeLessThan(
+      graceFirst.indexOf('John Doe'),
+    );
   });
 
   it('exports only the rows asked for', async () => {
