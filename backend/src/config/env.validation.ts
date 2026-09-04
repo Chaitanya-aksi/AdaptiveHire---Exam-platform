@@ -40,8 +40,11 @@ export const envValidationSchema = Joi.object({
   // The provider's CA, as PEM or base64 of the same. Without it the connection
   // is encrypted but the server is unauthenticated — see `configuration.ts`.
   POSTGRES_CA_CERT: Joi.string().allow('').default(''),
-  // Free managed plans cap connections server-side and offer no pooler.
-  POSTGRES_POOL_MAX: Joi.number().min(1).max(50).default(5),
+  // TypeORM's own default. Lower it on a hosted deployment, where free plans
+  // cap connections server-side and offer no pooler — but not below about 10
+  // locally: concurrent `/auth/refresh` holds a connection through an argon2
+  // hash, and a small pool then cannot drain inside the e2e teardown window.
+  POSTGRES_POOL_MAX: Joi.number().min(1).max(50).default(10),
 
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),

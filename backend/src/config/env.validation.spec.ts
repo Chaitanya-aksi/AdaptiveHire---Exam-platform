@@ -83,8 +83,12 @@ describe('envValidationSchema', () => {
   });
 
   describe('POSTGRES_POOL_MAX', () => {
-    it('defaults to 5, well under a free plan ceiling of 20', () => {
-      expect(validate({}).value.POSTGRES_POOL_MAX).toBe(5);
+    // Deliberately TypeORM's own default rather than the lower value a hosted
+    // deployment wants: at 5 the refresh-token e2e suite cannot drain its pool
+    // inside jest's teardown window, because each refresh holds a connection
+    // through an argon2 hash. The hosted value belongs in that host's env.
+    it('defaults to 10', () => {
+      expect(validate({}).value.POSTGRES_POOL_MAX).toBe(10);
     });
 
     it.each(['0', '99'])('refuses %s', (max) => {

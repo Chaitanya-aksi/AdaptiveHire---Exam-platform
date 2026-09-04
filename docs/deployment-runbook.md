@@ -76,7 +76,7 @@ docker compose, which needs no TLS and sits behind no proxy.
 |---|---|---|
 | `POSTGRES_SSL` | `true` | Aiven refuses plaintext |
 | `POSTGRES_CA_CERT` | base64 of the CA | Without it the server is unauthenticated |
-| `POSTGRES_POOL_MAX` | `5` | Free plan allows 20 connections, no pooler |
+| `POSTGRES_POOL_MAX` | `5` | Free plan allows 20 connections, no pooler. **Must be set** — the default is 10, which plus a migration run reaches the ceiling |
 | `REDIS_URL` | the `rediss://` URL | Carries credentials and turns TLS on |
 | `COOKIE_SECURE` | `true` | Required by `COOKIE_SAMESITE=none` |
 | `COOKIE_SAMESITE` | `none` | SPA and API are different sites |
@@ -88,6 +88,14 @@ docker compose, which needs no TLS and sits behind no proxy.
 than discovered in production, because its symptom is the worst kind: login
 appears to succeed and every session dies at the next page load, with no error
 anywhere.
+
+**`POSTGRES_POOL_MAX=5` is a real constraint, not free headroom.** Setting it
+locally makes the refresh-token e2e suite fail its teardown: every
+`/auth/refresh` holds a database connection through a 64 MiB argon2 hash, so a
+small pool queues under concurrent auth load and cannot drain. On 0.1 CPU that
+contention is worse, not better. The pool cap is required by the connection
+ceiling, so the thing to fix is the hash cost — **LOAD-09 is a prerequisite for
+running a real cohort on this plan, not an optimisation.**
 
 **If you own a domain, prefer subdomains.** Point `app.example.com` at Catalyst
 and `api.example.com` at Render: they are then same-site, `COOKIE_SAMESITE` stays

@@ -18,10 +18,21 @@ export interface AppConfig {
      */
     caCert: string;
     /**
-     * Connections this process may open. Deliberately low: free managed plans
-     * cap connections server-side and offer no pooler, and a single instance
-     * cannot execute more than a handful of queries at once anyway. Leaving
-     * headroom is what lets a migration or a psql session in alongside the app.
+     * Connections this process may open.
+     *
+     * Defaults to TypeORM's own 10, which is what local runs and the e2e suite
+     * want. A hosted deployment should lower it — free managed plans cap
+     * connections server-side and offer no pooler, so 10 here plus a migration
+     * run from a laptop reaches a 20-connection ceiling, where new connections
+     * are refused rather than queued.
+     *
+     * Do not lower the *default* to buy that headroom. At 5 the refresh-token
+     * suite's teardown stops fitting in jest's 5s hook timeout: every
+     * `/auth/refresh` holds a connection through a 64 MiB argon2 hash, so a
+     * small pool queues under concurrent auth load and the pool cannot drain.
+     * That is a real property of the workload, not a test artefact — it is the
+     * same contention LOAD-09 addresses by taking token hashing off the
+     * password cost curve.
      */
     poolMax: number;
   };
@@ -111,7 +122,7 @@ export default (): AppConfig => ({
     database: process.env.POSTGRES_DB ?? 'adaptivehire',
     ssl: process.env.POSTGRES_SSL === 'true',
     caCert: readCaCert(process.env.POSTGRES_CA_CERT),
-    poolMax: parseInt(process.env.POSTGRES_POOL_MAX ?? '5', 10),
+    poolMax: parseInt(process.env.POSTGRES_POOL_MAX ?? '10', 10),
   },
   redis: {
     host: process.env.REDIS_HOST ?? 'localhost',
