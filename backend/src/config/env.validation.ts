@@ -55,6 +55,13 @@ export const envValidationSchema = Joi.object({
     .allow('')
     .default(''),
 
+  // Key namespace for every BullMQ queue. Anything sharing this Redis *and*
+  // this prefix will consume each other's jobs, so a test run takes its own —
+  // see `configuration.ts`. Leave it alone for real work.
+  BULL_PREFIX: Joi.string()
+    .pattern(/^[A-Za-z0-9_:-]+$/)
+    .default('bull'),
+
   JWT_ACCESS_SECRET: Joi.string().min(16).required(),
   JWT_ACCESS_TTL: Joi.string().default('15m'),
   JWT_REFRESH_SECRET: Joi.string().min(16).required(),

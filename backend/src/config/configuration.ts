@@ -45,6 +45,19 @@ export interface AppConfig {
      */
     url: string;
   };
+  /**
+   * Key namespace for every BullMQ queue.
+   *
+   * A queue is shared by whoever points at it: any worker on this Redis with
+   * the same prefix will consume jobs enqueued by anyone else, whatever that
+   * enqueuing process was configured to do. That is how an e2e run's
+   * `@e2e.local` invitations reached a developer's running dev server and went
+   * out through live SMTP, blocking the sending account for real candidates.
+   *
+   * Test runs therefore take their own namespace. Leave it at the default
+   * anywhere the jobs are meant to be real work.
+   */
+  bullPrefix: string;
   jwt: {
     accessSecret: string;
     accessTtl: string;
@@ -129,6 +142,7 @@ export default (): AppConfig => ({
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
     url: process.env.REDIS_URL ?? '',
   },
+  bullPrefix: process.env.BULL_PREFIX ?? 'bull',
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? '',
     accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',

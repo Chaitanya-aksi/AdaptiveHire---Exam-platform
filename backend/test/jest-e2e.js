@@ -16,12 +16,12 @@ module.exports = {
   globalTeardown: '<rootDir>/global-teardown.ts',
 
   /*
-   * Blanks MAIL_HOST before anything imports AppModule, so a run cannot push
-   * its `@e2e.local` invitations through real SMTP. See the file itself — the
-   * failure it prevents is a provider reputation block on the sending account,
-   * which takes real invitations down with it.
+   * Runs before anything imports AppModule, and must stay that way: it blanks
+   * MAIL_HOST and moves the BullMQ queues into their own key namespace, so a
+   * run can neither send its `@e2e.local` invitations itself nor hand them to
+   * a real worker sharing this Redis. Both leaks have happened; see the file.
    */
-  setupFiles: ['<rootDir>/no-real-mail.ts'],
+  setupFiles: ['<rootDir>/e2e-isolation.ts'],
 
   /*
    * Serial, because every suite shares one database.

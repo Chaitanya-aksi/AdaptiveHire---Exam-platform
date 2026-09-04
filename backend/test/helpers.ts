@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
-import { E2E_EMAIL_DOMAIN } from './e2e.constants';
+import { E2E_BULL_PREFIX, E2E_EMAIL_DOMAIN } from './e2e.constants';
 
 export const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'ChangeMe!2345';
 export const SEEDED_RECRUITER = 'recruiter@adaptivehire.local';
@@ -56,21 +56,39 @@ export async function createTestApp(
   await app.init();
 
   /*
-   * Defence in depth over `test/no-real-mail.ts`, which blanks MAIL_HOST before
-   * the config module loads. If that ever stops working — a Jest config change
-   * dropping `setupFiles`, or @nestjs/config changing how it merges
-   * `process.env` — the suites would go straight back to pushing dozens of
-   * `@e2e.local` invitations through real SMTP and blocking the sending
-   * account. Failing the run is the mild outcome; sending them is not.
+   * Defence in depth over `test/e2e-isolation.ts`, which sets both of these
+   * before the config module loads. If that ever stops working — a Jest config
+   * change dropping `setupFiles`, or @nestjs/config changing how it merges
+   * `process.env` — the suites go back to mailing dozens of `@e2e.local`
+   * invitations for real, or to handing them to whatever worker shares this
+   * Redis. Failing the run is the mild outcome; either alternative is not.
    */
-  const mailHost = app.get(ConfigService).get<string>('mail.host');
+  const config = app.get(ConfigService);
+  const leaks: string[] = [];
+
+  const mailHost = config.get<string>('mail.host');
   if (mailHost) {
+    leaks.push(
+      `MAIL_HOST is "${mailHost}" — this run would send its @e2e.local ` +
+        'invitations through a real SMTP server, which gets the account ' +
+        'reputation-blocked for real candidates too.',
+    );
+  }
+
+  const bullPrefix = config.get<string>('bullPrefix');
+  if (bullPrefix !== E2E_BULL_PREFIX) {
+    leaks.push(
+      `BULL_PREFIX is "${bullPrefix}", not "${E2E_BULL_PREFIX}" — test jobs ` +
+        'would land on the shared queue, where any running dev server or ' +
+        'deployed worker will pick them up and act on them for real.',
+    );
+  }
+
+  if (leaks.length > 0) {
     await app.close();
     throw new Error(
-      `Refusing to run e2e with a real MAIL_HOST ("${mailHost}"). Test suites ` +
-        'create dozens of @e2e.local invitations, and sending those through a ' +
-        'real SMTP server gets the account reputation-blocked. Check that ' +
-        "jest-e2e.js still lists setupFiles: ['<rootDir>/no-real-mail.ts'].",
+      `Refusing to run e2e without isolation:\n  - ${leaks.join('\n  - ')}\n` +
+        "Check that jest-e2e.js still lists setupFiles: ['<rootDir>/e2e-isolation.ts'].",
     );
   }
 

@@ -1,9 +1,69 @@
+import Redis from 'ioredis';
 import dataSource from '../src/database/data-source';
 import {
+  E2E_BULL_PREFIX,
   E2E_EMAIL_DOMAIN,
   E2E_ORG_PREFIX,
   E2E_QUESTION_TAGS,
 } from './e2e.constants';
+
+/**
+ * Drops the run's BullMQ namespace.
+ *
+ * The suites enqueue invite jobs their short-lived app never gets round to
+ * draining, so each run leaves a few dozen jobs sitting in `wait`. Under the
+ * e2e prefix nothing will ever consume them — that is the point — but they
+ * would otherwise pile up in Redis run after run.
+ *
+ * Scoped by prefix, and hard-coded to the e2e one rather than read from the
+ * environment: this file is the backstop, and a backstop that deletes whatever
+ * prefix it happens to find could delete the real queues.
+ */
+async function clearE2eQueues(): Promise<void> {
+  const url = process.env.REDIS_URL?.trim();
+  const redis = url
+    ? new Redis(url, { maxRetriesPerRequest: null })
+    : new Redis({
+        host: process.env.REDIS_HOST ?? 'localhost',
+        port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+        maxRetriesPerRequest: null,
+      });
+
+  try {
+    let cursor = '0';
+    let removed = 0;
+    do {
+      const [next, keys] = await redis.scan(
+        cursor,
+        'MATCH',
+        `${E2E_BULL_PREFIX}:*`,
+        'COUNT',
+        500,
+      );
+      cursor = next;
+      if (keys.length > 0) {
+        // UNLINK rather than DEL: reclaiming happens off the main thread, and
+        // a teardown has no reason to block Redis for anyone else using it.
+        await redis.unlink(...keys);
+        removed += keys.length;
+      }
+    } while (cursor !== '0');
+
+    if (removed > 0) {
+      console.log(
+        `[e2e teardown] Removed ${removed} ${E2E_BULL_PREFIX} key(s).`,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `\n[e2e teardown] Could not clear ${E2E_BULL_PREFIX} keys: ${
+        (error as Error).message
+      }`,
+    );
+  } finally {
+    redis.disconnect();
+  }
+}
 
 /**
  * Runs once after the whole e2e run, including when suites fail.
@@ -20,6 +80,10 @@ import {
  * tagged ones are removed explicitly.
  */
 export default async function globalTeardown(): Promise<void> {
+  // First, and not inside the database block below: that block returns early
+  // when Postgres is unreachable, which would silently skip this.
+  await clearE2eQueues();
+
   // A failure here must not mask a genuine test failure, so nothing throws.
   try {
     await dataSource.initialize();
