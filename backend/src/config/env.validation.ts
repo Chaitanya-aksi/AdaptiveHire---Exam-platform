@@ -28,9 +28,23 @@ export const envValidationSchema = Joi.object({
   POSTGRES_USER: Joi.string().required(),
   POSTGRES_PASSWORD: Joi.string().required(),
   POSTGRES_DB: Joi.string().required(),
+  // Managed Postgres refuses plaintext connections; local compose has no
+  // certificate to offer, so this stays off by default.
+  POSTGRES_SSL: Joi.boolean().default(false),
+  // The provider's CA, as PEM or base64 of the same. Without it the connection
+  // is encrypted but the server is unauthenticated — see `configuration.ts`.
+  POSTGRES_CA_CERT: Joi.string().allow('').default(''),
+  // Free managed plans cap connections server-side and offer no pooler.
+  POSTGRES_POOL_MAX: Joi.number().min(1).max(50).default(5),
 
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
+  // Set by managed providers, credentials included; `rediss://` means TLS.
+  // Takes precedence over REDIS_HOST/REDIS_PORT when present.
+  REDIS_URL: Joi.string()
+    .uri({ scheme: ['redis', 'rediss'] })
+    .allow('')
+    .default(''),
 
   JWT_ACCESS_SECRET: Joi.string().min(16).required(),
   JWT_ACCESS_TTL: Joi.string().default('15m'),
@@ -40,6 +54,15 @@ export const envValidationSchema = Joi.object({
   AUTH_REFRESH_GRACE_SECONDS: Joi.number().min(0).max(300).default(30),
 
   COOKIE_SECURE: Joi.boolean().default(false),
+
+  // `none` is what a split deployment needs — the SPA and the API are then
+  // different sites and the browser withholds a `lax` cookie without saying so.
+  // It requires COOKIE_SECURE; that pairing is enforced below, on the object.
+  COOKIE_SAMESITE: Joi.string().valid('lax', 'strict', 'none').default('lax'),
+
+  // True behind any PaaS proxy, so the rate limiter reads the real client
+  // address instead of bucketing every candidate together.
+  TRUST_PROXY: Joi.boolean().default(false),
 
   THROTTLE_TTL_SECONDS: Joi.number().default(60),
   THROTTLE_LIMIT: Joi.number().default(120),
@@ -61,4 +84,25 @@ export const envValidationSchema = Joi.object({
   MAIL_USER: Joi.string().allow('').default(''),
   MAIL_PASS: Joi.string().allow('').default(''),
   MAIL_FROM: Joi.string().default('AdaptiveHire <no-reply@adaptivehire.local>'),
-});
+})
+  // Every current browser drops a `SameSite=None` cookie that is not also
+  // `Secure`, so the pair is refused at boot rather than found in production —
+  // its symptom is the worst kind: login appears to succeed, and every session
+  // dies silently at the next page load with no error anywhere.
+  //
+  // Checked here on the whole object rather than with `.when()` on the key,
+  // because a `then: Joi.valid(...)` *adds* to the values the base schema
+  // already allows instead of narrowing them — the rule silently passed
+  // everything. This also runs after defaults are applied, so an unset
+  // COOKIE_SECURE is correctly read as false.
+  .custom((env: Record<string, unknown>, helpers) => {
+    if (env.COOKIE_SAMESITE === 'none' && env.COOKIE_SECURE !== true) {
+      return helpers.message({
+        custom:
+          'COOKIE_SAMESITE=none requires COOKIE_SECURE=true — browsers drop a ' +
+          'SameSite=None cookie that is not Secure, which signs every user out ' +
+          'on their next page load.',
+      });
+    }
+    return env;
+  });

@@ -108,7 +108,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.auth.logout(userId);
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    res.clearCookie(REFRESH_COOKIE_NAME, this.refreshCookieOptions());
   }
 
   @Get('me')
@@ -123,18 +123,36 @@ export class AuthController {
   }
 
   /**
+   * The attributes the refresh cookie is written with.
+   *
+   * `clearCookie` has to be given the same `secure`, `sameSite` and `path`, or
+   * the browser treats it as a different cookie and leaves the original in
+   * place — so both sites read from here rather than repeating the literals.
+   *
+   * `sameSite` is configurable because a split deployment puts the SPA and the
+   * API on different sites, where a `lax` cookie is silently withheld and every
+   * session dies on the next page load. `none` without `secure` is refused at
+   * boot in `env.validation.ts`.
+   */
+  private refreshCookieOptions(): CookieOptions {
+    return {
+      httpOnly: true,
+      secure: this.config.get<boolean>('cookieSecure') ?? false,
+      sameSite:
+        this.config.get<'lax' | 'strict' | 'none'>('cookieSameSite') ?? 'lax',
+      path: REFRESH_COOKIE_PATH,
+    };
+  }
+
+  /**
    * The refresh token goes out as an httpOnly cookie only — never in the JSON
    * body — so page scripts can't read it.
    */
   private respondWithTokens(result: AuthResult, res: Response) {
-    const options: CookieOptions = {
-      httpOnly: true,
-      secure: this.config.get<boolean>('cookieSecure') ?? false,
-      sameSite: 'lax',
-      path: REFRESH_COOKIE_PATH,
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, {
+      ...this.refreshCookieOptions(),
       maxAge: 7 * 24 * 60 * 60 * 1000,
-    };
-    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, options);
+    });
     return { accessToken: result.accessToken, user: result.user };
   }
 }
