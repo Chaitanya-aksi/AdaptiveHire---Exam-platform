@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { MailService } from '../../mail/mail.service';
@@ -95,5 +95,44 @@ export class InviteEmailsProcessor extends WorkerHost {
     this.logger.log(
       `Email (${data.kind}) handled for ${data.to} (job ${job.id})`,
     );
+  }
+
+  /**
+   * Says out loud that an email did not go out.
+   *
+   * Without this the most important failures were the quietest ones. The jobs
+   * carrying a secret — a reset link, a generated password — are enqueued with
+   * `removeOnFail: true` so the payload is not left sitting in Redis after the
+   * attempts run out, and that is right; but it also deleted the only evidence
+   * the send had ever been tried. A blocked SMTP account therefore looked
+   * identical to a working one from the server's side: the API answered 204, the
+   * reset token was written, and nothing anywhere said the mail had bounced.
+   *
+   * So the failure is logged where the payload is not. The kind, the recipient
+   * and the SMTP server's own words are what make the cause diagnosable —
+   * "550 5.4.6 Unusual sending activity detected" names the problem outright —
+   * and none of them are the secret. `job.data.resetUrl` and `job.data.password`
+   * are deliberately never read here.
+   */
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<OutboundEmailJob> | undefined, error: Error): void {
+    const kind = job?.data?.kind ?? 'unknown';
+    const to = job?.data?.to ?? 'unknown recipient';
+    const attempts = job?.opts?.attempts ?? 1;
+    const made = job?.attemptsMade ?? 0;
+    // Only the last attempt is a delivery failure; the earlier ones are retries
+    // that may still succeed, and logging those at error level would cry wolf.
+    const final = made >= attempts;
+
+    const message = `Email (${kind}) to ${to} failed on attempt ${made}/${attempts}: ${error.message}`;
+
+    if (final) {
+      this.logger.error(
+        `${message} — GIVING UP, this email will not arrive. The recipient is ` +
+          'waiting for mail that is not coming.',
+      );
+    } else {
+      this.logger.warn(message);
+    }
   }
 }

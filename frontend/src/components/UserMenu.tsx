@@ -1,20 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { initials } from '../lib/initials';
+import { IconSignOut, IconUser } from './Icons';
 import type { UserRole } from '../lib/types';
 
 const ROLE_LABEL: Record<UserRole, string> = {
   recruiter_admin: 'Recruiter / Admin',
   candidate: 'Candidate',
 };
-
-/** Up to two initials from a display name, for the avatar. */
-export function initials(name: string | undefined): string {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return (parts[0][0] + last).toUpperCase();
-}
 
 /**
  * The account route each role's layout mounts under.
@@ -98,15 +92,18 @@ export function UserMenu() {
             </div>
           </div>
 
+          {/* Real icons rather than the text glyphs these used to be (◍ and ⤴):
+              a character borrowed for its shape renders at whatever the system
+              font decides, at a weight and baseline nothing else here shares.
+              These inherit `currentColor` and the same stroke as every other
+              icon in the app, so the destructive item tints with its own row. */}
           <div className="user-dropdown-items">
             <button
               type="button"
               role="menuitem"
               onClick={() => void navigate(profilePath(user?.role))}
             >
-              <span className="mi" aria-hidden="true">
-                ◍
-              </span>
+              <IconUser className="mi" width={17} height={17} />
               My account
             </button>
 
@@ -116,9 +113,7 @@ export function UserMenu() {
               className="signout"
               onClick={() => void signOut()}
             >
-              <span className="mi" aria-hidden="true">
-                ⤴
-              </span>
+              <IconSignOut className="mi" width={17} height={17} />
               Sign out
             </button>
           </div>

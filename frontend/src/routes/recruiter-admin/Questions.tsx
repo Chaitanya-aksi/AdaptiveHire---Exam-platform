@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { SubNav } from '../../components/SubNav';
-import { useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { ConfirmDialog } from '../../components/Modal';
 import { QuestionEditor } from '../../components/questions/QuestionEditor';
 import { useToast } from '../../components/Toast';
@@ -39,7 +44,19 @@ const QUESTION_TABS = [
 
 export function Questions() {
   const toast = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [modules, setModules] = useState<ModuleCatalogEntry[]>([]);
+  /*
+   * Separate from `modules.length`, because the editor cannot be mounted before
+   * the subjects arrive. `QuestionEditor` seeds its subject picker from
+   * `modules[0]` in a `useState` initialiser, which never re-runs — mounted a
+   * moment early it would sit there with an empty picker and no subject, and
+   * that is now reachable: `/admin/questions/new` is a URL somebody can open
+   * cold, where before the editor could only be opened by a click on a page
+   * that had already loaded them.
+   */
+  const [modulesLoaded, setModulesLoaded] = useState(false);
   const [data, setData] = useState<Paginated<Question> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -49,10 +66,31 @@ export function Questions() {
   const [pendingDelete, setPendingDelete] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // null = closed. { question: null } = creating; { question } = editing.
-  const [editor, setEditor] = useState<{ question: Question | null } | null>(
-    null,
-  );
+  /*
+   * Writing a new question has its own URL; editing an existing one does not.
+   *
+   * The asymmetry is deliberate. Creating is where somebody is *sent* — from the
+   * dashboard's "Build your question bank" tile, from a colleague's link, from a
+   * bookmark — and a destination has to survive a reload and a back button.
+   * Editing is always reached from a row on this page, so it needs no address of
+   * its own and would only put a question id in the history for every row
+   * anybody glanced at.
+   *
+   * `editing` therefore stays local state; creating is read from the path, and
+   * closing the form navigates rather than clearing a flag.
+   */
+  const creating = location.pathname.endsWith('/questions/new');
+  const [editing, setEditing] = useState<Question | null>(null);
+  const editor = creating
+    ? { question: null }
+    : editing
+      ? { question: editing }
+      : null;
+
+  const closeEditor = () => {
+    setEditing(null);
+    if (creating) void navigate('/admin/questions');
+  };
 
   /*
    * Subject and status live in the query string rather than in local state, so
@@ -80,7 +118,14 @@ export function Questions() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    void modulesApi.list().then(setModules);
+    // Settled either way: a failed load must still release the editor's gate
+    // below, or a direct link to /questions/new would hang on "Loading…"
+    // forever instead of saying the subjects could not be fetched.
+    modulesApi
+      .list()
+      .then(setModules)
+      .catch(() => setModules([]))
+      .finally(() => setModulesLoaded(true));
   }, []);
 
   // Debounced so typing doesn't fire a request per keystroke.
@@ -183,7 +228,7 @@ export function Questions() {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
   const onSaved = (saved: Question, created: boolean, editedId?: string) => {
-    setEditor(null);
+    closeEditor();
 
     // Editing a platform question does not change it — it creates this
     // organisation's own copy, which comes back with a different id. Splicing by
@@ -215,12 +260,23 @@ export function Questions() {
   };
 
   if (editor) {
+    if (!modulesLoaded) return <div className="empty">Loading…</div>;
+
+    if (modules.length === 0) {
+      return (
+        <div className="card empty">
+          A question has to belong to a subject, and none could be loaded. Try
+          again, or check the Modules section.
+        </div>
+      );
+    }
+
     return (
       <QuestionEditor
         modules={modules}
         question={editor.question}
         onSaved={onSaved}
-        onCancel={() => setEditor(null)}
+        onCancel={closeEditor}
       />
     );
   }
@@ -233,13 +289,12 @@ export function Questions() {
           <p>Every question the adaptive engine can draw from.</p>
           <SubNav items={QUESTION_TABS} />
         </div>
-        <button
-          className="primary"
-          disabled={modules.length === 0}
-          onClick={() => setEditor({ question: null })}
-        >
+        {/* A link, not a button: writing a question now has an address, and a
+            destination people are sent to should be openable in a new tab and
+            copyable from the address bar like every other page. */}
+        <Link to="/admin/questions/new" className="button primary">
           New question
-        </button>
+        </Link>
       </div>
 
       {error && <div className="alert error">{error}</div>}
@@ -408,10 +463,7 @@ export function Questions() {
                   </td>
                   <td>
                     <div className="row-actions">
-                      <button
-                        className="link"
-                        onClick={() => setEditor({ question: q })}
-                      >
+                      <button className="link" onClick={() => setEditing(q)}>
                         Edit
                       </button>
                       {q.status !== 'active' && (

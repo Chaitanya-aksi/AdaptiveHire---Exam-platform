@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthShell } from '../components/AuthShell';
 import { homeFor } from '../components/ProtectedRoute';
-import { useToast } from '../components/Toast';
+import { landingCopy, useSplash } from '../components/Splash';
 import { useAuth } from '../lib/auth';
 import { describeError } from '../lib/errors';
 
@@ -21,7 +21,7 @@ const MIN_PASSWORD = 8;
 export function RecruiterRegister() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const toast = useToast();
+  const splash = useSplash();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -56,7 +56,12 @@ export function RecruiterRegister() {
         accountType: 'recruiter',
         organisationName: organisationName.trim(),
       });
-      toast.success(`Welcome, ${user.fullName.split(' ')[0]}.`);
+      // Same beat as a sign-in, and for the same reason: raised before the
+      // navigation and in the same tick, so the destination mounts and fetches
+      // underneath the overlay instead of after it. It carries the welcome a
+      // toast used to — one greeting, on the screen that is already holding
+      // this moment, rather than a second one sliding in behind it.
+      splash.show(landingCopy(user, 'sign-up'));
       void navigate(homeFor(user.role), { replace: true });
     } catch (err) {
       const status = (err as { response?: { status?: number } }).response
@@ -76,15 +81,11 @@ export function RecruiterRegister() {
       title="Host assessments"
       subtitle="Register your company to build adaptive assessments, invite candidates and read their reports."
       footer={
-        <>
-          <div>
-            Already have a recruiter account?{' '}
-            <Link to="/recruiter/login">Sign in</Link>
-          </div>
-          <div className="auth-alt-secondary">
-            Taking an assessment? <Link to="/login">Candidate sign in</Link>
-          </div>
-        </>
+        // Only the other audience's door — "already have an account" is now a
+        // button inside the form.
+        <div className="auth-alt-secondary">
+          Taking an assessment? <Link to="/login">Candidate sign in</Link>
+        </div>
       }
     >
       <form className="auth-form" onSubmit={(e) => void submit(e)}>
@@ -172,6 +173,31 @@ export function RecruiterRegister() {
         >
           {busy ? 'Creating your workspace…' : 'Create account'}
         </button>
+
+      {/*
+        The way back, matching the sign-up button on the sign-in page. Somebody
+        who followed that link and then realised they already have an account
+        should not have to find their way back through the small print.
+      */}
+      <div className="auth-alt-sep">
+        <span>Already have an account?</span>
+      </div>
+      <Link className="auth-alt-btn" to="/recruiter/login">
+        Sign in instead
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={15}
+          height={15}
+          aria-hidden="true"
+        >
+          <path d="M4 10h12M11 5l5 5-5 5" />
+        </svg>
+      </Link>
       </form>
 
       <div className="hint">

@@ -23,6 +23,7 @@ import { MailModule } from './mail/mail.module';
 import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
 import { ProctoringModule } from './proctoring/proctoring.module';
 import { QuestionBankModule } from './question-bank/question-bank.module';
+import { QueueErrorsModule } from './queues/queue-errors.module';
 import { RedisModule } from './redis/redis.module';
 import { ReportsModule } from './reports/reports.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -70,8 +71,11 @@ import { UsersModule } from './users/users.module';
         ],
       }),
     }),
-    // Shared BullMQ connection — invite-emails (and later auto-submit / report
-    // generation) all run on this same Redis instance.
+    // The Redis instance every queue runs on — invite-emails, auto-submit and
+    // report generation. These are connection *options*, so BullMQ builds its
+    // own clients from them rather than sharing the one in `RedisModule`: a
+    // worker blocks on its connection waiting for jobs, and blocking the
+    // application's client would stall every session read behind it.
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -82,6 +86,9 @@ import { UsersModule } from './users/users.module';
       }),
     }),
     RedisModule,
+    // After the queues are registered: it discovers them on bootstrap and
+    // gives each one the error handling BullMQ does not attach itself.
+    QueueErrorsModule,
     MailModule,
     UsersModule,
     AuthModule,

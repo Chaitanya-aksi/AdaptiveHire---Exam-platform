@@ -30,6 +30,18 @@ import { ReportsService } from './reports.service';
 export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
+  /**
+   * Every attempt in the workspace, most recent first.
+   *
+   * Declared above the `assessments/:assessmentId` route below purely for
+   * readability — `attempts` is a literal segment and could never be parsed as
+   * that route's parameter.
+   */
+  @Get('attempts')
+  listForOrganisation(@CurrentOrg() organisationId: string) {
+    return this.reports.listForOrganisation(organisationId);
+  }
+
   /** Every attempt at one assessment — the way in to an individual report. */
   @Get('assessments/:assessmentId')
   listForAssessment(

@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import type { AuthUser, UserRole } from '../lib/types';
 
 /*
  * The branded pause, and the one place that draws it.
@@ -26,6 +27,66 @@ import {
  * spinner: it should last long enough to read and never longer, which a
  * progress bar chasing a fast network cannot promise.
  */
+
+/**
+ * One line naming where this account is headed, for whoever is holding the
+ * screen while it loads.
+ *
+ * Here rather than at either call site because there are two of them and they
+ * are the same sentence: the sign-in splash, which knows exactly who just
+ * signed in, and the page-load splash, which is working from the role hint
+ * left behind by the last session. Two copies would drift, and the drift would
+ * be a candidate being told about a workspace they do not have.
+ *
+ * `null` is the honest unknown — a first visit, a cleared browser, a signed-out
+ * visitor on their way to the sign-in page — and gets a line that promises
+ * nothing rather than a guess.
+ */
+export function destinationLine(role: UserRole | null): string {
+  if (role === 'recruiter_admin') return 'Opening your workspace.';
+  if (role === 'candidate') return 'Opening your assessments.';
+  return 'Getting things ready.';
+}
+
+/**
+ * How this person got here: back to an account they have, or in through a form
+ * that just created one. The only difference it makes is one word of greeting,
+ * which is exactly the word that would be wrong if it were guessed.
+ */
+export type Arrival = 'sign-in' | 'sign-up';
+
+/**
+ * The whole splash for somebody who has just been let in, from either door.
+ *
+ * Shared by the two sign-in pages and the two registration pages rather than
+ * written out at each: four call sites, one sentence, and the drift would land
+ * on the person's first second in the product.
+ */
+export function landingCopy(
+  user: AuthUser,
+  arrival: Arrival,
+): { title: string; subtitle: string } {
+  // First name only. The greeting is the proof the right account was reached,
+  // and a full legal name reads like a record rather than a welcome.
+  const firstName = user.fullName.trim().split(/\s+/)[0];
+  const greeting = arrival === 'sign-up' ? 'Welcome' : 'Welcome back';
+  const title = firstName ? `${greeting}, ${firstName}` : greeting;
+
+  // A provisioned account is bounced to /set-password by `ProtectedRoute`, so
+  // promising them their assessments here would name a screen they are not
+  // about to see. Only reachable from a sign-in — an account that already
+  // exists cannot be registered again — but the rule belongs to the copy
+  // rather than to one of its callers.
+  if (user.mustChangePassword) {
+    return {
+      title,
+      subtitle:
+        'One thing first — the password we emailed you needs replacing.',
+    };
+  }
+
+  return { title, subtitle: destinationLine(user.role) };
+}
 
 interface BrandSplashProps {
   /** The stage being entered — "Sample test", the assessment's own name. */

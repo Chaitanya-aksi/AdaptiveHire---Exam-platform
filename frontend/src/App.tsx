@@ -4,9 +4,15 @@ import { AppLayout } from './components/AppLayout';
 import { CandidateLayout } from './components/CandidateLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute, homeFor } from './components/ProtectedRoute';
-import { BrandSplash, SplashProvider } from './components/Splash';
+import {
+  BrandSplash,
+  SplashProvider,
+  destinationLine,
+} from './components/Splash';
 import { ToastProvider } from './components/Toast';
 import { AuthProvider, useAuth } from './lib/auth';
+import { readRoleHint } from './lib/session-hint';
+import { ThemeIdentityBridge } from './lib/theme';
 import { ForgotPassword } from './routes/ForgotPassword';
 import { Login } from './routes/Login';
 import { Profile } from './routes/Profile';
@@ -90,6 +96,16 @@ const AssessmentReports = lazy(() =>
     default: m.AssessmentReports,
   })),
 );
+const AllReports = lazy(() =>
+  import('./routes/recruiter-admin/AllReports').then((m) => ({
+    default: m.AllReports,
+  })),
+);
+const ProctoringSignals = lazy(() =>
+  import('./routes/recruiter-admin/ProctoringSignals').then((m) => ({
+    default: m.ProctoringSignals,
+  })),
+);
 const CandidateReport = lazy(() =>
   import('./routes/recruiter-admin/CandidateReport').then((m) => ({
     default: m.CandidateReport,
@@ -137,12 +153,30 @@ function BootSplash() {
   const [gone, setGone] = useState(false);
   const finish = useCallback(() => setGone(true), []);
 
+  /*
+   * Read once, on the way in, and then left alone.
+   *
+   * Nobody knows who this is yet — that is the whole reason this splash is on
+   * screen — so the line comes from the role the last settled session left in
+   * `localStorage`. Latching it matters: the real session lands part-way
+   * through the hold, and swapping the words underneath somebody mid-read
+   * would be worse than the generic line it replaced. A missing or stale hint
+   * therefore costs exactly one splash, and the session that resolves behind
+   * this one puts it right for the next load.
+   *
+   * A shared browser can only ever be one role's at a time, so two tabs signed
+   * in as a candidate and a recruiter share one hint and the second tab's
+   * reload may name the other's destination. It is a caption on a fade, and
+   * the page underneath is still whatever the session says it is.
+   */
+  const [subtitle] = useState(() => destinationLine(readRoleHint()));
+
   if (gone) return null;
 
   return (
     <BrandSplash
       title="Just a moment"
-      subtitle="Getting things ready."
+      subtitle={subtitle}
       holdMs={BOOT_MIN_MS}
       ready={!loading}
       onDone={finish}
@@ -155,6 +189,24 @@ function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <div className="empty">Loading…</div>;
   return <Navigate to={user ? homeFor(user.role) : '/login'} replace />;
+}
+
+/**
+ * Reads the session and hands the account id to the theme provider.
+ *
+ * Renders nothing. It exists only because `ThemeProvider` wraps `App` — the
+ * sign-in, reset and register pages are themed and live outside `AuthProvider`
+ * — so the identity has to travel up from inside the auth tree rather than
+ * down from the provider.
+ *
+ * `loading` is passed through as the "we don't know yet" flag: during the
+ * silent refresh `user` is null but the person may well be signed in, and
+ * treating that as signed-out would flip the theme for the length of the
+ * request.
+ */
+function ThemeIdentitySync() {
+  const { user, loading } = useAuth();
+  return <ThemeIdentityBridge userId={user?.id ?? null} known={!loading} />;
 }
 
 /**
@@ -178,7 +230,7 @@ function AppRecovery({ reset }: { reset: () => void }) {
     <div className="empty" style={{ padding: 48, textAlign: 'center' }}>
       <h1 style={{ marginBottom: 8 }}>Something went wrong</h1>
       <p className="muted" style={{ margin: '0 0 18px' }}>
-        This page didn&rsquo;t load properly. Trying again usually fixes it.
+        This page didn&rsquo;t load properly. Please try again!
       </p>
       <button type="button" className="primary" onClick={reset}>
         Try again
@@ -195,6 +247,11 @@ export default function App() {
     >
       <BrowserRouter>
         <AuthProvider>
+          {/*
+            Tells the theme provider — which sits above this one, because the
+            sign-in pages are themed too — whose colour preference to load.
+          */}
+          <ThemeIdentitySync />
           <ToastProvider>
             {/*
               Outside <Routes> on purpose. The sign-in splash has to survive the
@@ -276,6 +333,13 @@ export default function App() {
                   >
                     <Route index element={<Dashboard />} />
                     <Route path="questions" element={<Questions />} />
+                    {/* Same component: writing a question is the bank with its
+                        editor open, and giving that an address is what lets the
+                        dashboard's "Build your question bank" tile land on the
+                        form rather than on the list beside it. Above
+                        `questions/analysis` only for readability — both are
+                        literal segments and neither shadows the other. */}
+                    <Route path="questions/new" element={<Questions />} />
                     <Route
                       path="questions/analysis"
                       element={<QuestionAnalysis />}
@@ -311,6 +375,12 @@ export default function App() {
                       path="assessments/:id/results"
                       element={<AssessmentReports />}
                     />
+                    {/* Above `reports/:sessionId`, or "proctoring" would be
+                        read as a session id — these are siblings in the
+                        Assessments section's tab strip, not children of a
+                        report. */}
+                    <Route path="reports" element={<AllReports />} />
+                    <Route path="proctoring" element={<ProctoringSignals />} />
                     <Route
                       path="reports/:sessionId"
                       element={<CandidateReport />}

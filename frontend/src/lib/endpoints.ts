@@ -17,8 +17,10 @@ import type {
   BrandingPatch,
   ItemAnalysis,
   ModuleQuestionStats,
+  OrgAttemptListItem,
   OrgRole,
   Paginated,
+  ProctoringSignalSummary,
   PracticeQuestion,
   Question,
   QuestionDraft,
@@ -512,6 +514,15 @@ export const reportsApi = {
       .then((r) => r.data),
 
   /**
+   * Every attempt in the workspace, newest first, across all assessments.
+   *
+   * Carries no standing — see `OrgAttemptListItem`. Use `forAssessment` when
+   * ranking or shortlisting, which only mean something within one cohort.
+   */
+  allAttempts: () =>
+    api.get<OrgAttemptListItem[]>('/reports/attempts').then((r) => r.data),
+
+  /**
    * Downloads the cohort as a CSV.
    *
    * Sends the session ids in the order they are on screen, so the file matches
@@ -612,4 +623,18 @@ export const reportsApi = {
     api
       .post<void>(`/reports/sessions/${sessionId}/regenerate`)
       .then(() => undefined),
+};
+
+export const proctoringApi = {
+  /**
+   * Every signal the platform watches for, with this workspace's counts.
+   *
+   * Events themselves are written over the WebSocket by the candidate's own
+   * browser (`lib/socket.ts`); this is the only place the REST client reads
+   * them back.
+   */
+  signals: () =>
+    api
+      .get<ProctoringSignalSummary[]>('/proctoring/signals')
+      .then((r) => r.data),
 };

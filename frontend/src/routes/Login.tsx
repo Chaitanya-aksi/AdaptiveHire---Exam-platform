@@ -14,14 +14,11 @@ export function Login() {
       title="Welcome back"
       subtitle="Sign in to access your assessment account."
       footer={
-        <>
-          <div>
-            New to AdaptiveHire? <Link to="/register">Create an account</Link>
-          </div>
-          <div className="auth-alt-secondary">
-            Recruiter or admin? <Link to="/recruiter/login">Sign in here</Link>
-          </div>
-        </>
+        // Creating an account is a button under the form now; this stays for
+        // the visitor who is on the wrong side of the platform entirely.
+        <div className="auth-alt-secondary">
+          Recruiter or admin? <Link to="/recruiter/login">Sign in here</Link>
+        </div>
       }
     >
       <SignInForm portal="candidate" />

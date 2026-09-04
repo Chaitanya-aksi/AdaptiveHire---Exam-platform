@@ -63,7 +63,7 @@ export function JourneyStrip() {
       </ol>
 
       <div className="journey-actions">
-        <Link to="/admin/assessments" className="button primary">
+        <Link to="/admin/assessments/new" className="button primary">
           Create an assessment
         </Link>
         <Link to="/admin/modules" className="button">

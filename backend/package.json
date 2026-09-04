@@ -34,7 +34,8 @@
     "seed": "npm run seed:users && npm run seed:modules && npm run seed:assessments && npm run seed:questions && npm run seed:samples",
     "reports:regenerate": "ts-node src/database/seeds/regenerate-reports.ts",
     "check:random-baseline": "ts-node src/database/seeds/check-random-baseline.ts",
-    "e2e:clean": "ts-node test/clean-e2e-data.ts"
+    "e2e:clean": "ts-node test/clean-e2e-data.ts",
+    "reset:link": "ts-node src/database/seeds/issue-reset-link.ts"
   },
   "overrides": {
     "uuid": "^11.1.1"

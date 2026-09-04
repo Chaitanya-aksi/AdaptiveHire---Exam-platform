@@ -34,10 +34,18 @@ interface Destination {
  *
  * Deliberately short. A hub that offers everything equally offers nothing — these
  * get the large treatment and the rest sits in `EXPLORE` below, one rung quieter.
+ *
+ * Each tile names an action, so each one lands on the form that performs it
+ * rather than on the list it lives in. "Host a test" used to open the assessment
+ * list, leaving the reader to find the button that hosts a test — a tile that
+ * describes doing something and then delivers a table has not finished the job
+ * it advertised. "Hire candidates" is the exception and correctly opens the
+ * list, because inviting people happens against an assessment that already
+ * exists.
  */
 const PRIMARY: Destination[] = [
   {
-    to: '/admin/assessments',
+    to: '/admin/assessments/new',
     Icon: IconAssessment,
     title: 'Host a test',
     body: 'Choose subjects, set how many questions and how long, and pick which questions the engine may draw from.',
@@ -49,7 +57,7 @@ const PRIMARY: Destination[] = [
     body: 'Invite people by email or upload a spreadsheet, then track who has started, finished or not replied.',
   },
   {
-    to: '/admin/questions',
+    to: '/admin/questions/new',
     Icon: IconBank,
     title: 'Build your question bank',
     body: 'Use the questions that ship with the platform, or write your own — private to your organisation.',
@@ -71,10 +79,10 @@ const EXPLORE: Destination[] = [
     body: 'Upload a CSV or Excel sheet. Bad rows are reported, not fatal.',
   },
   {
-    to: '/admin/assessments',
+    to: '/admin/reports',
     Icon: IconReport,
     title: 'Candidate reports',
-    body: 'Ability scores, behavioural profile and every answer, per attempt.',
+    body: 'Every attempt across your workspace, newest first — score, recommendation and every answer.',
   },
   {
     to: bankLink({ status: 'draft' }),
@@ -89,10 +97,10 @@ const EXPLORE: Destination[] = [
     body: 'View people who are present in your organization.',
   },
   {
-    to: '/admin/assessments',
+    to: '/admin/proctoring',
     Icon: IconShield,
     title: 'Proctoring signals',
-    body: 'Recorded per attempt and shown as evidence so that recruiter can decide the honesty and behavior of the candidate.',
+    body: 'What the platform watches for during an attempt, what each signal can and cannot tell you, and what yours have recorded.',
   },
 ];
 
@@ -186,7 +194,7 @@ export function Dashboard() {
             exactly how the score was reached.
           </p>
           <div className="hero-actions">
-            <Link to="/admin/assessments" className="button primary">
+            <Link to="/admin/assessments/new" className="button primary">
               Create an assessment
             </Link>
             <Link to="/admin/import" className="button">

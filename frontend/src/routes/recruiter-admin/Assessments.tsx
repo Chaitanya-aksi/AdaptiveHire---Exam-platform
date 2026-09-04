@@ -8,10 +8,12 @@ import {
   IconTrash,
 } from '../../components/Icons';
 import { Modal } from '../../components/Modal';
+import { SubNav } from '../../components/SubNav';
 import { useToast } from '../../components/Toast';
 import { assessmentsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
 import { formatWhen } from '../../lib/schedule';
+import { ASSESSMENT_TABS } from './section-tabs';
 import type { Assessment } from '../../lib/types';
 
 /*
@@ -113,6 +115,7 @@ export function Assessments() {
         <div>
           <h1>Assessments</h1>
           <p>Every round this workspace has built.</p>
+          <SubNav items={ASSESSMENT_TABS} />
         </div>
         <Link className="button primary" to="/admin/assessments/new">
           New assessment

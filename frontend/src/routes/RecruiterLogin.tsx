@@ -15,15 +15,12 @@ export function RecruiterLogin() {
       title="Recruiter sign in"
       subtitle="Manage assessments, the question bank, and candidate reports."
       footer={
-        <>
-          <div>
-            New here?{' '}
-            <Link to="/recruiter/register">Register to host assessments</Link>
-          </div>
-          <div className="auth-alt-secondary">
-            Taking an assessment? <Link to="/login">Candidate sign in</Link>
-          </div>
-        </>
+        // Registering is a button under the form now, where a visitor without
+        // an account is already looking. What is left here is the one thing
+        // this page cannot do for them: send them to the other audience's door.
+        <div className="auth-alt-secondary">
+          Taking an assessment? <Link to="/login">Candidate sign in</Link>
+        </div>
       }
     >
       <SignInForm portal="recruiter" />

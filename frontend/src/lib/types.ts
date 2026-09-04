@@ -388,6 +388,12 @@ export interface ItemAnalysis {
   status: QuestionStatus;
   authoredDifficulty: number;
   attempts: number;
+  /**
+   * Attempts still needed before any figure below is published, or 0 once the
+   * question has enough. The threshold lives on the server; this is it minus
+   * `attempts`, so the page can explain its own dashes.
+   */
+  attemptsNeeded: number;
   /** Proportion answered correctly — difficulty as observed, 0-1. */
   pValue: number | null;
   /**
@@ -903,4 +909,56 @@ export interface AttemptListItem {
   violationCount: number;
   /** Null until somebody on the team has acted on this attempt. */
   review: AttemptReview | null;
+}
+
+/**
+ * One attempt in the workspace-wide list at `/admin/reports`, newest first.
+ *
+ * Carries the assessment, because across a workspace a name alone does not say
+ * which test this was — and carries no `rank`, because a standing only means
+ * something against the people who sat the same paper. That column belongs to
+ * the per-assessment cohort view and nowhere else.
+ */
+export interface OrgAttemptListItem {
+  sessionId: string;
+  assessment: { id: string; title: string };
+  candidate: { id: string; fullName: string; email: string };
+  status: SessionStatus;
+  startedAt: string;
+  submittedAt: string | null;
+  timing: AttemptTiming;
+  questionsAnswered: number;
+  overallScore: number | null;
+  abilityScore: number | null;
+  behavioralScore: number | null;
+  hiringRecommendation: HiringRecommendation | null;
+  violationCount: number;
+  review: AttemptReview | null;
+}
+
+/* ── Proctoring ─────────────────────────────────────────────────────────── */
+
+/** One attempt carrying a signal, as the catalogue lists it. */
+export interface ProctoringSignalAttempt {
+  sessionId: string;
+  candidateName: string;
+  assessmentTitle: string;
+  occurredAt: string;
+  occurrences: number;
+}
+
+/**
+ * What one signal has recorded across the workspace.
+ *
+ * Every signal comes back whether or not it has ever fired — this is a
+ * catalogue of what is watched for, not a list of what went wrong.
+ */
+export interface ProctoringSignalSummary {
+  eventType: ProctoringEventType;
+  /** Times recorded in total. */
+  occurrences: number;
+  /** Distinct attempts carrying it — the figure that matters for judgement. */
+  attempts: number;
+  lastSeenAt: string | null;
+  recent: ProctoringSignalAttempt[];
 }

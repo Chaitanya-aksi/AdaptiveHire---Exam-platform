@@ -261,6 +261,34 @@ export interface AttemptListItem {
 }
 
 /**
+ * One attempt in the workspace-wide list, newest first.
+ *
+ * Deliberately not an `AttemptListItem`. It carries the assessment, because
+ * across a workspace a candidate's name alone does not say which test this was;
+ * and it carries **no `rank` or `cohortSize`**, because a standing only means
+ * something against people who sat the same paper. Different assessments have
+ * different modules, lengths and pools, so a position drawn across all of them
+ * would be a number a recruiter could neither reproduce nor act on — the same
+ * reason the platform-wide percentile was removed.
+ */
+export interface OrgAttemptListItem {
+  sessionId: string;
+  assessment: { id: string; title: string };
+  candidate: { id: string; fullName: string; email: string };
+  status: SessionStatus;
+  startedAt: string;
+  submittedAt: string | null;
+  timing: AttemptTiming;
+  questionsAnswered: number;
+  overallScore: number | null;
+  abilityScore: number | null;
+  behavioralScore: number | null;
+  hiringRecommendation: HiringRecommendation | null;
+  violationCount: number;
+  review: AttemptReview | null;
+}
+
+/**
  * The two-layer report.
  *
  * Layer one is `reports`: narrative, strengths, weaknesses and a rule-based
@@ -789,6 +817,93 @@ export class ReportsService {
     });
 
     return this.rankByScore(rows);
+  }
+
+  /**
+   * Every attempt across the whole workspace, most recent first.
+   *
+   * The cross-assessment view. `listForAssessment` above is still the place a
+   * cohort is worked through — ranking, shortlisting and the CSV all need one
+   * assessment to mean anything — and this is the place somebody lands when
+   * they want the last thing that came in, whichever test it was for.
+   *
+   * Ordered on `startedAt` rather than `submittedAt` so an attempt still in
+   * progress appears where it belongs in the sequence instead of falling to the
+   * bottom with the nulls.
+   */
+  async listForOrganisation(
+    organisationId: string,
+    options: { limit?: number } = {},
+  ): Promise<OrgAttemptListItem[]> {
+    const take = Math.min(options.limit ?? 200, 500);
+
+    // Filtered through the assessment's organisation, which is the only tenancy
+    // link a session has — a candidate belongs to no organisation.
+    const sessions = await this.sessions.find({
+      where: { assessment: { organisationId } },
+      relations: { candidate: true, assessment: true },
+      order: { startedAt: 'DESC' },
+      take,
+    });
+    if (sessions.length === 0) return [];
+
+    const sessionIds = sessions.map((session) => session.id);
+    const [reports, results, events, reviews] = await Promise.all([
+      this.reports.find({ where: { sessionId: In(sessionIds) } }),
+      this.moduleResults.find({ where: { sessionId: In(sessionIds) } }),
+      this.logs.find({
+        where: { sessionId: In(sessionIds) },
+        select: { id: true, sessionId: true },
+      }),
+      this.reviews.find({
+        where: { sessionId: In(sessionIds), organisationId },
+        relations: { updatedBy: true },
+      }),
+    ]);
+
+    return sessions.map((session) => {
+      const report = reports.find((r) => r.sessionId === session.id);
+      const review = reviews.find((r) => r.sessionId === session.id);
+      const mine = results.filter((result) => result.sessionId === session.id);
+
+      return {
+        sessionId: session.id,
+        assessment: {
+          id: session.assessmentId,
+          title: session.assessment.title,
+        },
+        candidate: {
+          id: session.candidateId,
+          fullName: session.candidate.fullName,
+          email: session.candidate.email,
+        },
+        status: session.status,
+        startedAt: session.startedAt.toISOString(),
+        submittedAt: session.submittedAt?.toISOString() ?? null,
+        timing: attemptTiming(session),
+        questionsAnswered: mine.reduce(
+          (total, result) => total + result.questionsAnswered,
+          0,
+        ),
+        overallScore: toNumber(report?.overallScore ?? null),
+        abilityScore: toNumber(report?.abilityScore ?? null),
+        behavioralScore: toNumber(report?.behavioralScore ?? null),
+        hiringRecommendation: report?.hiringRecommendation ?? null,
+        violationCount: events.filter((event) => event.sessionId === session.id)
+          .length,
+        review: review
+          ? {
+              decision: review.decision,
+              tags: review.tags,
+              note: review.note,
+              updatedBy: review.updatedBy?.fullName ?? null,
+              updatedAt: review.updatedAt.toISOString(),
+              rejectionEmailSentAt:
+                review.rejectionEmailSentAt?.toISOString() ?? null,
+            }
+          : null,
+      };
+    });
   }
 
   /**

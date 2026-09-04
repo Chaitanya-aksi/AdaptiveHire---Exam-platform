@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { setAccessToken } from './api';
 import { authApi } from './endpoints';
+import { rememberSession } from './session-hint';
 import type { AuthUser, LoginPortal, RegisterPayload } from './types';
 
 interface AuthState {
@@ -95,6 +96,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateUser = useCallback((patch: Partial<AuthUser>) => {
     setUser((current) => (current ? { ...current, ...patch } : current));
   }, []);
+
+  /*
+   * Leave behind what the next page load's splash needs to name a destination
+   * before this provider has restored anything. See `session-hint.ts`.
+   *
+   * One effect on the settled session rather than a write at each of the five
+   * places `user` changes, because one of those is `updateUser`: choosing a
+   * password on /set-password is exactly what turns an account the hint
+   * withholds into one it should keep, and a rule spread over five call sites
+   * is a rule that gets missed at the sixth.
+   *
+   * Guarded on `loading` so the null of "not restored yet" is never read as
+   * "signed out" — that would clear the hint on every single load, which is
+   * the one thing it has to survive.
+   */
+  useEffect(() => {
+    if (loading) return;
+    rememberSession(user);
+  }, [loading, user]);
 
   const value = useMemo(
     () => ({ user, loading, login, register, logout, updateUser }),

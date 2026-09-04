@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { homeFor } from './ProtectedRoute';
-import { useSplash } from './Splash';
+import { landingCopy, useSplash } from './Splash';
 import { useAuth } from '../lib/auth';
-import type { AuthUser, LoginPortal } from '../lib/types';
+import type { LoginPortal } from '../lib/types';
 
 /** Where to send someone who used the wrong form, per portal. */
 const OTHER_DOOR: Record<LoginPortal, { to: string; label: string }> = {
@@ -12,37 +12,31 @@ const OTHER_DOOR: Record<LoginPortal, { to: string; label: string }> = {
 };
 
 /**
- * What the splash says while the destination loads behind it.
+ * The way on for somebody who has no account yet — a button under the form
+ * rather than a line of small print below the panel.
  *
- * Named for where they are going rather than for what the app is doing —
- * "Opening your assessments" is the same beat as a spinner and tells them
- * something, which is the whole reason the splash is there instead of one.
+ * Signing in and signing up are the only two things this page is for, and a
+ * visitor who cannot do the first needs the second to be visible without
+ * hunting. `lead` is the question the button answers, so the pair reads as one
+ * sentence.
  */
-function landing(user: AuthUser): { title: string; subtitle: string } {
-  // First name only. The greeting is the proof the right account was reached,
-  // and a full legal name reads like a record rather than a welcome.
-  const firstName = user.fullName.trim().split(/\s+/)[0];
-  const title = firstName ? `Welcome back, ${firstName}` : 'Welcome back';
-
-  // A provisioned account is bounced to /set-password by ProtectedRoute, so
-  // promising them their assessments here would name a screen they are not
-  // about to see.
-  if (user.mustChangePassword) {
-    return {
-      title,
-      subtitle:
-        'One thing first — the password we emailed you needs replacing.',
-    };
-  }
-
-  return {
-    title,
-    subtitle:
-      user.role === 'recruiter_admin'
-        ? 'Opening your workspace.'
-        : 'Opening your assessments.',
-  };
-}
+const SIGN_UP: Record<
+  LoginPortal,
+  { to: string; label: string; lead: string; inline: string }
+> = {
+  candidate: {
+    to: '/register',
+    label: 'Create a candidate account',
+    lead: 'New to AdaptiveHire?',
+    inline: 'Create an account',
+  },
+  recruiter: {
+    to: '/recruiter/register',
+    label: 'Register to host assessments',
+    lead: 'No account yet?',
+    inline: 'Register your company',
+  },
+};
 
 /**
  * The sign-in form itself, shared by the candidate and recruiter entry points.
@@ -66,11 +60,35 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
    */
   const justReset = params.get('reset') === '1';
 
-  const [email, setEmail] = useState('');
+  /**
+   * The address an invitation email already knows.
+   *
+   * Every invite links to `/login?email=…` (built in `InvitationsService`), and
+   * until this was read the parameter went nowhere: somebody arriving from
+   * their inbox — holding a password they cannot possibly remember — was shown
+   * an empty form and asked to type back the address the link was carrying.
+   * That is the moment a first-time candidate is most likely to give up, and
+   * it was self-inflicted.
+   *
+   * Only a starting value, not a lock: the field stays editable, because the
+   * link may have been forwarded to the person who should actually sit the
+   * assessment.
+   */
+  const invitedEmail = params.get('email')?.trim() ?? '';
+
+  const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   /** Set when the credentials were right but the door was wrong. */
   const [wrongDoor, setWrongDoor] = useState(false);
+  /**
+   * Set when the pair was refused, which is the only answer a sign-in should
+   * give: the server will not say whether the email exists, because that turns
+   * this form into a way to test which addresses hold accounts. So the offer to
+   * sign up is worded as a question rather than a diagnosis — the person knows
+   * which of the two they are, and this form deliberately does not.
+   */
+  const [offerSignUp, setOfferSignUp] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -80,6 +98,7 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
     setBusy(true);
     setError(null);
     setWrongDoor(false);
+    setOfferSignUp(false);
 
     try {
       const user = await login(email, password, portal);
@@ -87,7 +106,7 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
       // the overlay and the route change together. Reversing the two would
       // paint a frame of the half-built destination first, which is precisely
       // the moment the splash exists to cover.
-      splash.show(landing(user));
+      splash.show(landingCopy(user, 'sign-in'));
       void navigate(homeFor(user.role), { replace: true });
     } catch (err) {
       const response = (
@@ -104,6 +123,7 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
           response?.data?.message ?? 'That account signs in on the other page.',
         );
       } else {
+        setOfferSignUp(status === 401);
         setError(
           status === 401
             ? 'That email and password combination was not recognised.'
@@ -166,6 +186,13 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
                 <Link to={OTHER_DOOR[portal].to}>
                   {OTHER_DOOR[portal].label}
                 </Link>
+              </>
+            )}
+            {offerSignUp && (
+              <>
+                {' '}
+                Never signed up?{' '}
+                <Link to={SIGN_UP[portal].to}>{SIGN_UP[portal].inline}</Link>
               </>
             )}
           </span>
@@ -236,6 +263,10 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
             type={showPassword ? 'text' : 'password'}
             autoComplete="current-password"
             placeholder="Enter your password"
+            /* Arriving from an invitation, the only thing left to do here is
+               paste the emailed password, so start in that field rather than
+               in one that is already filled in. */
+            autoFocus={Boolean(invitedEmail)}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -334,6 +365,32 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
           </>
         )}
       </button>
+
+      {/*
+        Inside the form, under the submit button, because that is where someone
+        who has just failed to sign in is already looking — the same place the
+        cross-links used to sit was below the whole panel, where a visitor with
+        no account had to go looking for the one thing they needed.
+      */}
+      <div className="auth-alt-sep">
+        <span>{SIGN_UP[portal].lead}</span>
+      </div>
+      <Link className="auth-alt-btn" to={SIGN_UP[portal].to}>
+        {SIGN_UP[portal].label}
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={15}
+          height={15}
+          aria-hidden="true"
+        >
+          <path d="M4 10h12M11 5l5 5-5 5" />
+        </svg>
+      </Link>
     </form>
   );
 }

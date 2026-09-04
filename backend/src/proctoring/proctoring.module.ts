@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssessmentSession } from '../sessions/entities/assessment-session.entity';
 import { ProctoringLog } from './entities/proctoring-log.entity';
+import { ProctoringController } from './proctoring.controller';
 import { ProctoringGateway } from './proctoring.gateway';
 import { ProctoringService } from './proctoring.service';
 
@@ -13,6 +14,7 @@ import { ProctoringService } from './proctoring.service';
     // never see a socket.
     JwtModule.register({}),
   ],
+  controllers: [ProctoringController],
   providers: [ProctoringService, ProctoringGateway],
   exports: [ProctoringService],
 })

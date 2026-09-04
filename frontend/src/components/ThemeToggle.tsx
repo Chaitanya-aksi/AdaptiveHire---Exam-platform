@@ -25,7 +25,7 @@ function Icon({ choice }: { choice: ThemeChoice }) {
     return (
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
         <circle cx="8" cy="8" r="3.2" fill="currentColor" />
-        <g stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+        <g stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
           <path d="M8 1v1.8M8 13.2V15M1 8h1.8M13.2 8H15" />
           <path d="M3.05 3.05l1.27 1.27M11.68 11.68l1.27 1.27M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27" />
         </g>
@@ -57,13 +57,13 @@ function Icon({ choice }: { choice: ThemeChoice }) {
         rx="1.6"
         fill="none"
         stroke="currentColor"
-        stroke-width="1.4"
+        strokeWidth="1.4"
       />
       <path
         d="M5.5 13.9h5"
         stroke="currentColor"
-        stroke-width="1.4"
-        stroke-linecap="round"
+        strokeWidth="1.4"
+        strokeLinecap="round"
       />
     </svg>
   );

@@ -1,24 +1,19 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
+import { ChangePasswordDialog } from '../components/ChangePasswordDialog';
+import { EditNameDialog } from '../components/EditNameDialog';
+import { IconLock, IconUser } from '../components/Icons';
 import { SubNav } from '../components/SubNav';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../lib/auth';
 import { usersApi } from '../lib/endpoints';
 import { describeError } from '../lib/errors';
+import { initials } from '../lib/initials';
 import type { UserProfile, UserRole } from '../lib/types';
 
 const ROLE_LABEL: Record<UserRole, string> = {
   recruiter_admin: 'Recruiter / Admin',
   candidate: 'Candidate',
 };
-
-/** Up to two initials from a display name, for the avatar. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  const first = parts[0][0];
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return (first + last).toUpperCase();
-}
 
 function memberSince(iso: string): string {
   const date = new Date(iso);
@@ -44,15 +39,9 @@ export function Profile() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Name editing.
-  const [name, setName] = useState('');
-  const [savingName, setSavingName] = useState(false);
-
-  // Password change.
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
+  // Both forms live in dialogs, so all this page holds is which one is open.
+  const [editingName, setEditingName] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +50,6 @@ export function Profile() {
       .then((me) => {
         if (cancelled) return;
         setProfile(me);
-        setName(me.fullName);
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -71,54 +59,6 @@ export function Profile() {
       cancelled = true;
     };
   }, []);
-
-  const nameDirty = profile !== null && name.trim() !== profile.fullName;
-
-  const saveName = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!nameDirty || name.trim().length < 2) return;
-    setSavingName(true);
-    try {
-      const updated = await usersApi.updateName(name.trim());
-      setProfile(updated);
-      setName(updated.fullName);
-      updateUser({ fullName: updated.fullName }); // keep the top-bar menu in sync
-      toast.success('Name updated.');
-    } catch (err) {
-      toast.error(describeError(err, 'Could not update your name.'));
-    } finally {
-      setSavingName(false);
-    }
-  };
-
-  const passwordValid =
-    currentPassword.length > 0 &&
-    newPassword.length >= 8 &&
-    newPassword === confirmPassword;
-
-  const changePassword = async (e: FormEvent) => {
-    e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      toast.error('New password and confirmation do not match.');
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters.');
-      return;
-    }
-    setSavingPassword(true);
-    try {
-      await usersApi.changePassword(currentPassword, newPassword);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      toast.success('Password changed.');
-    } catch (err) {
-      toast.error(describeError(err, 'Could not change your password.'));
-    } finally {
-      setSavingPassword(false);
-    }
-  };
 
   const display = profile ?? user;
   const recruiter = display?.role === 'recruiter_admin';
@@ -161,105 +101,107 @@ export function Profile() {
           </div>
         </div>
 
-        <form className="card" onSubmit={(e) => void saveName(e)}>
+        {/*
+          Both cards below are a statement of fact with an action beside it,
+          rather than a form standing permanently open. Most visits to this page
+          are to read something — your name, your role, when you joined — and a
+          page led by input boxes asks a question of everybody who came only to
+          look. The name box also printed an answer already given twice above
+          it, on the identity card and in the top bar. This is the shape every
+          production settings page uses, for both reasons.
+        */}
+        <div className="card">
           <div className="card-head">
             <h2>Display name</h2>
           </div>
           <div className="card-pad">
-            <label className="field-label" htmlFor="fullName">
-              Full name
-            </label>
-            <input
-              id="fullName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              maxLength={150}
-              style={{ width: '100%', maxWidth: 360 }}
-            />
-            <p className="muted small" style={{ margin: '8px 0 0' }}>
-              This is how your name appears across AdaptiveHire.
-            </p>
-          </div>
-          <div className="card-foot">
-            <button
-              type="submit"
-              className="primary"
-              disabled={!nameDirty || name.trim().length < 2 || savingName}
-            >
-              {savingName ? 'Saving…' : 'Save name'}
-            </button>
-          </div>
-        </form>
+            <div className="setting-row">
+              <span className="setting-icon" aria-hidden="true">
+                <IconUser width={19} height={19} />
+              </span>
 
-        <form className="card" onSubmit={(e) => void changePassword(e)}>
+              <div className="setting-text">
+                <div className="setting-value">{display?.fullName ?? '—'}</div>
+                <p className="muted small">
+                  This is how your name appears across AdaptiveHire.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="setting-action"
+                onClick={() => setEditingName(true)}
+                disabled={!display}
+              >
+                Edit name
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
           <div className="card-head">
-            <h2>Change password</h2>
+            <h2>Password</h2>
           </div>
-          <div className="card-pad stack" style={{ gap: 12 }}>
-            <div>
-              <label className="field-label" htmlFor="currentPassword">
-                Current password
-              </label>
-              <input
-                id="currentPassword"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                style={{ width: '100%', maxWidth: 360 }}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="newPassword">
-                New password
-              </label>
-              <input
-                id="newPassword"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                style={{ width: '100%', maxWidth: 360 }}
-              />
-              <p className="muted small" style={{ margin: '6px 0 0' }}>
-                At least 8 characters.
-              </p>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="confirmPassword">
-                Confirm new password
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                style={{ width: '100%', maxWidth: 360 }}
-              />
-              {confirmPassword.length > 0 &&
-                confirmPassword !== newPassword && (
-                  <p
-                    className="small"
-                    style={{ margin: '6px 0 0', color: 'var(--danger)' }}
-                  >
-                    Passwords don&rsquo;t match.
-                  </p>
-                )}
+          <div className="card-pad">
+            <div className="setting-row">
+              <span className="setting-icon" aria-hidden="true">
+                <IconLock width={19} height={19} />
+              </span>
+
+              <div className="setting-text">
+                <div className="setting-value setting-value--mask">
+                  {/* Not a real length — a password's length is not something
+                      to publish. A fixed run of dots says "one is set" and
+                      says nothing else. */}
+                  ••••••••••
+                </div>
+                <p className="muted small">
+                  Used to sign in to AdaptiveHire with{' '}
+                  <strong>{display?.email ?? 'your email address'}</strong>.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="setting-action"
+                onClick={() => setChangingPassword(true)}
+                disabled={!display}
+              >
+                Change password
+              </button>
             </div>
           </div>
-          <div className="card-foot">
-            <button
-              type="submit"
-              className="primary"
-              disabled={!passwordValid || savingPassword}
-            >
-              {savingPassword ? 'Updating…' : 'Update password'}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
+
+      {display && (
+        <>
+          <EditNameDialog
+            open={editingName}
+            currentName={display.fullName}
+            onClose={() => setEditingName(false)}
+            onSaved={(updated) => {
+              setProfile(updated);
+              // Keeps the top bar's name and initials in step without a second
+              // fetch — this page and that menu read from different sources.
+              updateUser({ fullName: updated.fullName });
+              setEditingName(false);
+              toast.success('Name updated.');
+            }}
+          />
+
+          <ChangePasswordDialog
+            open={changingPassword}
+            email={display.email}
+            onClose={() => setChangingPassword(false)}
+            onChanged={() => {
+              setChangingPassword(false);
+              toast.success('Password changed.');
+            }}
+          />
+        </>
+      )}
     </>
   );
 }

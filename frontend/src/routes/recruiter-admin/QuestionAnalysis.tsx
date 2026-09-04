@@ -67,6 +67,20 @@ const FLAG_COPY: Record<
   },
 };
 
+/**
+ * The chip for a question below the threshold.
+ *
+ * A question nobody has ever been served and one answered nineteen times are
+ * both "insufficient data" to the server, and both correctly show dashes — but
+ * they are not the same thing to the person reading the page. One is waiting for
+ * a few more attempts; the other has never been in front of a candidate, and
+ * telling them it lacks *enough* attempts implies some were made.
+ */
+const shortfall = (item: ItemAnalysis): string =>
+  item.attempts === 0
+    ? 'Never asked'
+    : `${item.attempts} of ${item.attempts + item.attemptsNeeded} attempts`;
+
 const FLAG_ORDER: ItemFlag[] = [
   'negative_discrimination',
   'too_hard',
@@ -89,6 +103,7 @@ const percent = (value: number): string => `${Math.round(value * 100)}%`;
 function ItemRow({ item }: { item: ItemAnalysis }) {
   const [open, setOpen] = useState(false);
   const worst = item.flags.length > 0 ? FLAG_COPY[item.flags[0]] : null;
+  const measured = item.attemptsNeeded === 0;
 
   return (
     <article className={`ia-item${worst ? ` ia-item--${worst.tone}` : ''}`}>
@@ -100,35 +115,57 @@ function ItemRow({ item }: { item: ItemAnalysis }) {
       >
         <span className="ia-text">{item.questionText}</span>
 
-        <span className="ia-figures">
-          <span className="ia-figure">
-            <span className="ia-figure-n">
-              {item.pValue === null ? '—' : percent(item.pValue)}
+        {/*
+          Below the threshold the three figures are replaced by one sentence
+          rather than shown as "— / — / 0". Three dashes read as broken data;
+          they are in fact the correct answer to a question nobody has answered,
+          and the row should say which of the two it is.
+        */}
+        {measured ? (
+          <span className="ia-figures">
+            <span className="ia-figure">
+              <span className="ia-figure-n">
+                {item.pValue === null ? '—' : percent(item.pValue)}
+              </span>
+              <span className="ia-figure-l">Correct</span>
             </span>
-            <span className="ia-figure-l">Correct</span>
-          </span>
-          <span className="ia-figure">
-            <span
-              className={`ia-figure-n${
-                item.discrimination !== null && item.discrimination < 0
-                  ? ' ia-negative'
-                  : ''
-              }`}
-            >
-              {item.discrimination === null
-                ? '—'
-                : item.discrimination.toFixed(2)}
+            <span className="ia-figure">
+              <span
+                className={`ia-figure-n${
+                  item.discrimination !== null && item.discrimination < 0
+                    ? ' ia-negative'
+                    : ''
+                }`}
+              >
+                {item.discrimination === null
+                  ? '—'
+                  : item.discrimination.toFixed(2)}
+              </span>
+              <span className="ia-figure-l">Separation</span>
             </span>
-            <span className="ia-figure-l">Separation</span>
+            <span className="ia-figure">
+              <span className="ia-figure-n">{item.attempts}</span>
+              <span className="ia-figure-l">Attempts</span>
+            </span>
           </span>
-          <span className="ia-figure">
-            <span className="ia-figure-n">{item.attempts}</span>
-            <span className="ia-figure-l">Attempts</span>
+        ) : (
+          <span className="ia-figures">
+            <span className="ia-figure ia-figure--wide">
+              <span className="ia-figure-n ia-pending">{shortfall(item)}</span>
+              <span className="ia-figure-l">
+                {item.attemptsNeeded} more before it is scored
+              </span>
+            </span>
           </span>
-        </span>
+        )}
       </button>
 
-      {item.flags.length > 0 && (
+      {/* `insufficient_data` is the *only* flag a question below the threshold
+          carries, and the figures beside it already say so — more precisely
+          than the chip could, since "not enough attempts yet" is the wrong
+          sentence for a question nobody has ever been served. So the chip row
+          is for real findings, and this row has none to show. */}
+      {measured && item.flags.length > 0 && (
         <div className="ia-flags">
           {item.flags.map((flag) => (
             <span
@@ -143,11 +180,22 @@ function ItemRow({ item }: { item: ItemAnalysis }) {
 
       {open && (
         <div className="ia-detail">
-          {item.flags.map((flag) => (
-            <p key={flag} className="ia-explain">
-              <strong>{FLAG_COPY[flag].label}.</strong> {FLAG_COPY[flag].detail}
+          {measured ? (
+            item.flags.map((flag) => (
+              <p key={flag} className="ia-explain">
+                <strong>{FLAG_COPY[flag].label}.</strong>{' '}
+                {FLAG_COPY[flag].detail}
+              </p>
+            ))
+          ) : (
+            <p className="ia-explain">
+              <strong>Nothing measured yet.</strong>{' '}
+              {item.attempts === 0
+                ? 'No candidate has answered this question, so there is nothing to report about it.'
+                : `${item.attempts} ${item.attempts === 1 ? 'candidate has' : 'candidates have'} answered this — too few for a proportion or a correlation to mean anything, so no figures are published.`}{' '}
+              Nothing is being claimed about it either way.
             </p>
-          ))}
+          )}
 
           <div className="ia-meta">
             <span>
@@ -166,11 +214,15 @@ function ItemRow({ item }: { item: ItemAnalysis }) {
             <span>{item.moduleName}</span>
           </div>
 
+          {/* The options are always worth reading; the pick rates are not
+              always worth drawing. Below the threshold every bar is either
+              empty or built from a handful of answers, and a chart of near-
+              zeroes invites conclusions the numbers cannot carry. */}
           <table className="ia-options">
             <thead>
               <tr>
                 <th scope="col">Option</th>
-                <th scope="col">Chosen by</th>
+                {measured && <th scope="col">Chosen by</th>}
               </tr>
             </thead>
             <tbody>
@@ -185,12 +237,14 @@ function ItemRow({ item }: { item: ItemAnalysis }) {
                       <span className="ia-correct-tag">correct</span>
                     )}
                   </td>
-                  <td className="ia-rate">
-                    <span className="ia-rate-bar">
-                      <span style={{ width: `${option.pickRate * 100}%` }} />
-                    </span>
-                    {percent(option.pickRate)}
-                  </td>
+                  {measured && (
+                    <td className="ia-rate">
+                      <span className="ia-rate-bar">
+                        <span style={{ width: `${option.pickRate * 100}%` }} />
+                      </span>
+                      {percent(option.pickRate)}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -274,6 +328,33 @@ export function QuestionAnalysis() {
     (item) => severity(item) <= FLAG_ORDER.indexOf('too_easy'),
   ).length;
 
+  /*
+   * How much of the bank has actually been measured.
+   *
+   * Worth stating outright, because on a young bank the honest answer is
+   * "almost none of it" and every row correctly says so — which without this
+   * line reads as a page that failed to load rather than one reporting that
+   * nobody has answered these questions yet. `threshold` is read off the data
+   * rather than hardcoded: the server owns that number.
+   */
+  const measured = items.filter((item) => item.attemptsNeeded === 0);
+
+  /*
+   * Read off a row that is still *below* the threshold, because only there does
+   * `attempts + attemptsNeeded` come to the threshold itself. On a row that has
+   * met it `attemptsNeeded` is 0 and the sum is that row's own attempt count, so
+   * taking the maximum across everything reported the busiest question in the
+   * bank as the bar every question has to clear — "until 50 candidates have
+   * answered it" once a single question reached fifty.
+   *
+   * Null when every question has enough, which is the one case the payload
+   * cannot answer: no row is left carrying the number. The sentence quoting it
+   * is dropped rather than guessed, and it has nothing to explain by then
+   * anyway — no row is showing dashes.
+   */
+  const pending = items.find((item) => item.attemptsNeeded > 0);
+  const threshold = pending ? pending.attempts + pending.attemptsNeeded : null;
+
   return (
     <>
       <div className="page-head">
@@ -289,6 +370,27 @@ export function QuestionAnalysis() {
       </div>
 
       {error && <div className="alert error">{error}</div>}
+
+      {!loading && items.length > 0 && (
+        <div className="card card-pad ia-coverage">
+          <strong>
+            {measured.length} of {items.length} question
+            {items.length === 1 ? '' : 's'}{' '}
+            {measured.length === 1 ? 'has' : 'have'} enough attempts to report
+            on.
+          </strong>{' '}
+          {threshold !== null && (
+            <span className="muted">
+              Nothing is published about a question until {threshold} candidates
+              have answered it. Every figure here is a proportion or a
+              correlation, and both are noise on a handful of answers — a
+              question that looks like it is scoring backwards after five
+              attempts usually is not. The rest of this list is waiting, not
+              broken.
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="toolbar">
         <select

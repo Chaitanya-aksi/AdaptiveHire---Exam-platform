@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthShell } from '../components/AuthShell';
 import { homeFor } from '../components/ProtectedRoute';
-import { useToast } from '../components/Toast';
+import { landingCopy, useSplash } from '../components/Splash';
 import { useAuth } from '../lib/auth';
 import { describeError } from '../lib/errors';
 
@@ -11,7 +11,7 @@ const MIN_PASSWORD = 8;
 export function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const toast = useToast();
+  const splash = useSplash();
   const [searchParams] = useSearchParams();
 
   const [fullName, setFullName] = useState('');
@@ -44,7 +44,12 @@ export function Register() {
         password,
         accountType: 'candidate',
       });
-      toast.success(`Welcome, ${user.fullName.split(' ')[0]}.`);
+      // Same beat as a sign-in, and for the same reason: raised before the
+      // navigation and in the same tick, so the destination mounts and fetches
+      // underneath the overlay instead of after it. It carries the welcome a
+      // toast used to — one greeting, on the screen that is already holding
+      // this moment, rather than a second one sliding in behind it.
+      splash.show(landingCopy(user, 'sign-up'));
       void navigate(homeFor(user.role), { replace: true });
     } catch (err) {
       const response = (
@@ -71,15 +76,13 @@ export function Register() {
       title="Create your account"
       subtitle="Register as a candidate to take your invited assessments."
       footer={
-        <>
-          <div>
-            Already have an account? <Link to="/login">Sign in</Link>
-          </div>
-          <div className="auth-alt-secondary">
-            Hiring instead?{' '}
-            <Link to="/recruiter/register">Register to host assessments</Link>
-          </div>
-        </>
+        // Only the other audience's door. "Already have an account?" is now a
+        // button inside the form, and saying it twice would make neither look
+        // like the answer.
+        <div className="auth-alt-secondary">
+          Hiring instead?{' '}
+          <Link to="/recruiter/register">Register to host assessments</Link>
+        </div>
       }
     >
       <form className="auth-form" onSubmit={(e) => void submit(e)}>
@@ -90,7 +93,7 @@ export function Register() {
           <input
             id="fullName"
             autoComplete="name"
-            placeholder="Ada Lovelace"
+            placeholder="John Doe"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             maxLength={150}
@@ -150,6 +153,31 @@ export function Register() {
         >
           {busy ? 'Creating account…' : 'Create account'}
         </button>
+
+      {/*
+        The way back, matching the sign-up button on the sign-in page. Somebody
+        who followed that link and then realised they already have an account
+        should not have to find their way back through the small print.
+      */}
+      <div className="auth-alt-sep">
+        <span>Already have an account?</span>
+      </div>
+      <Link className="auth-alt-btn" to="/login">
+        Sign in instead
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={15}
+          height={15}
+          aria-hidden="true"
+        >
+          <path d="M4 10h12M11 5l5 5-5 5" />
+        </svg>
+      </Link>
       </form>
 
       <div className="hint">

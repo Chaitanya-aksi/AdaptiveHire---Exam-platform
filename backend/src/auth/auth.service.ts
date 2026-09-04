@@ -297,35 +297,7 @@ export class AuthService {
       return;
     }
 
-    const token = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000);
-
-    /*
-     * Asking again does NOT invalidate the previous link, and that is a
-     * correction rather than an oversight.
-     *
-     * It used to. The result was a trap: the expired screen offers "send me a
-     * new link", which issued a new token and killed the one the person still
-     * had open in their mail client. They would go back to that tab, submit,
-     * be told it had expired, ask for another — and repeat, with every attempt
-     * killing the link they were about to use. Three requests in six minutes,
-     * every submission refused.
-     *
-     * So outstanding links now coexist. Each is still single-use and still dies
-     * after an hour, and the moment any one of them is redeemed the rest are
-     * burned with it — see `resetPassword`, which is where invalidating a live
-     * link actually protects something.
-     */
-    await this.resetTokens.save(
-      this.resetTokens.create({
-        userId: user.id,
-        tokenHash: hashResetToken(token),
-        expiresAt,
-      }),
-    );
-
-    const appUrl = this.config.getOrThrow<string>('appUrl');
-    const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    const resetUrl = await this.mintResetLink(user.id);
 
     try {
       await this.emailQueue.add(
@@ -356,6 +328,77 @@ export class AuthService {
         }`,
       );
     }
+  }
+
+  /**
+   * Mints one reset token and returns the link that redeems it.
+   *
+   * The single place a reset link is created, so the CLI escape hatch below
+   * cannot drift from the emailed one on TTL, token size or URL shape — a
+   * second copy of this would be a second thing to get wrong about a live
+   * credential.
+   *
+   * Asking again does NOT invalidate the previous link, and that is a
+   * correction rather than an oversight.
+   *
+   * It used to. The result was a trap: the expired screen offers "send me a
+   * new link", which issued a new token and killed the one the person still
+   * had open in their mail client. They would go back to that tab, submit, be
+   * told it had expired, ask for another — and repeat, with every attempt
+   * killing the link they were about to use. Three requests in six minutes,
+   * every submission refused.
+   *
+   * So outstanding links now coexist. Each is still single-use and still dies
+   * after an hour, and the moment any one of them is redeemed the rest are
+   * burned with it — see `resetPassword`, which is where invalidating a live
+   * link actually protects something.
+   */
+  private async mintResetLink(userId: string): Promise<string> {
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000);
+
+    await this.resetTokens.save(
+      this.resetTokens.create({
+        userId,
+        tokenHash: hashResetToken(token),
+        expiresAt,
+      }),
+    );
+
+    const appUrl = this.config.getOrThrow<string>('appUrl');
+    return `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  /**
+   * Mints a reset link and hands it back instead of emailing it.
+   *
+   * **Operator escape hatch — for the CLI only. Never expose this from a
+   * controller.** It returns a live credential, and every protection the
+   * emailed flow relies on comes from the fact that the link goes to the
+   * account's own inbox and nowhere else. A route that returned it would let
+   * anyone who could name an address take that account.
+   *
+   * It exists because the mail transport is the one part of this flow that is
+   * not ours. When the SMTP account is rate-limited, blocked, or simply not yet
+   * configured, the whole reset path is dead for a reason no code change can
+   * fix — and an administrator with shell access on the server needs some way
+   * to let a locked-out person back in. That administrator already has the
+   * database, so this grants no access they did not have; it just saves them
+   * writing the token by hand and getting the hash or the TTL wrong.
+   *
+   * The link is returned, never logged: printing it is the caller's decision,
+   * and the caller is a terminal a human is looking at.
+   */
+  async issueResetLinkForOperator(
+    email: string,
+  ): Promise<{ resetUrl: string; expiresInMinutes: number } | null> {
+    const user = await this.users.findByEmail(email.trim().toLowerCase());
+    if (!user) return null;
+
+    return {
+      resetUrl: await this.mintResetLink(user.id),
+      expiresInMinutes: RESET_TOKEN_TTL_MINUTES,
+    };
   }
 
   /**

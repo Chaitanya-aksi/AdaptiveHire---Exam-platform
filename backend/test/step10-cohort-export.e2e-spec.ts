@@ -103,7 +103,7 @@ describe('Step 10 — Cohort export', () => {
       .expect(201);
     assessmentId = (assessment.body as { id: string }).id;
 
-    sessionOne = await makeAttempt('Ada Lovelace');
+    sessionOne = await makeAttempt('John Doe');
     sessionTwo = await makeAttempt('Grace Hopper');
   });
 
@@ -117,7 +117,7 @@ describe('Step 10 — Cohort export', () => {
     expect(csv).toContain('Candidate');
     expect(csv).toContain('Overall score');
     expect(csv).toContain('Decision');
-    expect(csv).toContain('Ada Lovelace');
+    expect(csv).toContain('John Doe');
   });
 
   it('honours the order it was given', async () => {
@@ -134,7 +134,7 @@ describe('Step 10 — Cohort export', () => {
     const csv = await download([sessionTwo]);
 
     expect(csv).toContain('Grace Hopper');
-    expect(csv).not.toContain('Ada Lovelace');
+    expect(csv).not.toContain('John Doe');
   });
 
   it('escapes a note containing commas, quotes and newlines', async () => {
@@ -182,7 +182,7 @@ describe('Step 10 — Cohort export', () => {
       '11111111-2222-4333-8444-555555555555',
     ]);
 
-    expect(csv).toContain('Ada Lovelace');
+    expect(csv).toContain('John Doe');
   });
 
   it('refuses an implausibly large request', async () => {

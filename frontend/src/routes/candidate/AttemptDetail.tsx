@@ -261,7 +261,7 @@ export function AttemptDetail() {
       )}
 
       <section className="card card-pad at-card">
-        <h2 className="at-card-title">Where this has got to</h2>
+        <h2 className="at-card-title">Timeline</h2>
         <StatusBar stages={stages} />
       </section>
 

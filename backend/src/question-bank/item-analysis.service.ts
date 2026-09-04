@@ -61,6 +61,16 @@ export interface ItemAnalysis {
   authoredDifficulty: number;
   /** Scored attempts behind these figures. */
   attempts: number;
+  /**
+   * How many attempts this question still needs before anything is published
+   * about it, or 0 once it has enough.
+   *
+   * Sent rather than left for the client to subtract, so the threshold has one
+   * definition. A page showing three dashes and no explanation of what would
+   * make them numbers reads as broken data rather than as a question nobody has
+   * answered yet — which, on a young bank, nearly every row is.
+   */
+  attemptsNeeded: number;
   /** Proportion answered correctly — difficulty as observed, 0-1. */
   pValue: number | null;
   /**
@@ -263,6 +273,7 @@ export class ItemAnalysisService {
       status: question.status,
       authoredDifficulty: question.difficultyScore,
       attempts,
+      attemptsNeeded: Math.max(0, MIN_ATTEMPTS - attempts),
       pValue,
       discrimination,
       drift,

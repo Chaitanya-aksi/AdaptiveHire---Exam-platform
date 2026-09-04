@@ -7,12 +7,20 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { connectionErrorReporter } from './connection-error-log';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
 /**
- * One shared ioredis connection. Session state, the server-authoritative
- * timer TTL keys, and BullMQ all sit on this same instance.
+ * The application's own ioredis connection: session state and the
+ * server-authoritative timer TTL keys.
+ *
+ * BullMQ talks to the same Redis *server* but does not share this client — it
+ * is handed connection options in `app.module.ts` and builds its own, because a
+ * worker needs a connection it can block on and blocking it would stall every
+ * session read. This comment used to claim the connection was shared, which
+ * made the missing error handling on BullMQ's side look deliberate; see
+ * `queue-errors.module.ts`.
  */
 @Global()
 @Module({
@@ -28,27 +36,24 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
         const client = new Redis({
           host,
           port,
-          // Required by BullMQ, which shares this connection config.
+          // Matches what BullMQ requires of its own connections, so both
+          // behave the same way when Redis goes away mid-request.
           maxRetriesPerRequest: null,
         });
 
         // Without an 'error' listener ioredis prints a bare
         // "Unhandled error event" stack that names neither Redis nor the
-        // address it failed to reach. Log it once per state change instead of
-        // on every one of the endless reconnect attempts.
-        let lastErrorCode: string | null = null;
-        client.on('error', (err: NodeJS.ErrnoException) => {
-          const code = err.code ?? err.message;
-          if (code === lastErrorCode) return;
-          lastErrorCode = code;
-          logger.error(
+        // address it failed to reach.
+        const errors = connectionErrorReporter(
+          logger,
+          (code) =>
             `Cannot reach Redis at ${host}:${port} (${code}). ` +
-              `Is it running? \`docker compose up -d redis\``,
-          );
-        });
+            `Is it running? \`docker compose up -d redis\``,
+        );
+        client.on('error', errors.report);
 
         client.on('ready', () => {
-          lastErrorCode = null;
+          errors.reset();
           logger.log(`Connected to Redis at ${host}:${port}`);
         });
 

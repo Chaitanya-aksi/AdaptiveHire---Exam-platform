@@ -167,11 +167,77 @@ export function IconShield(props: IconProps) {
   );
 }
 
+/**
+ * One person: the account menu's own entry.
+ *
+ * A shoulders-and-head mark rather than the avatar's initials — the initials
+ * are already directly above it in the dropdown, and repeating them would be
+ * the same thing twice at two sizes.
+ */
+export function IconUser(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20v-1a4.5 4.5 0 0 1 4.5-4.5h5A4.5 4.5 0 0 1 19 19v1" />
+    </Icon>
+  );
+}
+
+/** Leaving: a door with the arrow pointing out of it. */
+export function IconSignOut(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 4.5h3.5a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-3.5" />
+      <path d="M10 12H4" />
+      <path d="M7.5 8.5 4 12l3.5 3.5" />
+    </Icon>
+  );
+}
+
 export function IconArrow(props: IconProps) {
   return (
     <Icon {...props} width="16" height="16">
       <path d="M5 12h13" />
       <path d="M12.5 6.5 19 12l-6.5 5.5" />
+    </Icon>
+  );
+}
+
+/** A closed padlock: the account's sign-in credentials. */
+export function IconLock(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+      <path d="M12 14.5v2" />
+    </Icon>
+  );
+}
+
+/**
+ * Show / hide, for a password field.
+ *
+ * The struck-through eye means "hidden", so it is what a field shows while the
+ * characters are masked — the icon names the state you are in, not the one the
+ * button would move you to, and the `aria-label` on the button carries the
+ * action. Both are drawn here because the pair only makes sense together.
+ */
+export function IconEye(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2 12s3.8-6.5 10-6.5S22 12 22 12s-3.8 6.5-10 6.5S2 12 2 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </Icon>
+  );
+}
+
+export function IconEyeOff(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M17.9 17.9A10.4 10.4 0 0 1 12 19.5C5.8 19.5 2 12 2 12a18.9 18.9 0 0 1 4.6-5.6" />
+      <path d="M9.9 5.2A9.9 9.9 0 0 1 12 5c6.2 0 10 7 10 7a19 19 0 0 1-2.2 3.2" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="m3 3 18 18" />
     </Icon>
   );
 }

@@ -407,7 +407,7 @@ export function People() {
               id="newName"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Ada Lovelace"
+              placeholder="John Doe"
               maxLength={150}
               style={{ width: '100%' }}
             />
@@ -499,8 +499,9 @@ export function People() {
                   organisation immediately.
                 </p>
                 <p className="muted small" style={{ marginBottom: 0 }}>
-                  Note: This can't be undone!
-                  This user will be deleted permanently and the assessments, questions they created are kept. Delete them manually if you want to.
+                  Note: This can't be undone! This user will be deleted
+                  permanently and the assessments, questions they created are
+                  kept. Delete them manually if you want to.
                 </p>
               </>
             ) : (

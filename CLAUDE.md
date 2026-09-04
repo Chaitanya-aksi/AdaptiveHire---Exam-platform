@@ -53,80 +53,27 @@ The rules, all of which have to hold:
 
 ---
 
-## Folder Structure
+## Layout notes
 
-```
-adaptivehire/
-├── docker-compose.yml
-├── .env.example
-├── docs/                              # planning docs live here — read these first
-│   ├── build-architecture-plan.md
-│   ├── database-schema.md
-│   ├── tech-stack.md
-│   └── requirements.md
-│
-├── backend/                           # NestJS
-│   └── src/
-│       ├── auth/                      # JWT, guards, roles
-│       ├── users/                     # candidate + recruiter_admin
-│       ├── modules-catalog/           # the `modules` (subjects) table — named to avoid
-│       │                              # colliding with NestJS's own "module" concept
-│       ├── question-bank/
-│       │   ├── entities/
-│       │   │   ├── question.entity.ts
-│       │   │   ├── mcq-question-details.entity.ts
-│       │   │   └── personality-question-details.entity.ts
-│       │   └── bulk-import/           # spreadsheet parser + seed script
-│       ├── assessments/               # assessment config, assessment_modules
-│       ├── invitations/
-│       ├── adaptive-engine/           # THE core — five services, one folder each
-│       │   ├── evaluation/
-│       │   ├── ability-estimator/     # Elo-style logic lives here
-│       │   ├── question-selector/
-│       │   ├── stopping-engine/
-│       │   └── adaptive-engine.service.ts   # orchestrates the four above
-│       ├── sessions/                  # session lifecycle: start, next-question, submit-answer
-│       │   └── redis-session.service.ts     # wraps ioredis, session-state read/write
-│       ├── proctoring/                # WebSocket gateway, event logging
-│       ├── reports/
-│       ├── queues/                    # BullMQ setup, all workers
-│       │   ├── auto-submit/
-│       │   ├── report-generation/
-│       │   └── invite-emails/
-│       └── common/                    # shared DTOs, pipes, filters, enums
-│
-├── frontend/                          # React
-│   └── src/
-│       ├── routes/
-│       │   ├── candidate/             # login, assessment list, test-taking screens
-│       │   └── recruiter-admin/       # dashboard, question bank, assessments, reports
-│       │       #
-│       │       # Recruiter navigation is SECTIONS, not pages (reorganised
-│       │       # 2026-08-20). The top bar lists six: Dashboard, Assessments,
-│       │       # Question bank, Modules, People, Settings. A section with more
-│       │       # than one view carries its own `SubNav` tab strip rather than
-│       │       # claiming another slot in the bar:
-│       │       #   Question bank → Questions · Performance · Bulk import
-│       │       #   Settings      → Workspace · My account
-│       │       # "Question performance" and "Bulk import" used to be top-level
-│       │       # items, and "My account" lived only behind the user menu.
-│       │       #
-│       │       # Creating an assessment is its own page (`assessments/new`),
-│       │       # not a form stacked on top of the list. The list is opened far
-│       │       # more often than the form, and leading it with a long empty
-│       │       # form made the page people actually use unreadable.
-│       │       # `/admin/profile` stays as a redirect to
-│       │       # `/admin/settings/account` so old links still land.
-│       ├── components/assessment/     # question renderer, timer, progress
-│       ├── hooks/
-│       │   ├── useSession.ts
-│       │   └── useProctoring.ts       # fullscreen, tab-switch, face-detection, multi-display
-│       └── lib/
-│           ├── api.ts                 # REST client
-│           └── socket.ts              # WebSocket client
-│
-└── shared/types/                      # optional — shared TS enums (scoring_type, session status)
-```
+The tree itself is `ls`; only these two things about it are not.
+
+- **`modules-catalog/`** is the `modules` (subjects) table, named that way to
+  avoid colliding with NestJS's own "module" concept.
+- **Recruiter navigation is SECTIONS, not pages** (reorganised 2026-08-20). The
+  top bar lists six: Dashboard, Assessments, Question bank, Modules, People,
+  Settings. A section with more than one view carries its own `SubNav` tab strip
+  rather than claiming another slot in the bar:
+  - Question bank → Questions · Performance · Bulk import
+  - Assessments → Assessments · Reports · Proctoring signals
+  - Settings → Workspace · My account
+
+  "Question performance" and "Bulk import" used to be top-level items, and "My
+  account" lived only behind the user menu. Creating an assessment is its own
+  page (`assessments/new`), not a form stacked on top of the list: the list is
+  opened far more often than the form, and leading it with a long empty form
+  made the page people actually use unreadable. `/admin/profile` stays as a
+  redirect to `/admin/settings/account` so old links still land.
+- Planning docs live in `docs/` — read those first for detail this file summarises.
 
 ---
 
@@ -174,119 +121,36 @@ Five cooperating NestJS services under `adaptive-engine/`:
 
 ## Security & Proctoring Scope (final for v1 — do not add or remove without discussion)
 
-- No revisiting previous questions (enforced server-side via Redis session state, never trust client)
-  - The runtime shows a **numbered question queue** above the question (`QuestionQueue` in `ModuleProgress.tsx`) — answered filled, current ringed, still-to-come dimmed. It is **display only**: `<span>`s in a list, never buttons. That is the design, not an oversight — the server would refuse a jump backwards anyway, and a clickable-looking chip that does nothing is worse than a label. It is drawn against `max` with the slots past `min` dashed, because an adaptive module has no fixed length and a solid chip would promise one.
-- **Server-authoritative timer (Redis TTL key, not client-side `setInterval`), and it starts on "Begin" — never on page load.** There are two clocks and both must start at the same moment: the per-module deadline (`startCurrentModule`) and the **session** deadline that auto-submit fires on. The session one used to be set in `createSession`, which runs when the runtime page loads, so the entire time budget drained while a candidate read the very first intro screen — a real attempt was auto-submitted with **zero answers** before a single question had been served. `beginSessionClock` now rebases both `expiresAt` and `startedAt` when the *first* module starts.
-  - `startedAt` moves too, deliberately: a recruiter reads elapsed time as how long the attempt took, and leaving it at session creation would include however long the intro screen sat open.
-  - The queued auto-submit job must be **removed before the replacement is added** — BullMQ keys on `jobId` and silently keeps the existing job rather than replacing it, so adding alone leaves the old, far-too-early deadline live.
-  - `createSession` still sets a placeholder deadline of `budget + START_GRACE_SECONDS` (2h) purely so a session cannot sit `in_progress` forever if somebody opens the runtime and walks away. Nothing is measured during it.
-  - `npx ts-node src/database/seeds/check-session-clock.ts <assessmentId>` proves the invariant on a throwaway candidate and invitation it deletes afterwards.
-- Fullscreen enforcement (Fullscreen API)
-- **Tab-switch handling — detection plus a blackout and a re-entry gate (hardened 2026-08-20).** A request to "disable tab switching completely" was assessed and is **not achievable in a browser**, so this is what was built instead. Record the finding rather than re-deriving it:
-  - Alt+Tab, Cmd+Tab, the Windows key and Mission Control are handled by the **operating system** and never reach the page — there is no event to cancel, so this half is genuinely unreachable. Ctrl+T, Ctrl+W, Ctrl+N and Ctrl+Tab are **reserved by the browser**: the keydown *does* reach the page, but `preventDefault` cancels only the page's default action, never the user agent's, so a tab opens anyway. Real prevention of the OS half requires a native lockdown client (SEB-style), which stays out of scope for v1.
-  - **`navigator.keyboard.lock()` does close the browser-reserved half, and is used (updated 2026-08-21).** Held only while a module runs and the page is in Fullscreen-API full screen — both are conditions of the API, not choices — it routes Ctrl+T/W/N and Escape to the page instead of the browser, so those keys genuinely do nothing during a section. It is still limited by spec to "keys granted access by the underlying operating system", which is why it cannot touch the window switcher, and it is absent entirely in Firefox and Safari, so every caller must cope with `undefined`. Do not describe the lock as decorative: the earlier wording here said `preventDefault` "does nothing" and stopped, which undersold what actually ships.
-  - **F11 is intercepted and redirected into our own full screen (added 2026-08-21).** There are two full screens and only one of them can be locked: the browser's F11 leaves `document.fullscreenElement` **null**, and `keyboard.lock()` is tied by spec to Fullscreen-API full screen, so it cannot arm against F11. A candidate who pressed Escape and then F11 therefore got a screen that *looked* locked while Ctrl+T went on opening tabs — the worst state available, because it reads as secure. Unlike Ctrl+T, **F11 arrives `cancelable: true`** (verified in Chrome), so the handler cancels it and spends the activation it carries on `requestFullscreen()` instead. The result is identical to the "Return to full screen" button, lock included, which makes that button the only way *into a locked state* by construction rather than by asking the candidate to prefer it. Deliberately one-way — F11 no longer toggles back out; Escape still leaves, so nobody is trapped, and leaving is recorded either way.
-  - `useProctoring` exposes **`browserFullscreen`** (from `matchMedia('(display-mode: fullscreen)')`, which fires no `fullscreenchange` and needs its own listener) purely so the re-entry warning can be worded for what the candidate can actually see. Telling somebody staring at a full-screen window that they are "not in full screen" reads as a broken app; that pair — browser full screen on, ours off — gets its own sentence instead.
-  - What ships is **detect, warn hard, record**: leaving raises an `AwayWarning` above the question, logs `tab_switch` with its timestamp, and the server-authoritative clock never stops. The warning has **no dismiss button** — it stands for the rest of the section and its count rises inline on each further departure, because an acknowledge button is only ever pressed to make the message go away. It is a **single compact line** for the same reason: a three-line banner that never leaves is a three-line banner pushing the question down the screen for ten minutes. Consequently the "currently away" latch resets on **return** (window `focus`, or `visibilitychange` back to visible), not on acknowledgement; without that, every switch after the first would go unlogged. `blur` is watched as well as `visibilitychange` because moving to another window on a **second monitor** only blurs and leaves the document visible.
-  - **The screen is deliberately NOT blanked.** A blackout overlay was built and then removed the same day: `blur` fires on any transient focus change — an OS notification, a permission dialog, a keyboard user tabbing one control past the last one — and hiding the question in those cases takes the test away from a candidate who did nothing, while their clock runs. Do not reintroduce it without solving the false-positive problem first.
-  - Two things keep the detection honest. `blur` is **debounced by `AWAY_GRACE_MS` (700ms) and re-checked with `document.hasFocus()`**, so focus bouncing out and back is not a violation; `visibilitychange` is not debounced, because a hidden document is unambiguous. And a **focus trap** wraps Tab inside `.assess-shell`, which is the actual fix for the reported bug — tabbing past the last control used to move focus into the browser's address bar, blurring the window and registering as leaving.
-  - The departure latch is a **ref, not state**: `blur` and `visibilitychange` both fire on one switch, and de-duplicating inside a state updater would double-emit under StrictMode.
-  - Also refused while a module runs: context menu, copy/cut, Ctrl+P/S/C/X/A, and text selection. Browser-reserved combinations are still deliberately **not** `preventDefault`ed for show — a handler that appears to block Ctrl+T and does not invites the reader to trust the rest. The keyboard lock is what actually blocks them, and it does so by capturing the key rather than by cancelling the event; F11 is the one exception in the keydown handler, and only because it is genuinely cancelable.
-  - Known false positive: an OS notification stealing focus counts as leaving. Accepted, because the alternative is missing the second-monitor case.
-  - Still **not** an auto-disqualification. The gate costs time and is recorded; it never ends the attempt. Making a tab switch fail an attempt would reverse the philosophy at the bottom of this section and needs an explicit decision.
-- **Face detection (face-api.js, client-side only — NO video recording or storage).** Measures whether the candidate's face is *properly framed*, not merely whether one is somewhere in the picture. The rule lives in **one** file, `lib/face-framing.ts`, and both callers use it: the readiness wizard on `SETUP_RULE` and the assessment runtime on `RUNTIME_RULE`. A geometry rule kept in two places drifts — the alignment oval was briefly drawn from CSS and measured from TypeScript, and the ring on screen tested nothing at all.
-  - **Counting faces was a real defect, in both places.** A candidate passed the readiness check with their face jammed against the left edge and the oval empty, and a camera angled at the ceiling with a head in one corner logged nothing during a test — a face was present, the count was one, everything looked fine. `framing()` tests position (centre within the oval's radii × tolerance) and size (`minFaceWidth`..`maxFaceWidth`) and reports *which* way it failed.
-  - **`RUNTIME_RULE` is deliberately looser than `SETUP_RULE`**, mostly on distance. Setting up is a deliberate act with a preview to look at; sitting an assessment for forty minutes involves shifting in a chair, there is no oval on screen to aim at, and every event becomes a line in somebody's report — "leaned back at 14:32" buries the events a recruiter should actually read. Position stays near-strict, because a camera pointed away is the signal that matters.
-  - **`SUSTAINED_FRAMES` in `useProctoring` requires two consecutive agreeing reads before anything is logged, and only transitions are emitted** — a glance at the desk never reaches the log. At `FACE_POLL_MS` that is **1-2s** (both were retuned 2026-08-27; the poll was 5000ms and a departure took 5-10s to notice at best).
-    - **The poll rate was never the main cost — the run counter was.** It restarted whenever one framing problem became another, and real movement is never a clean `ok`→`absent` step: walking out of shot reads `too_far` *then* `absent`, and returning reads `too_far` then `off_centre` then `ok`. Each intermediate verdict reset the count, so a measured walk-away took **25s** to log and a return took **30s** to clear the warning, against the 10s the constants implied. The counter now runs on whether the candidate is framed *at all*, so a changing problem continues the run instead of restarting it: the same two sequences are 4s and 6s.
-    - Swapping one framing problem for another therefore emits nothing — it is the same finding reworded, and it is also what stops a face hovering on the detector's score threshold from flickering out a stream of events. The exceptions are a problem becoming `absent` or `multiple`, which are different claims and get their own event; those need the identical verdict twice (`codeRuns`), because `runs` is already satisfied mid-problem and without it an `absent`/`multiple` oscillation would emit on every read.
-    - **`SUSTAINED_FRAMES` stays at 2 and must not go to 1.** The tiny detector genuinely misses a face that is plainly there; at 1 a simulated `ok absent ok absent ok` writes two false `face_absent` rows into a hiring record, where at 2 it writes none. An event here has to be true before it has to be fast.
-    - The loop skips a tick rather than stacking if detection ever outruns the poll interval, and a detection in flight when a module ends is discarded rather than emitted.
-  - Mid-test this is **still detect-and-log** — see the philosophy at the end of this section. Nothing here blocks, ends or fails an attempt; what changed is that the events are now true.
-- **Camera is mandatory to begin a module.** A candidate cannot start (or resume into) a module until their camera is confirmed active; if permission is denied or unsupported, the "Begin" action stays disabled with an explanation, and they cannot proceed until it is granted. **The camera starts itself where permission already stands** (`useProctoring`, gated on `permissionState('camera') === 'granted'`), so the section intro states its condition — "Camera on and working" — rather than offering a button. Asking a candidate to press "Turn on camera" thirty seconds after the readiness check proved it works, with Begin greyed out until they did, made a working product look broken. Never attempt `getUserMedia` blindly here: without a standing grant it puts an unrequested permission prompt on screen at the worst moment, which is why the manual control returns only when the answer is not `granted`. This is a start-of-module prerequisite, not a mid-test penalty — see below.
-- **`face_not_framed` is its own event type**, not a reuse of `face_absent` (migration `1786710000000`). An occupied chair reported as an empty one is a false claim in a hiring record. Every event here is named for what was measured — the same rule that gave `background_noise` its name — and `metadata.reason` carries `off_centre` / `too_far` / `too_close`.
-- Multi-display detection (Window Management API `getScreenDetails()`) — logged as a soft signal, never auto-flagged
-- **Ambient-audio detection (added 2026-08-19 — a deliberate widening of this scope, confirmed explicitly).** Sustained sound above a threshold while a module is running is logged as `background_noise`, on the same "detect and log" footing as face presence. Analysed entirely in the browser with an `AnalyserNode` reading a level: **no audio is recorded, buffered, transcribed or transmitted**, and the platform never learns what was said — only that it was loud. It cannot distinguish a voice from a television, so the event is named for what is actually measured, and the report says so. Not a *mid-test* gate — a noisy room never interrupts, ends or fails an attempt, because a candidate in a shared house has done nothing wrong and the signal is for the recruiter to weigh. A working microphone is, since 2026-08-20, required to *begin*, along with every other readiness check; see below.
-- **System readiness check before the assessment (added 2026-08-19; every check made blocking, and rebuilt as a one-step-at-a-time wizard, 2026-08-20).** Runs once, before the first module, and again on demand from the candidate's assessment card so problems surface before the day rather than at the start. **Every check gates the start** — browser, screen, camera, microphone, connection — and the candidate cannot advance past a step until it passes.
-  - **One check per screen, and every step decides continuously.** This replaced a single list of six ticks; the first wizard then had to be pushed further, because asking each question *once* reproduced the very bug it existed to prevent — the camera step opened a stream, reported "Working", and let a candidate through on a completely black frame. **A device answering is not a device doing its job.** So each step is now live:
-    - **Camera** runs `watchFaces` (face-api.js) against the preview element itself and passes only while **exactly one face is properly framed inside the alignment oval**. Counting faces was not enough and was a real defect: a candidate passed with their face jammed against the left edge of frame and the oval completely empty, because something in the picture was a face. `watchFaces` therefore returns **normalised boxes, not a count**, and `alignment()` tests position (centre within `CENTRE_TOLERANCE_X/Y` of the oval's radii) and size (`MIN_FACE_WIDTH`..`MAX_FACE_WIDTH`), reporting "not in the oval" / "too far" / "too close" separately. Zero faces says so; two or more says the candidate must sit alone.
-      - `OVAL` in `ReadinessCheck.tsx` is the **single source of truth**: the ring on screen is drawn from those numbers via inline styles, so the ring the candidate is asked to fill is by construction the ring being measured. Do not move it back into CSS — as separate numbers they drifted at once.
-      - `cx` is 0.5 deliberately: the preview is mirrored for comfort, and a horizontally centred target is the one shape that maps onto itself under that mirror, so nothing else has to think about it.
-      - Vertical tolerance is looser than horizontal. Sliding a chair sideways is fine adjustment; vertical framing is set by a laptop hinge, and a measured face on a real desk sat 0.005 from the limit with the lid at a comfortable angle.
-      - `STABLE_SAMPLES` requires agreeing consecutive reads before the verdict flips, so a face near a threshold does not strobe the step between pass and fail. While a good frame is still settling the step says "Hold still…" rather than claiming a pass it has not granted.
-      - The corner caption lives on the `Alignment` result beside `detail`, not derived at render time — derived separately the two contradicted each other mid-settle.
-      - `openCamera` requests a **4:3 stream** to match the preview's aspect ratio. With `object-fit: cover` a 16:9 stream is cropped on screen while detection still sees the full frame, so a face the candidate cannot see would count as inside the oval.
-    - **Microphone** passes only once the meter has **actually moved** past `HEARD_AT` — a device muted in the OS mixer opens fine and moves nothing. `HEARD_AT` is deliberately half of `LOUD_AT` in `audio-monitor.ts`; the two must be read together.
-    - **Screen** re-evaluates on every `resize`, so un-maximising takes the pass away again.
-    - **Connection** re-measures on a timer.
-    - Continue is bound to the verdict **right now**, not one from a moment ago: cover the lens after passing and the button disables again.
-  - `watchFaces` detects on a `<video>` the caller already owns, unlike `startFaceMonitor` which opens its own stream for the runtime. Opening a second camera for the readiness check would light two indicators and do double the work for the same answer.
-  - Consequently `openCamera` and `openMicrophone` **hand their live resources back to the caller** rather than closing them on the spot; the wizard owns them and releases them when the step is left. A webcam left running behind a later step lights the candidate's camera indicator with nothing on screen explaining why.
-  - There is no `canStart` helper any more. The wizard asks the smaller question at each step and will not advance until it passes, so reaching the end *is* the proof — a helper recomputing it from a bag of results would be a second source of truth for a rule the flow already enforces.
-  - The meter's "we heard you" confirmation is **feedback, not a gate**: a very quiet microphone in a silent room would otherwise trap somebody who has done nothing wrong. Passing the step needs the device to open, not the candidate to make a noise. This reverses the original split, where only the camera and the runtime's own APIs blocked and the rest warned and let the candidate through: a warning nobody has to act on is a warning that gets waved past, and the candidate is the one who pays for it in the report afterwards. `warn` and `fail` now differ only in wording — `warn` means "you can fix this yourself right now" and carries a `fix` line saying how, `fail` means this machine or browser cannot do it.
-  - **What each check can actually see matters.** `screen.isExtended` reports *physical* displays only; two windows side by side on one monitor are one display and no browser API can see what is drawn beside the page. `checkWindowFills` covers that case with a proxy — the window must cover ≥90% of `availWidth × availHeight` — which the candidate fixes by maximising.
-  - **A refused camera or microphone permission cannot be re-prompted.** Once "Never allow" is chosen, `getUserMedia` rejects immediately and no web page can reopen that dialog; it is a browser security rule. The check therefore uses the Permissions API to tell "blocked" apart from "no device" and shows where the switch is, after which "Check again" picks up the new state.
-  - The connection check times three round trips to a real authenticated endpoint and takes the median, with a cache-busting nonce — Express puts an ETag on the response, and without it a 304 would be timed instead of the request.
-- **Untimed, unscored practice questions before the assessment (added 2026-08-19; made part of starting 2026-08-20).** Drawn from questions flagged `questions.isSample`, which the adaptive selector and the assessment pools both exclude, so a sample can never be served for real or counted. `PracticeService` aims for a **total of three**, round-robin across the assessment's subjects — three subjects give a tour of one apiece, one subject gives three from it. A per-subject cap could do neither, and gave single-subject assessments exactly one question, which rehearses nothing. The platform bank therefore seeds **three deliberately trivial samples per module**: the point is showing how a question is answered, never its difficulty. The point is that the first time somebody meets a ranking control is not while the clock is running. Each stage is entered through a **branded splash** (`SectionSplash`) — the AdaptiveHire mark, then "Sample test", then the assessment's own title read from the invitation, and again before **each section after the first** with that section's name. The first section is never announced: reaching it means passing the readiness check, which already ends on the assessment's own splash, and a second a heartbeat later reads as a stutter. It is a signpost, not a spinner: the sample questions and the real assessment use the same controls on purpose, so without a marker between them the moment answers begin to count would pass unannounced. The hold is fixed rather than tied to loading, and `prefers-reduced-motion` collapses the animation while keeping the pause. They are reached by pressing **"Start assessment"**, and the last one ends on **"Start assessment"** again — they are a stage of starting, not a side door labelled "try a few questions" that the people who most need them walked straight past. There is no skip; leaving means going back to the assessment list without starting anything.
-  - **Nothing is marked and nothing is revealed.** Pick an option, move on. The reveal step and the "there is no right answer to this kind of question" verdict were both removed (2026-08-20): the point is that the *controls* are familiar, and a right/wrong badge here teaches a candidate to dread the next screen rather than to use it. It also means a sample's `correctOption` never reaches the candidate's eyes, only the API.
-  - **The framing is deliberately light.** One "Warm-up · not scored" chip, and nothing else — no "this one does not count" headline, and no "a practice question…" preamble on the stem itself (that lived in the seeded question text and was removed there). A candidate must know these answers go nowhere; they must not be told so loudly that the rehearsal stops feeling like the real thing, because a rehearsal that does not feel real rehearses nothing.
-- Auto-submit on timeout (BullMQ delayed job, fires even if the candidate's browser is closed)
-- All violation events push to backend via WebSocket → `proctoring_logs` table
-- **Explicitly out of scope for v1:** OS-level lockdown (SEB-style native app), object/phone detection in camera feed, video/audio recording or review, speech transcription, voice identification, ML-based anomaly detection. These are known, accepted limitations — not oversights.
-- **Philosophy: detect and log for recruiter judgment, never auto-disqualify — once a module is underway.** Mid-test violations (tab switches, full-screen exits, face going briefly out of frame, etc.) never block, end, or fail the test; they are presented as data in the report and the recruiter makes the call. **The exceptions are all gates before anything starts, never penalties once it has:** the camera-mandatory check at the top of each module, and the system readiness check before the assessment, which since 2026-08-20 requires every one of its checks to pass. The distinction that matters is timing, not severity — nothing a candidate does *during* an attempt can end it early.
+**The full scope lives in `.claude/rules/proctoring.md`**, which loads whenever
+you work on proctoring, the session runtime or the readiness check. It is
+locked: do not add or remove a signal without discussion.
+
+The one principle that applies everywhere, so it stays here:
+
+**Detect and log for recruiter judgment, never auto-disqualify — once a module
+is underway.** Mid-test violations (tab switches, full-screen exits, a face
+leaving frame, background noise) never block, end, or fail an attempt; they are
+data in the report and a person makes the call. The only exceptions are *gates
+before anything starts* — the camera check at the top of each module and the
+system readiness check — never penalties once it has. The distinction that
+matters is timing, not severity.
 
 ---
 
 ## Reporting
 
-Two-layer report per completed session:
-1. **Summary** (from `reports` table) — ability scores, trait profile, strengths/weaknesses, rule-based hiring recommendation, violation counts
-2. **Detail view** (queried live, not stored) — full question-by-question answer list (right/wrong, question text) and the full timestamped proctoring event list
+**The full rules live in `.claude/rules/reporting.md`**, which loads whenever you
+work on report building, the adaptive engine's scoring, or the report pages.
 
-Report generation runs asynchronously via a BullMQ job triggered on submission — the candidate should never wait for report computation.
+Two things that cut across the whole codebase, so they stay here:
 
-**Every objective module states what its questions were worth to a guesser (added 2026-08-27).** `ModuleSummary.expectedByChance` sits beside `questionsCorrect` on the report page and in the PDF, so a section reads "3 of 12 correct · 3 expected by guessing alone" rather than a bare score. A candidate answering at random scores about 36/100 on a 12-question module — `STARTING_ABILITY` sits exactly on the reporting scale's midpoint and nothing corrects for guessing — and 36 with no context reads like a weak result rather than no result at all.
-
-- Summed per question as `1 / options` by `expectedCorrectByChance` in `report-builder.ts`, never assumed from `MIN_OPTIONS`. Four-option items put chance at a quarter but the bank allows six, and quoting a quarter to a recruiter whose candidate faced six-option items understates what they did.
-- **Stated on every objective section, never only the weak ones.** Shown selectively it becomes an accusation, which is a different feature (a response-validity flag) and a different decision. Shown always it is simply the scale the score sits on.
-- It is a count, not a verdict: nothing here corrects a score, caps a recommendation or flags an attempt, and the narrative does not mention it. Same division of labour as the proctoring signals — surface the evidence, leave the judgement with a person.
-- Null rather than zero when no question could be read. Zero would claim every correct answer was earned.
-- Computed live in `buildModuleSummaries` from `responses`, which are kept permanently, so **completed sessions from before this change show it with no backfill.**
-
-### Behavioural composites and the overall score (decided 2026-08-12)
-
-A trait module on its own used to produce ten trait scores, a null `overallScore` and a permanent `borderline` — which read as "no result" for a candidate who had answered everything. So the report now derives five **role-relevant composites** from the workplace traits (Leadership Readiness, Team Collaboration, Reliability & Follow-Through, Adaptability Under Pressure, Integrity & Judgment). Each is a fixed authored weighting over the traits, defined in `reports/behavioral-profiles.ts` — rule-based, no learned weights, and a recruiter can reproduce any composite by hand.
-
-`overallScore` is now **ability 70% / behavioural index 30%**, and whichever half the assessment did not measure drops out so the other takes full weight. This is a deliberate change from the earlier "traits never touch the recommendation" rule: what reaches the recommendation is fit for a kind of work, never a rating of the personality, and no single trait can move the outcome. Consistency, repeat-probe results and proctoring signals still reach it nowhere.
-
-### Trait scores are measured per item, not against the authoring range (changed 2026-08-27)
-
-A trait score is `sum` placed on the scale the **served questions** actually made possible, not the fixed `TRAIT_WEIGHT_MIN..MAX`. **50 is what answering at random earns**, 100 is picking the most indicative option every time and 0 the least.
-
-The old fixed rescaling gave a random responder **57.6/100**, and on a personality-only assessment that is the whole `overallScore` — so a monkey came out as **"Recommended"** (`RECOMMENDED_AT` is 55). It was not an arithmetic bug: option sets are authored positive-skewed, because a good scenario question offers several defensible behaviours and one poor one. Across the starter bank the mean option weight is **+0.6, not 0** (`ownership` +0.79, `resilience` +0.83). A scale anchored on the authoring range therefore starts every candidate above its own midpoint. Re-authoring the 64 fixtures would have fixed those 64 fixtures; it would not touch a customer's own bank uploaded through bulk import, which nothing can police.
-
-- The scale comes from `EvaluationService.achievableTraitRange`, which **runs every answer a candidate could have given through the real evaluators** and looks at what came out. A ranking's contribution depends on the position of every option, so a second formula for "the best possible ordering" would be a second scoring model free to drift from the real one. Enumeration cannot drift: it *is* the real one. `MAX_OPTIONS` (6) bounds the cost at 720 orderings per submitted answer.
-- `TraitRange.chance` is the **mean** of those outcomes, never the midpoint of `worst..best`. A question offering +3/+2/0/−3 has a midpoint of 0 and a chance value of +0.5, and only the mean is what a random answer earns.
-- An option that says nothing about a trait contributes **zero, and counts** — staying silent is one of the answers on offer. Leave it out and only the options that mention a trait ever reach its score, which is the skew again.
-- **One straight line, scaled by whichever side of chance has more room.** Scaling each half to its own extreme is the obvious alternative and is wrong: it makes the mapping non-linear, and a non-linear map does not carry the mean through it — random came out at 55.7 in exactly that shape. A single slope keeps `E[random] = 50` exact whatever the bank looks like. The price is that the narrower side stops short of its extreme (85.7, not 100, on the example above), which is the honest reading: that question does not offer as far up as it does down.
-- `count` and `sumSquares` deliberately **do not** move with the range — only `weights`. They measure how often the candidate expressed a trait and how steadily, which is what confidence, trait coverage in the selector, the trait module's stop condition and consistency each ask. None of those questions changed; only the score's scale did.
-- A question the clock took away passes **no range**. The candidate never had the choice, and charging them the chance value for it would read as having answered it badly.
-- Tallies carry `chanceSum`/`bestSum`/`worstSum` as **optional**, and a tally without them falls back to the old fixed rescaling. Stored results and in-flight Redis sessions have no values for them, and rescoring a number a recruiter has already read, on a scale its questions were never measured against, would be worse than leaving it.
-- `npm run check:random-baseline` runs simulated attempts through the real services against the real fixtures and prints the before/after. Random **57.9 → 50.1**; best-possible 81.0 → 75.7; worst-possible 30.8 → 21.0, so the usable spread widened rather than compressed.
-
-**This fixes the scale, not the detection.** 50 is the honest score for an attempt that said nothing — a random responder has not demonstrated *low* integrity, they have demonstrated nothing, and no trait scale can say otherwise. Telling a random attempt apart from a considered one is a separate, unbuilt job: the signals already exist and are already computed (a random attempt's mean trait consistency measures **0.32**, below `VARIED_AT`, and its probe pairs flip), but nothing consumes them. The objective side is also still unfixed and has its own floor — a random 12-question module scores ~36/100, because `STARTING_ABILITY` sits exactly on the reporting scale's midpoint and there is no correction for guessing anywhere.
-
-### Repeat consistency probes (added 2026-08-12)
-
-Questions can be twinned via `questions.probeGroup`: same underlying construct, reworded stem, reworded and **reordered** options. The engine serves one, holds the group back for `PROBE_GAP_QUESTIONS` (8), then serves the twin and compares the two answers. Objective twins compare on the outcome (right then wrong means the right answer was a guess); trait twins compare per-trait weight distance. Capped at `PROBE_MAX_PAIRS` per module, and a pair is only opened if the module has room left to close it.
-
-The window for opening a pair is only `maxQuestions - PROBE_GAP_QUESTIONS` wide — three slots on a 12-question module — so the selector **asks** for a probe question while that window is open (`ConsistencyProbeService.wantsNewPair`) rather than waiting for one to turn up. It does so through the module's normal rules restricted to probe-carrying questions, so difficulty matching and trait targeting are unaffected, and falls through to ordinary selection when no probe question fits. Left to chance the landing rate was ~61%; asking takes it to ~90% (measured over 20 personality runs). The remaining misses are modules that legitimately stop on `confidence_reached` before the twin's turn comes round — a real interaction, since probe questions weighting four traits each accelerate trait coverage and so bring the confidence stop forward.
-
-**Report-only, with one exception.** A probe *answer* never moves an ability estimate, a trait score or a confidence — a disagreement is surfaced with both answers side by side in the detail view and nothing else. Stored on `session_module_results.probeResults`. Reordering the options is not optional: a twin whose options sit in the same order is answered by position, and measures nothing.
-
-The exception is `StoppingEngineService`, which defers a `confidence_reached` stop while a pair is open and its twin has not yet had its turn (`ConsistencyProbeService.awaitingTwin`) — stopping one question short of the twin spends a question and reports nothing for it. Only the *fact* that a check is outstanding is consulted, never how it was answered. It is bounded three ways: the clock and `maxQuestions` are both checked first and neither can be deferred, and the deferral lapses the moment the twin's turn passes, so a twin archived mid-run holds the module open for exactly one extra selection. This took the landing rate from ~90% to 100% (measured, 20 personality runs) at a cost of ~2 extra questions on runs that would have stopped early. Note the side effect: on a 12-question module the adaptive-length spread narrows (9-12 became 11-12), so raise `maxQuestions` if that variation matters more than the check.
-
-Relatedly, a module whose pool runs dry *after* meeting its confidence threshold reports `confidence_reached`, not `pool_exhausted` — it ended settled, and the latter would wrongly tell a recruiter the score rests on fewer answers than intended.
+- The report has **two layers**: a stored `summary` (`reports` table) and a
+  **detail view queried live** from `responses`/`proctoring_logs`, never
+  duplicated into `reports`. Generation runs asynchronously via BullMQ on
+  submission — a candidate never waits for it.
+- The PDF (`reports/report-pdf.ts`, pdfmake) is a **second rendering of the same
+  payloads**. It cannot drift in data, but it can in layout: **a field added to
+  the report page must be added there too.**
 
 ---
 
@@ -314,17 +178,18 @@ No AI-generated questions, no third-party question APIs for v1 — content is ma
 
 ---
 
-## Build Order (follow this sequence — the Adaptive Engine must be validated before UI work begins)
+## Working agreements
 
-1. **Foundation** — Docker Compose (Postgres + Redis), repo structure, auth (JWT + roles), core TypeORM entities/migrations for the full schema above
-2. **Question Bank** — CRUD + seed script, load ~100-150 sample questions
-3. **Adaptive Engine** — all 5 services, tested via direct API calls, no UI dependency
-4. **Candidate Runtime** — test-taking UI, Redis session state, timer, all four proctoring signals, BullMQ auto-submit
-5. **Recruiter/Admin Flow** — assessment creation, invites, two-layer report UI
-6. **Hardening** — bulk import polish, basic testing across all roles
+The schema, tech stack and security scope above are **locked**. Ask before making
+any architectural decision not already settled in this file or in `docs/` —
+don't change them unilaterally.
 
----
+The original six-step build order (Foundation → Question Bank → Adaptive Engine →
+Candidate Runtime → Recruiter Flow → Hardening) is **complete**; git history is
+the record of it. New work is ordinary feature and fix work on a running system,
+not scaffolding.
 
-## Instructions for Claude Code
-
-Start with Step 1 (Foundation): scaffold the `docker-compose.yml`, initialize the NestJS backend and React frontend projects in the folder structure above, and generate the TypeORM entities and first migration matching the database schema described here. Confirm the Docker environment runs cleanly before moving to Question Bank work. Ask before making any architectural decision not already specified in this document — the schema, tech stack, and security scope above are locked and should not be changed without explicit confirmation.
+One rule from that period still stands: **the adaptive engine is validated by
+direct API calls, not through the UI.** If you change scoring, selection or
+stopping, prove it with the engine's own scripts and e2e suites before touching
+a screen.

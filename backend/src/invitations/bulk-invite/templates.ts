@@ -7,6 +7,6 @@
  * optional and only used to personalise the invite email.
  */
 export const CANDIDATE_TEMPLATE_CSV = `name,email
-Ada Lovelace,ada@example.com
+John Doe,johndoe@example.com
 Alan Turing,alan@example.com
 `;
