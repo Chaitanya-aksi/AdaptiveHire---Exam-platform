@@ -16,6 +16,14 @@ module.exports = {
   globalTeardown: '<rootDir>/global-teardown.ts',
 
   /*
+   * Blanks MAIL_HOST before anything imports AppModule, so a run cannot push
+   * its `@e2e.local` invitations through real SMTP. See the file itself — the
+   * failure it prevents is a provider reputation block on the sending account,
+   * which takes real invitations down with it.
+   */
+  setupFiles: ['<rootDir>/no-real-mail.ts'],
+
+  /*
    * Serial, because every suite shares one database.
    *
    * Jest defaults to a worker per core, and parallel suites were writing to the

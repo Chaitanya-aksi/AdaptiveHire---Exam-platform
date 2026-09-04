@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import cookieParser from 'cookie-parser';
@@ -53,6 +54,26 @@ export async function createTestApp(
     }),
   );
   await app.init();
+
+  /*
+   * Defence in depth over `test/no-real-mail.ts`, which blanks MAIL_HOST before
+   * the config module loads. If that ever stops working — a Jest config change
+   * dropping `setupFiles`, or @nestjs/config changing how it merges
+   * `process.env` — the suites would go straight back to pushing dozens of
+   * `@e2e.local` invitations through real SMTP and blocking the sending
+   * account. Failing the run is the mild outcome; sending them is not.
+   */
+  const mailHost = app.get(ConfigService).get<string>('mail.host');
+  if (mailHost) {
+    await app.close();
+    throw new Error(
+      `Refusing to run e2e with a real MAIL_HOST ("${mailHost}"). Test suites ` +
+        'create dozens of @e2e.local invitations, and sending those through a ' +
+        'real SMTP server gets the account reputation-blocked. Check that ' +
+        "jest-e2e.js still lists setupFiles: ['<rootDir>/no-real-mail.ts'].",
+    );
+  }
+
   return app;
 }
 
