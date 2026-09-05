@@ -1507,6 +1507,33 @@ button.link.danger-link {
   gap: 14px;
 }
 
+/* ── Header rows on narrow screens ─────────────────────────────────────────
+ *
+ * `.page-head`, `.card-head` and `.spread` are the same shape three times over:
+ * a title on the left, actions on the right, held apart by `space-between`.
+ * With no wrap that has nowhere to go on a phone — the title compresses to a
+ * few characters per line while the buttons keep their width, so the heading
+ * becomes a narrow column beside a button that is fine.
+ *
+ * Only these three. `.row` and `.toolbar` already wrap, which is why the
+ * filter bars survive a phone and the page headings above them do not.
+ *
+ * 620px rather than the 760px the nav uses: a title and one button coexist
+ * happily well below the width at which six nav sections stop fitting, and
+ * moving them together would wrap headings on screens with room to spare.
+ *
+ * `justify-content` is deliberately left alone. Once wrapped there is one item
+ * per line, and `space-between` puts a lone item at the start — so the actions
+ * land under the title rather than drifting to the right edge.
+ */
+@media (max-width: 620px) {
+  .page-head,
+  .card-head,
+  .spread {
+    flex-wrap: wrap;
+  }
+}
+
 /* =============================================================================
    Sign in / sign up  -  premium immersive layout (v4)
    ============================================================================= */
