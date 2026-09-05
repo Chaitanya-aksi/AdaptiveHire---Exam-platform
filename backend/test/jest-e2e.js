@@ -16,6 +16,14 @@ module.exports = {
   globalTeardown: '<rootDir>/global-teardown.ts',
 
   /*
+   * Runs before anything imports AppModule, and must stay that way: it blanks
+   * MAIL_HOST and moves the BullMQ queues into their own key namespace, so a
+   * run can neither send its `@e2e.local` invitations itself nor hand them to
+   * a real worker sharing this Redis. Both leaks have happened; see the file.
+   */
+  setupFiles: ['<rootDir>/e2e-isolation.ts'],
+
+  /*
    * Serial, because every suite shares one database.
    *
    * Jest defaults to a worker per core, and parallel suites were writing to the

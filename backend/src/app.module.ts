@@ -98,6 +98,11 @@ import { UsersModule } from './users/users.module';
         // Same factory as the application's own client in `RedisModule`, so
         // credentials and TLS cannot be set for one and forgotten on the other.
         connection: redisConnectionOptions(config),
+        // Namespaces every queue key. Shared by producer and worker alike, so
+        // a run with its own prefix is genuinely invisible to anything else on
+        // this Redis rather than merely well-behaved — which is what an e2e
+        // run needs, having no business handing its jobs to a real worker.
+        prefix: config.getOrThrow<string>('bullPrefix'),
       }),
     }),
     RedisModule,

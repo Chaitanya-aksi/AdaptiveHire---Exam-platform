@@ -8,6 +8,16 @@
 /** Reserved for test accounts. Never use it for a real or seeded user. */
 export const E2E_EMAIL_DOMAIN = 'e2e.local';
 
+/**
+ * Key namespace for the BullMQ queues during a test run — anything but the
+ * default `bull`, which is what real workers watch.
+ *
+ * Lives here rather than in `e2e-isolation.ts` because this file has no side
+ * effects: importing it to assert on the value must not itself set the value,
+ * or the guard in `helpers.ts` would pass even when `setupFiles` is missing.
+ */
+export const E2E_BULL_PREFIX = 'bull-e2e';
+
 /** Any question carrying one of these tags is disposable. */
 export const E2E_QUESTION_TAGS = ['e2e', 'e2e-import'];
 
