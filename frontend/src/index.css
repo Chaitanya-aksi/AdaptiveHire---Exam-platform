@@ -419,6 +419,176 @@ a {
   background: var(--accent-soft);
 }
 
+/* ── Narrow-screen navigation ──────────────────────────────────────────────
+ *
+ * Six sections plus the brand, the theme toggle and the account button want
+ * about 850px. `.topnav` scrolls horizontally, which carries the middle sizes
+ * honestly enough, but below roughly 760px scrolling a bar stops being a way
+ * to find anything — so the sections move into a drawer.
+ *
+ * The drawer deliberately sits *below* the top bar (z-index 45 against its 50)
+ * rather than over it. That keeps the toggle visible and tappable while the
+ * drawer is open, so the button that opened it is also the button that shuts
+ * it. Modals stay above both at 100.
+ */
+
+.nav-toggle {
+  display: none;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  margin-left: -8px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.nav-toggle:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+/* Three bars from one element: the middle is the box, the outer two are its
+   pseudo-elements, so there is no extra markup to keep in step. */
+.nav-toggle-icon,
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.nav-toggle-icon {
+  position: relative;
+}
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+.nav-toggle-icon::before {
+  top: -6px;
+}
+.nav-toggle-icon::after {
+  top: 6px;
+}
+
+/* Both are display:none until the media query below turns them on, so a window
+   resized back to full width cannot leave a drawer stranded on screen. */
+.nav-drawer,
+.nav-drawer-backdrop {
+  display: none;
+}
+
+.nav-drawer {
+  position: fixed;
+  top: 58px;
+  left: 0;
+  z-index: 45;
+  width: min(320px, 86vw);
+  height: calc(100dvh - 58px);
+  padding: 14px 12px;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.nav-drawer a {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 550;
+  /* Comfortably past the 44px touch target a thumb needs. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.nav-drawer a:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.nav-drawer a.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nav-drawer-backdrop {
+  position: fixed;
+  inset: 58px 0 0;
+  z-index: 40;
+  background: var(--overlay);
+}
+
+@media (max-width: 760px) {
+  .nav-toggle {
+    display: grid;
+  }
+
+  .topnav {
+    display: none;
+  }
+
+  .nav-drawer:not([hidden]) {
+    display: flex;
+    animation: nav-drawer-in 0.16s ease;
+  }
+
+  .nav-drawer-backdrop {
+    display: block;
+    animation: overlay-in 0.16s ease;
+  }
+
+  /* 22px of side padding is a fifth of a phone's width. */
+  .topbar-inner {
+    padding: 0 14px;
+    gap: 10px;
+  }
+
+  .main {
+    padding: 18px 14px 48px;
+  }
+
+  /*
+   * The section tab strips are the one place the bar pattern survives on a
+   * phone: three or four short labels scroll far more happily than six long
+   * ones, and they stay in view rather than behind a button.
+   */
+  .subnav {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .subnav::-webkit-scrollbar {
+    display: none;
+  }
+  .subnav a {
+    white-space: nowrap;
+  }
+}
+
+@keyframes nav-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-drawer:not([hidden]),
+  .nav-drawer-backdrop {
+    animation: none;
+  }
+}
+
 /* ── Account menu ──────────────────────────────────────────────────────── */
 
 .user-menu {
