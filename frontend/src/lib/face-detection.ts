@@ -10,7 +10,22 @@
  * candidates who never reach a test never download it.
  */
 
-/** Served from `public/models` — the tiny detector, ~190KB. */
+/**
+ * Served from `public/models` — the tiny detector, ~190KB.
+ *
+ * **The weights file must keep its `.bin` extension.** face-api.js ships that
+ * shard with no extension at all, and a static host serving a single-page app
+ * decides what to do with an unknown path by looking at exactly that: no
+ * extension reads as a route, so the SPA fallback returns `index.html` instead
+ * of the weights. The download then "succeeds" with 1,964 bytes of HTML where
+ * 193,321 bytes of binary were expected, and the only visible symptom is the
+ * readiness check reporting "the face check could not start in this browser" —
+ * in every browser, because nothing about it is the browser's doing.
+ *
+ * The extension is therefore renamed on disk *and* in the weights manifest's
+ * `paths`, which is what face-api.js actually reads to find the shard. Both
+ * have to move together.
+ */
 const MODEL_URL = '/models';
 
 /** Small input size keeps this cheap enough to run alongside the test. */
