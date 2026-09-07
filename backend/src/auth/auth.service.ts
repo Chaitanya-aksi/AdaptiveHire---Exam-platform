@@ -23,6 +23,7 @@ import {
 import { User, type RecentRefreshToken } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { OrganisationsService } from '../organisations/organisations.service';
+import { PASSWORD_HASH_OPTIONS, TOKEN_HASH_OPTIONS } from './hashing';
 import { LoginDto, LoginPortal } from './dto/login.dto';
 import { RegisterDto, RegistrationType } from './dto/register.dto';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
@@ -516,7 +517,10 @@ export class AuthService {
       ),
     ]);
 
-    const newHash = await argon2.hash(refreshToken);
+    // Token cost, not password cost — see `hashing.ts`. Existing hashes keep
+    // verifying: argon2 encodes its parameters in the hash string, so
+    // `argon2.verify` reads them per-hash and needs no migration.
+    const newHash = await argon2.hash(refreshToken, TOKEN_HASH_OPTIONS);
     if (mode === 'rotate') {
       await this.users.rotateRefreshToken(
         user.id,
@@ -551,8 +555,18 @@ export class AuthService {
     };
   }
 
+  /**
+   * Spends the time a real password check would have spent, so a missing
+   * account cannot be told from a wrong password by timing alone.
+   *
+   * The options are passed explicitly, and must stay password-strength. This
+   * stands in for `argon2.verify(user.passwordHash, ...)`, which reads its
+   * parameters from the stored hash — so the moment this hashes more cheaply
+   * than passwords are hashed, the two paths take visibly different times and
+   * the enumeration leak this exists to close is reopened.
+   */
   private async burnTime(password: string): Promise<false> {
-    await argon2.hash(password);
+    await argon2.hash(password, PASSWORD_HASH_OPTIONS);
     return false;
   }
 }

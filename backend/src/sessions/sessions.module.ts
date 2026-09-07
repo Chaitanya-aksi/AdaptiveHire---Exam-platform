@@ -11,6 +11,7 @@ import { REPORT_GENERATION_QUEUE } from '../queues/report-generation/report-gene
 import { AssessmentSession } from './entities/assessment-session.entity';
 import { Response } from './entities/response.entity';
 import { SessionModuleResult } from './entities/session-module-result.entity';
+import { ExpiredSessionSweeper } from './expired-session-sweeper.service';
 import { RedisSessionService } from './redis-session.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
@@ -32,7 +33,13 @@ import { SessionsService } from './sessions.service';
     AssessmentsModule,
   ],
   controllers: [SessionsController],
-  providers: [SessionsService, RedisSessionService, AutoSubmitProcessor],
+  providers: [
+    SessionsService,
+    RedisSessionService,
+    AutoSubmitProcessor,
+    // Backstop for deadlines the delayed job missed — see the service.
+    ExpiredSessionSweeper,
+  ],
   exports: [SessionsService],
 })
 export class SessionsModule {}
