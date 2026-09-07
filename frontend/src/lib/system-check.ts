@@ -86,6 +86,36 @@ export async function permissionState(
   }
 }
 
+/**
+ * Whether the page is allowed to use cameras and microphones at all.
+ *
+ * `navigator.mediaDevices` is **undefined outside a secure context** — it is
+ * not a capability the browser may or may not have, it is switched off for the
+ * origin. Plain `http://` over a network, or a page framed by an insecure
+ * parent, and it is gone in Chrome, Edge, Brave and Firefox alike.
+ *
+ * This matters because the symptom is indistinguishable from an ancient
+ * browser, and the advice for the two is opposite. Reporting "this browser
+ * cannot use a camera — try Chrome or Edge" to somebody already in Chrome
+ * sends them to install Edge, hit the identical wall, and conclude the product
+ * is broken. It has to name the address bar instead.
+ */
+function insecureContext(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    window.isSecureContext === false &&
+    // localhost is a secure context by definition, so this only ever fires for
+    // a real insecure origin.
+    window.location.protocol !== 'https:'
+  );
+}
+
+/** What to do about an insecure origin. There is nothing the page can do. */
+const INSECURE_FIX =
+  'Open this page using the https:// address from your invitation email. ' +
+  'Cameras are switched off by the browser on an insecure connection, ' +
+  'whichever browser you use.';
+
 /** Turns a `getUserMedia` rejection into something a candidate can act on. */
 function mediaFailure(error: unknown): { blocked: boolean; missing: boolean } {
   const name = error instanceof Error ? error.name : '';
@@ -103,6 +133,22 @@ function mediaFailure(error: unknown): { blocked: boolean; missing: boolean } {
  * a year and wrong about every browser nobody thought of.
  */
 export function checkBrowser(): CheckResult {
+  const base = { key: 'browser', label: 'Browser' };
+
+  // Before anything is called missing: on an insecure origin the camera APIs
+  // are absent no matter how current the browser is, and saying "unsupported"
+  // here is what sends somebody to reinstall Chrome for nothing.
+  if (insecureContext()) {
+    return {
+      ...base,
+      status: 'fail',
+      detail:
+        'This page was opened over an insecure connection, so the browser ' +
+        'will not allow camera or microphone access.',
+      fix: INSECURE_FIX,
+    };
+  }
+
   const missing: string[] = [];
   if (typeof document.documentElement.requestFullscreen !== 'function') {
     missing.push('full screen');
@@ -114,8 +160,7 @@ export function checkBrowser(): CheckResult {
 
   if (missing.length > 0) {
     return {
-      key: 'browser',
-      label: 'Browser',
+      ...base,
       status: 'fail',
       detail: `This browser does not support ${missing.join(', ')}.`,
       fix: 'Open this page in a recent Chrome, Edge, Firefox or Safari.',
@@ -147,12 +192,27 @@ export async function openCamera(): Promise<{
   const fail = (result: CheckResult) => ({ result, stream: null });
 
   if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
-    return fail({
-      ...base,
-      status: 'fail',
-      detail: 'This browser cannot use a camera, and a camera is required.',
-      fix: 'Open this page in a recent Chrome, Edge, Firefox or Safari.',
-    });
+    // Almost always the origin rather than the browser — see `insecureContext`.
+    // Getting these two the wrong way round is what produced "try Chrome or
+    // Edge" for somebody who had already tried Chrome, Edge and Brave.
+    return fail(
+      insecureContext()
+        ? {
+            ...base,
+            status: 'fail',
+            detail:
+              'This page was opened over an insecure connection, so the ' +
+              'browser will not allow camera access.',
+            fix: INSECURE_FIX,
+          }
+        : {
+            ...base,
+            status: 'fail',
+            detail:
+              'This browser cannot use a camera, and a camera is required.',
+            fix: 'Open this page in a recent Chrome, Edge, Firefox or Safari.',
+          },
+    );
   }
 
   if ((await permissionState('camera')) === 'denied') {
@@ -332,20 +392,58 @@ export function checkDisplays(): CheckResult {
 export function checkWindowFills(): CheckResult {
   const base = { key: 'window', label: 'Screen space' };
 
-  const coverage =
-    Math.min(1, window.outerWidth / screen.availWidth) *
-    Math.min(1, window.outerHeight / screen.availHeight);
+  const availWidth = screen.availWidth;
+  const availHeight = screen.availHeight;
 
-  // 0.9 of the available area. Loose enough for window chrome, an off-by-a-few
-  // -pixels maximise and browser zoom; nowhere near loose enough for two
-  // windows side by side, which lands around 0.5.
-  if (coverage < 0.9) {
+  /*
+   * Refuse to judge on nonsense rather than block somebody who has done
+   * nothing wrong.
+   *
+   * These come from a different API than `window.outerWidth`, and the two are
+   * not guaranteed to agree: privacy features report deliberately altered
+   * screen metrics (Brave's fingerprinting protection does this by default),
+   * and a mismatched pixel base makes the ratio meaningless rather than merely
+   * imprecise. A check that cannot measure has no business failing a candidate
+   * — the assessment runs full screen regardless, which is the real
+   * enforcement; this is a courtesy warning beforehand.
+   */
+  if (!availWidth || !availHeight) {
+    return {
+      ...base,
+      status: 'ok',
+      detail: 'You can proceed.',
+      fix: null,
+    };
+  }
+
+  const widthRatio = Math.min(1, window.outerWidth / availWidth);
+  const heightRatio = Math.min(1, window.outerHeight / availHeight);
+
+  /*
+   * Each axis judged on its own, and the *worse* one decides.
+   *
+   * This used to multiply the two ratios, which compounds two innocent
+   * shortfalls into one guilty verdict: a properly maximised window commonly
+   * measures ~0.95 on each axis — window chrome, a taskbar, a few pixels of
+   * rounding — and 0.95 x 0.95 is 0.9025, sitting exactly on the old
+   * threshold. Any display scaling at all tipped it under, and the candidate
+   * was told to maximise a window that was already maximised, with no way
+   * forward. Splitting the axes removes the compounding entirely.
+   *
+   * 0.8 rather than 0.9 for the same reason: the case worth catching is two
+   * windows side by side, which puts one axis near 0.5 and is nowhere near
+   * this line, so the extra room costs nothing real.
+   */
+  const worstAxis = Math.min(widthRatio, heightRatio);
+
+  if (worstAxis < 0.8) {
     return {
       ...base,
       status: 'warn',
       detail:
         'This window does not fill the screen, so other windows can sit ' +
-        'beside it.',
+        `beside it. (Measured ${Math.round(widthRatio * 100)}% of the width ` +
+        `and ${Math.round(heightRatio * 100)}% of the height.)`,
       fix: 'Maximise this window, then press Check again. The assessment itself runs full screen.',
     };
   }
