@@ -1061,6 +1061,23 @@ export class SessionsService {
         {
           jobId: autoSubmitJobId(sessionId),
           delay: Math.max(0, delayMs),
+          /*
+           * Retried like every other queue here, and for a sharper reason.
+           *
+           * BullMQ defaults to a single attempt, so one transient failure at
+           * the deadline — a database blip, a cold start timing out, the
+           * managed provider briefly unreachable — moved this job to `failed`
+           * and left the attempt `in_progress` forever, with no report and
+           * nothing to retry it. That is the one outcome this job exists to
+           * prevent, and the deployment makes those blips likelier: the
+           * instance sleeps when idle, so the deadline for an abandoned
+           * session frequently arrives on a cold start.
+           *
+           * `autoSubmitSession` is idempotent — a session that finished
+           * cleanly is a no-op — so a retry can only help.
+           */
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
           removeOnComplete: true,
           removeOnFail: 100,
         },
