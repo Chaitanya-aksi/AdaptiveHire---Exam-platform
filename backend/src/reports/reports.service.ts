@@ -33,6 +33,7 @@ import type { PersonalityOption } from '../question-bank/entities/personality-qu
 import { AssessmentSession } from '../sessions/entities/assessment-session.entity';
 import { Response as ResponseRow } from '../sessions/entities/response.entity';
 import { SessionModuleResult } from '../sessions/entities/session-module-result.entity';
+import { resolveBranding } from '../invitations/candidate-branding';
 import {
   buildBehavioralProfiles,
   type ProfileScore,
@@ -1189,9 +1190,7 @@ export class ReportsService {
   ): Promise<CandidateMessageView> {
     // 404 for another company's attempt, as everywhere else.
     const session = await this.loadSession(sessionId, organisationId);
-    const organisation = await this.organisations.findOneOrFail({
-      where: { id: organisationId },
-    });
+    const sender = await this.senderFor(session, organisationId);
 
     const trimmed = body.trim();
     if (!trimmed) {
@@ -1204,13 +1203,10 @@ export class ReportsService {
         kind: 'candidate-message',
         to: session.candidate.email,
         candidateName: session.candidate.fullName,
-        organisationName: organisation.name,
+        organisationName: sender.name,
         assessmentTitle: session.assessment.title,
         body: trimmed,
-        replyTo:
-          organisation.supportEmail ??
-          this.config.get<string | null>('supportEmail') ??
-          null,
+        replyTo: sender.replyTo,
       },
       {
         attempts: 3,
@@ -1328,9 +1324,7 @@ export class ReportsService {
     review: CandidateReview,
   ): Promise<{ sentAt: string; to: string }> {
     const session = await this.loadSession(sessionId, organisationId);
-    const organisation = await this.organisations.findOneOrFail({
-      where: { id: organisationId },
-    });
+    const sender = await this.senderFor(session, organisationId);
 
     // Stamped before the job is queued, not after it sends. The failure this
     // orders against is a double send: if the stamp fails we have sent nothing
@@ -1347,14 +1341,11 @@ export class ReportsService {
           kind: 'rejection',
           to: session.candidate.email,
           candidateName: session.candidate.fullName,
-          organisationName: organisation.name,
+          organisationName: sender.name,
           assessmentTitle: session.assessment.title,
-          // The company's own address where they have set one, so a reply
+          // The business's own address where they have set one, so a reply
           // reaches the people who decided rather than the platform.
-          replyTo:
-            organisation.supportEmail ??
-            this.config.get<string | null>('supportEmail') ??
-            null,
+          replyTo: sender.replyTo,
         },
         {
           attempts: 3,
@@ -1412,12 +1403,50 @@ export class ReportsService {
   ): Promise<AssessmentSession> {
     const session = await this.sessions.findOne({
       where: { id: sessionId, assessment: { organisationId } },
-      relations: { candidate: true, assessment: true },
+      // The assessment's company comes along because the two emails sent from
+      // here are signed by the business the candidate applied to, not by the
+      // group that owns the workspace. Null is the ordinary case and falls back
+      // to the organisation — see `senderFor`.
+      relations: { candidate: true, assessment: { company: true } },
     });
     // Same 404 whether the session does not exist or belongs to another
     // company, so the API cannot be used to probe for other customers' sessions.
     if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
     return session;
+  }
+
+  /**
+   * Who an email about this attempt comes from: the business the candidate
+   * applied to, falling back to the workspace that owns the round.
+   *
+   * The rejection email in particular is the only message in the product a
+   * *person* is worse off for receiving, and it is deliberately signed by the
+   * hiring company rather than by AdaptiveHire — a rejection from a platform
+   * they have never heard of is both confusing and cold. That reasoning does
+   * not stop at the platform boundary: for a group hiring under six brands, the
+   * parent company is equally a name the candidate never applied to.
+   *
+   * Resolved field by field, matching the candidate portal's own rule, so a
+   * company that sets a name but no support address still replies from the
+   * group's shared recruiting inbox rather than from nowhere.
+   */
+  private async senderFor(
+    session: AssessmentSession,
+    organisationId: string,
+  ): Promise<{ name: string; replyTo: string | null }> {
+    const organisation = await this.organisations.findOneOrFail({
+      where: { id: organisationId },
+    });
+
+    // The same helper the candidate portal resolves its header from, so what an
+    // email is signed by and what they saw on screen cannot come apart.
+    const branding = resolveBranding(
+      organisation,
+      session.assessment?.company ?? null,
+      this.config.get<string | null>('supportEmail') ?? null,
+    );
+
+    return { name: branding.name, replyTo: branding.supportEmail };
   }
 
   /**

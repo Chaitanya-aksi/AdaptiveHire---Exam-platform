@@ -33,6 +33,52 @@ Report generation runs asynchronously via a BullMQ job triggered on submission �
 - Null rather than zero when no question could be read. Zero would claim every correct answer was earned.
 - Computed live in `buildModuleSummaries` from `responses`, which are kept permanently, so **completed sessions from before this change show it with no backfill.**
 
+### Reported is not the same as established (changed 2026-09-08)
+
+**There are two evidence floors, and a score has to clear the higher one before
+the report will call it a strength or a weakness.**
+
+- `MIN_TRAIT_CONFIDENCE` (0.5) is the floor for *showing a number*: it decides
+  whether a composite is scored and banded, and whether it can carry the
+  behavioural index. Unchanged.
+- `MIN_FINDING_CONFIDENCE` (0.8) is the floor for *making a claim* — the
+  strengths and weaknesses lists, and the two narrative sentences that say the
+  same thing in prose (`describeTraits`, and the strongest/weakest half of
+  `describeProfiles`).
+
+The gap between them is the whole point. "Teamwork 100, confidence 67%" in the
+trait table states a measurement beside how much is behind it. "Teamwork —
+100/100" under the heading **Strengths** makes a claim about a person, and there
+is no confidence column there to qualify it.
+
+**This was a live defect, and the old constant's own comment described the
+behaviour it failed to produce.** It read "two answers is not a personality
+finding" while sitting at 0.5 — but trait confidence is
+`answers / TRAIT_TARGET_QUESTIONS` capped at 1, and with the target at 3, two
+answers is 0.67. A real five-question personality section left Teamwork on two
+answers that happened to agree, which is a perfect 100 at 67% confidence, and it
+was printed as a strong area. 0.8 admits three answers and refuses two, so a
+trait is named only once it is *fully covered* by the engine's own definition.
+
+For a composite the same number means its traits are mostly fully covered, with
+room for one thinner contributor. Demanding a clean 1.0 from every one of four
+or five traits would make the finding vanish on a single short-measured trait.
+
+The objective side gets the same rule counted rather than measured:
+`MIN_FINDING_ANSWERS` (3) is how many questions a section must have served
+before its score is called strong or weak, since a module has no confidence
+figure. **The under-answered-section weakness is deliberately not gated on it** —
+that one is about coverage rather than ability, and it is most useful exactly
+when the count is low.
+
+Nothing here moves a score, a band, the behavioural index or the recommendation.
+It changes only what the report is willing to assert on top of them — the same
+division of labour as `expectedByChance` and the proctoring signals.
+
+**Stored reports keep their old strengths until rebuilt.** The summary layer is
+a cache written at submission, so run `npm run reports:regenerate` after any
+change to these constants; new submissions pick it up on their own.
+
 ### Behavioural composites and the overall score (decided 2026-08-12)
 
 A trait module on its own used to produce ten trait scores, a null `overallScore` and a permanent `borderline` — which read as "no result" for a candidate who had answered everything. So the report now derives five **role-relevant composites** from the workplace traits (Leadership Readiness, Team Collaboration, Reliability & Follow-Through, Adaptability Under Pressure, Integrity & Judgment). Each is a fixed authored weighting over the traits, defined in `reports/behavioral-profiles.ts` — rule-based, no learned weights, and a recruiter can reproduce any composite by hand.

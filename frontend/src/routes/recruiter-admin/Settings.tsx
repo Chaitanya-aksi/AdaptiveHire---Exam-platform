@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { CompanyManager } from '../../components/CompanyManager';
 import { SubNav } from '../../components/SubNav';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../lib/auth';
@@ -225,6 +226,14 @@ export function Settings() {
           </div>
         )}
       </form>
+
+      {/*
+        Under the workspace's own branding, because it is the exception to it:
+        the fields above are what a candidate sees by default, and a company
+        chosen on an assessment is what they see instead. Reading them in that
+        order is what makes the relationship obvious.
+      */}
+      <CompanyManager canEdit={canEdit} />
     </>
   );
 }

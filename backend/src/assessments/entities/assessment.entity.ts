@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Company } from '../../companies/entities/company.entity';
 import { Organisation } from '../../organisations/entities/organisation.entity';
 import { User } from '../../users/entities/user.entity';
 import { AssessmentModule } from './assessment-module.entity';
@@ -44,6 +45,32 @@ export class Assessment {
   @ManyToOne(() => Organisation, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organisationId' })
   organisation!: Organisation;
+
+  /**
+   * Which business in the group this round is for, or null for the workspace
+   * itself.
+   *
+   * This is what a candidate is shown: their invitation, their assessment card
+   * and their record all carry this company's name and logo, falling back to
+   * the organisation's own when it is null. It is presentation, never scope —
+   * `organisationId` above is the tenancy boundary and stays the only thing any
+   * query filters on. A company from another workspace is refused on write.
+   *
+   * Nullable, and null is what every assessment created before group companies
+   * existed has. A customer who is a single company never sets it.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  companyId!: string | null;
+
+  /**
+   * `SET NULL` on delete: removing a company falls its assessments back to the
+   * organisation's branding rather than deleting rounds, sessions and reports
+   * along with a tidied-up dropdown. Retiring a company is the better route and
+   * leaves this pointing where it did.
+   */
+  @ManyToOne(() => Company, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'companyId' })
+  company!: Company | null;
 
   @Column({ type: 'uuid', nullable: true })
   createdById!: string | null;

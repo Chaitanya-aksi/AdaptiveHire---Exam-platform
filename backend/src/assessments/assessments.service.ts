@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { CompaniesService } from '../companies/companies.service';
 import { QuestionStatus } from '../common/enums';
 import { ModuleCatalogEntry } from '../modules-catalog/entities/module.entity';
 import { Question } from '../question-bank/entities/question.entity';
@@ -36,6 +37,7 @@ export class AssessmentsService {
     private readonly modules: Repository<ModuleCatalogEntry>,
     @InjectRepository(Question)
     private readonly questions: Repository<Question>,
+    private readonly companies: CompaniesService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -198,10 +200,25 @@ export class AssessmentsService {
       );
     }
 
+    /*
+     * Checked before the assessment is written, like the pool below.
+     *
+     * The id came from a browser. Without this, naming another workspace's
+     * company would put their logo, their name and their support address on a
+     * page candidates are asked to sign in to — and `assertUsable` answers 404
+     * for a company that is not this organisation's, so the id cannot be probed
+     * either. It also refuses a retired company, which is what retiring one is
+     * for: it stays on old rounds and is not available for new ones.
+     */
+    if (dto.companyId) {
+      await this.companies.assertUsable(dto.companyId, organisationId);
+    }
+
     const assessment = this.assessments.create({
       title: dto.title.trim(),
       description: dto.description?.trim() || null,
       organisationId,
+      companyId: dto.companyId ?? null,
       createdById,
       opensAt,
       closesAt,
@@ -253,8 +270,15 @@ export class AssessmentsService {
     return this.assessments.find({
       where: { organisationId },
       // The pool comes along so the list can show whether an assessment is
-      // curated or drawing on the whole bank, without a request per row.
-      relations: { modules: { module: true }, questionPool: true },
+      // curated or drawing on the whole bank, without a request per row. The
+      // company likewise, so the list can say which business each round is for
+      // — the one thing that distinguishes two identically-titled rounds run
+      // for different subsidiaries.
+      relations: {
+        modules: { module: true },
+        questionPool: true,
+        company: true,
+      },
       order: { createdAt: 'DESC', modules: { displayOrder: 'ASC' } },
     });
   }
@@ -269,6 +293,40 @@ export class AssessmentsService {
    * why it does not scope.
    */
   async findOne(id: string, organisationId: string): Promise<Assessment> {
+    return this.load({ id, organisationId });
+  }
+
+  /**
+   * Changes which business in the group a round is for. `null` returns it to
+   * the workspace's own branding.
+   *
+   * Editable after creation because the mistake it corrects is invisible from
+   * the recruiter's side: they see the round's title, and only the candidate
+   * sees whose logo is on it. Nothing about the questions, the scoring or an
+   * attempt in progress depends on this — it is presentation — so it is safe to
+   * change at any point.
+   *
+   * It does change what an already-invited candidate sees on their next page
+   * load, which is the intended behaviour when a round was set up under the
+   * wrong company, and the reason to get it right at creation.
+   */
+  async setCompany(
+    id: string,
+    companyId: string | null,
+    organisationId: string,
+  ): Promise<Assessment> {
+    // 404 first for an assessment that is not this organisation's, before the
+    // company is looked at — otherwise the error would say which of the two ids
+    // was the bad one.
+    const assessment = await this.load({ id, organisationId });
+
+    if (companyId) {
+      await this.companies.assertUsable(companyId, organisationId);
+    }
+
+    assessment.companyId = companyId;
+    await this.assessments.save(assessment);
+
     return this.load({ id, organisationId });
   }
 
@@ -350,7 +408,16 @@ export class AssessmentsService {
       where,
       // The pool comes back as ids only; the picker fetches the questions
       // themselves from the question bank, already filtered by visibility.
-      relations: { modules: { module: true }, questionPool: true },
+      //
+      // `company` comes along because the recruiter's pages show which business
+      // a round is for, and the candidate runtime resolves branding from it —
+      // both reach an assessment through here, so loading it in one place is
+      // what stops the two disagreeing.
+      relations: {
+        modules: { module: true },
+        questionPool: true,
+        company: true,
+      },
       order: { modules: { displayOrder: 'ASC' } },
     });
     // Same 404 for "no such assessment" and "not yours", so the API cannot be

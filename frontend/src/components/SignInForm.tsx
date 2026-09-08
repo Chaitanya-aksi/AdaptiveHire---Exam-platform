@@ -12,23 +12,34 @@ const OTHER_DOOR: Record<LoginPortal, { to: string; label: string }> = {
 };
 
 /**
- * The way on for somebody who has no account yet — a button under the form
- * rather than a line of small print below the panel.
+ * The button under the form: the one other thing this page is for, after
+ * signing in.
  *
- * Signing in and signing up are the only two things this page is for, and a
- * visitor who cannot do the first needs the second to be visible without
- * hunting. `lead` is the question the button answers, so the pair reads as one
- * sentence.
+ * It is not symmetric between the two portals, deliberately.
+ *
+ * A recruiter with no account signs up, so theirs is registration. A candidate
+ * with no account cannot usefully make one — access comes from an invitation,
+ * which provisions the account and emails the credentials — so a "Create a
+ * candidate account" button here was the most prominent thing on the page and
+ * led nowhere anybody needed to go. The visitor on `/login` who is not a
+ * candidate is a recruiter who took the default door, and that is what the
+ * button now answers.
+ *
+ * `/register` still exists as the invite-gated fallback for a lost email; it is
+ * simply no longer advertised as the way in.
+ *
+ * `inline` is the offer made after a refused sign-in, and is absent for
+ * candidates for the same reason: "never signed up?" is not the question, and
+ * the answer to theirs is the invitation in their inbox.
  */
-const SIGN_UP: Record<
+const SECONDARY: Record<
   LoginPortal,
-  { to: string; label: string; lead: string; inline: string }
+  { to: string; label: string; lead: string; inline?: string }
 > = {
   candidate: {
-    to: '/register',
-    label: 'Create a candidate account',
-    lead: 'New to AdaptiveHire?',
-    inline: 'Create an account',
+    to: '/recruiter/login',
+    label: 'Recruiter or admin sign in',
+    lead: 'Hiring with AdaptiveHire?',
   },
   recruiter: {
     to: '/recruiter/register',
@@ -188,11 +199,13 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
                 </Link>
               </>
             )}
-            {offerSignUp && (
+            {offerSignUp && SECONDARY[portal].inline && (
               <>
                 {' '}
                 Never signed up?{' '}
-                <Link to={SIGN_UP[portal].to}>{SIGN_UP[portal].inline}</Link>
+                <Link to={SECONDARY[portal].to}>
+                  {SECONDARY[portal].inline}
+                </Link>
               </>
             )}
           </span>
@@ -373,10 +386,10 @@ export function SignInForm({ portal }: { portal: LoginPortal }) {
         no account had to go looking for the one thing they needed.
       */}
       <div className="auth-alt-sep">
-        <span>{SIGN_UP[portal].lead}</span>
+        <span>{SECONDARY[portal].lead}</span>
       </div>
-      <Link className="auth-alt-btn" to={SIGN_UP[portal].to}>
-        {SIGN_UP[portal].label}
+      <Link className="auth-alt-btn" to={SECONDARY[portal].to}>
+        {SECONDARY[portal].label}
         <svg
           viewBox="0 0 20 20"
           fill="none"

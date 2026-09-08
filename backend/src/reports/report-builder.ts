@@ -17,6 +17,8 @@ import {
   BORDERLINE_AT,
   CONSISTENT_AT,
   MIN_COVERAGE_RATIO,
+  MIN_FINDING_ANSWERS,
+  MIN_FINDING_CONFIDENCE,
   MIN_TRAIT_CONFIDENCE,
   RECOMMENDED_AT,
   STRONGLY_RECOMMENDED_AT,
@@ -361,10 +363,14 @@ function collectStrengths(
   const strengths: string[] = [];
 
   for (const module of modules) {
-    if (module.score !== null && module.score >= STRONG_SCORE) {
+    if (
+      module.score !== null &&
+      module.score >= STRONG_SCORE &&
+      isEstablished(module)
+    ) {
       strengths.push(`${module.name} — scored ${module.score}/100`);
     }
-    for (const trait of confidentTraits(module)) {
+    for (const trait of establishedTraits(module)) {
       if (trait.score >= STRONG_SCORE) {
         strengths.push(`${trait.label} — ${trait.score}/100`);
       }
@@ -373,7 +379,7 @@ function collectStrengths(
 
   // Composites come after the raw traits: a recruiter scanning the list reads
   // the specific findings first and the capability they add up to second.
-  for (const profile of confidentProfiles(behavioral)) {
+  for (const profile of establishedProfiles(behavioral)) {
     if (profile.band === 'strong') {
       strengths.push(`${profile.label} — ${profile.score}/100`);
     }
@@ -389,14 +395,21 @@ function collectWeaknesses(
   const weaknesses: string[] = [];
 
   for (const module of modules) {
-    if (module.score !== null && module.score <= WEAK_SCORE) {
+    if (
+      module.score !== null &&
+      module.score <= WEAK_SCORE &&
+      isEstablished(module)
+    ) {
       weaknesses.push(`${module.name} — scored ${module.score}/100`);
     }
-    for (const trait of confidentTraits(module)) {
+    for (const trait of establishedTraits(module)) {
       if (trait.score <= WEAK_SCORE) {
         weaknesses.push(`${trait.label} — ${trait.score}/100`);
       }
     }
+    // Deliberately not gated on `isEstablished`. This one is a statement about
+    // how much was answered rather than about how well, so a thin section is
+    // exactly when it needs saying.
     if (
       module.questionsAnswered > 0 &&
       module.questionsAnswered < module.questionCount
@@ -407,7 +420,7 @@ function collectWeaknesses(
     }
   }
 
-  for (const profile of confidentProfiles(behavioral)) {
+  for (const profile of establishedProfiles(behavioral)) {
     if (profile.band === 'developing') {
       weaknesses.push(
         `${profile.label} — ${profile.score}/100, the weakest of the behavioural profiles`,
@@ -418,17 +431,37 @@ function collectWeaknesses(
   return weaknesses;
 }
 
-/** Composites resting on enough evidence to be called either way. */
-function confidentProfiles(behavioral: BehavioralAssessment): ProfileScore[] {
+/*
+ * ── Reported, versus established ──────────────────────────────────────────
+ *
+ * Two different bars, and the gap between them is the point. Everything above
+ * `MIN_TRAIT_CONFIDENCE` is *reported*: it appears in the trait table and in
+ * the composites, next to the confidence figure that says how much sits behind
+ * it. Only what clears `MIN_FINDING_CONFIDENCE` is *established* — named under
+ * "Strengths" or "Weaknesses", where there is no confidence column and the
+ * label is the whole claim.
+ *
+ * The helpers below were one pair filtering on the reporting floor, which is
+ * how a trait measured by two answers came to be printed as a strong area on a
+ * perfect 100.
+ */
+
+/** Composites resting on enough evidence to be *called* strong or developing. */
+function establishedProfiles(behavioral: BehavioralAssessment): ProfileScore[] {
   return behavioral.profiles.filter(
-    (profile) => profile.confidence >= MIN_TRAIT_CONFIDENCE,
+    (profile) => profile.confidence >= MIN_FINDING_CONFIDENCE,
   );
 }
 
-function confidentTraits(module: ModuleSummary): ReportedTrait[] {
+function establishedTraits(module: ModuleSummary): ReportedTrait[] {
   return module.traits.filter(
-    (trait) => trait.confidence >= MIN_TRAIT_CONFIDENCE,
+    (trait) => trait.confidence >= MIN_FINDING_CONFIDENCE,
   );
+}
+
+/** An objective module has no confidence figure, so the count is the evidence. */
+function isEstablished(module: ModuleSummary): boolean {
+  return module.questionsAnswered >= MIN_FINDING_ANSWERS;
 }
 
 function buildNarrative(
@@ -516,41 +549,49 @@ function describeProfiles(
   behavioral: BehavioralAssessment,
   hasAbilityScore: boolean,
 ): string {
-  // Narrated only where the composite carries a score. A withheld one has too
-  // little behind it to be called a strength or a weakness in prose, which is
-  // the same judgement that withheld the number in the first place.
+  if (behavioral.index === null) return '';
+
+  // Naming a strongest and a weakest is the strengths list written as a
+  // sentence, so it takes the same evidence bar rather than the reporting one.
+  // Below it the composites are still scored, banded and shown in full — the
+  // report simply stops singling one out as what this candidate points to.
   const profiles = behavioral.profiles.filter(
     (profile): profile is ProfileScore & { score: number } =>
-      profile.score !== null && profile.confidence >= MIN_TRAIT_CONFIDENCE,
+      profile.score !== null && profile.confidence >= MIN_FINDING_CONFIDENCE,
   );
-  if (profiles.length === 0 || behavioral.index === null) return '';
+
+  // The behavioural share of the blend is only worth stating where there is an
+  // ability score for it to be a share of. Stated whether or not any single
+  // composite is firm enough to name: the index is the blend of all of them and
+  // is already withheld on its own terms when the evidence is too thin.
+  const weighting = hasAbilityScore
+    ? `The behavioural profile scores ${behavioral.index}/100 and carries ` +
+      `${Math.round(BEHAVIORAL_WEIGHT * 100)}% of the overall score.`
+    : '';
 
   const ranked = [...profiles].sort((a, b) => b.score - a.score);
   const best = ranked[0];
   const worst = ranked.at(-1);
 
-  // The behavioural share of the blend is only worth stating where there is an
-  // ability score for it to be a share of.
-  const weighting = hasAbilityScore
-    ? ` The behavioural profile scores ${behavioral.index}/100 and carries ` +
-      `${Math.round(BEHAVIORAL_WEIGHT * 100)}% of the overall score.`
-    : '';
+  if (!best || !worst) return weighting;
 
-  if (!best || !worst || best.key === worst.key) {
-    return `Their behavioural profile is strongest on ${best.label} (${best.score}/100).${weighting}`;
-  }
+  const lead =
+    best.key === worst.key
+      ? `Their behavioural profile is strongest on ${best.label} (${best.score}/100).`
+      : `Their behavioural profile points strongest to ${best.label} ` +
+        `(${best.score}/100) and weakest to ${worst.label} (${worst.score}/100).`;
 
-  return (
-    `Their behavioural profile points strongest to ${best.label} ` +
-    `(${best.score}/100) and weakest to ${worst.label} (${worst.score}/100).` +
-    weighting
-  );
+  return weighting ? `${lead} ${weighting}` : lead;
 }
 
 function describeTraits(modules: ModuleSummary[]): string {
+  // Same bar as the strengths list, and for the same reason: "they scored
+  // highest on Teamwork (100/100)" is a finding about the person, stated in a
+  // sentence that carries no confidence figure beside it. The trait table below
+  // still shows every measured trait with what is behind it.
   const traits = modules
     .flatMap((module) => module.traits)
-    .filter((trait) => trait.confidence >= MIN_TRAIT_CONFIDENCE);
+    .filter((trait) => trait.confidence >= MIN_FINDING_CONFIDENCE);
   if (traits.length === 0) return '';
 
   const ranked = [...traits].sort((a, b) => b.score - a.score);

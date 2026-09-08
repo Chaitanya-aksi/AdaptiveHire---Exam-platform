@@ -4820,13 +4820,94 @@ button.block {
   opacity: 1;
 }
 
+/* The way out, at the foot of the panel.
+ *
+ * Under a rule and a step quieter than the destinations above it: signing out
+ * is the least frequent thing anybody does here and must not read as a third
+ * place to go. It picks up the danger tint only on hover, where the intent is
+ * already expressed — a permanently red control at the bottom of a candidate's
+ * home page reads as a warning about something else. */
+.cand-signout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0 0 9px 9px;
+  background: none;
+  color: rgb(255 255 255 / 62%);
+  font: inherit;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.cand-signout:hover {
+  background: rgb(255 255 255 / 7%);
+  color: #fff;
+}
+.cand-signout:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 70%);
+  outline-offset: 2px;
+}
+.cand-signout svg {
+  flex: none;
+  opacity: 0.8;
+}
+
 /* ── Right: working column ─────────────────────────────────────────────── */
 
 .cand-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   background: var(--bg);
+}
+
+/* ── Account watermark ─────────────────────────────────────────────────────
+ *
+ * The signed-in address tiled across the column, at the volume of paper grain.
+ *
+ * `position: absolute` against `.cand-main` rather than `fixed`, so it covers
+ * the column's full scrolled height instead of the viewport — a short page and
+ * a long list of invitations both come out evenly textured.
+ *
+ * Everything above it in the column is given its own stacking position below,
+ * because this layer is a sibling of the content rather than a background
+ * image, and an untouched `.cand-content` would paint underneath it.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.cand-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  /* The tile itself is built in `CandidateLayout` and set inline: it carries the
+     account's address, so it is per-render data rather than a style. It repeats
+     by default, which is the point — the column's height is whatever the
+     invitation list makes it, and a tile has no count to get wrong. */
+  background-repeat: repeat;
+  opacity: 4%;
+}
+
+/* Black ink on a light page reads heavier than white ink on a dark one at the
+   same alpha, so the two are tuned separately rather than sharing a number. */
+.dark .cand-watermark {
+  opacity: 5.5%;
+}
+
+.cand-content,
+.cand-foot {
+  position: relative;
+  z-index: 1;
 }
 
 .cand-topbar {
@@ -4867,6 +4948,23 @@ button.block {
   .cand-topbar-brand {
     display: none;
   }
+}
+
+/*
+ * Pinned to the right edge of the column, at every width.
+ *
+ * `justify-content: space-between` on the bar is only half a rule: it puts the
+ * brand left and the account cluster right while there are two children, but
+ * the brand is `display: none` from 1000px up — and space-between with one
+ * child leaves it at the start. So on every desktop viewport the theme toggle
+ * and the account button sat against the panel, floating in the middle of the
+ * screen with the whole bar empty to their right.
+ *
+ * `margin-left: auto` is the fix that holds in both cases: it eats the slack
+ * whether or not the brand is there to push against.
+ */
+.cand-topbar .topbar-end {
+  margin-left: auto;
 }
 
 .cand-content {
@@ -5240,13 +5338,30 @@ button.block {
   outline: none;
 }
 
-.ci-go,
-.ci-view {
+/* Lifted above the stretched link so it still starts the test rather than
+   opening the record. `.ci-view` deliberately is not — see below. */
+.ci-go {
   position: relative;
   z-index: 1;
 }
 
+/*
+ * `pointer-events: none`, and it is load-bearing.
+ *
+ * "View record" is a label on the card's own link, not a control — the anchor
+ * around the title stretches its ::after over the whole card, and this text
+ * sits on top of that overlay. Left hit-testable it swallowed the pointer over
+ * the one place a candidate is most likely to aim: no pointer cursor, no hover
+ * state, and a click that did nothing, while the rest of the card worked. This
+ * hands those events down to the link underneath, so the words now behave like
+ * the button they look like.
+ *
+ * It keeps `position: relative` for the hover transform below, and needs no
+ * z-index of its own now that nothing is competing for the pointer.
+ */
 .ci-view {
+  position: relative;
+  pointer-events: none;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -6142,6 +6257,142 @@ button.block {
 .set-colour input[type='color']:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* ── Companies (the businesses a workspace hires for) ──────────────────────
+ *
+ * A list of brands, so the logo is the primary column rather than decoration:
+ * the whole point of the row is what a candidate will see, and these are
+ * hot-linked from each company's own site, so a URL that has stopped resolving
+ * has to be visible here rather than discovered by a candidate.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.cm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cm-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.cm-row:last-child {
+  border-bottom: 0;
+}
+
+/* An editing row gives its whole width to the form rather than keeping the
+   logo and buttons beside it, which would leave the fields in a narrow gutter. */
+.cm-row:has(.cm-form) {
+  display: block;
+  padding: 14px 4px;
+}
+
+/* Retired reads as quieter, not as broken: it is a valid state that a company
+   stays in for years, and every round it is already on still shows it. */
+.cm-row--retired .cm-body strong,
+.cm-row--retired .cm-logo,
+.cm-row--retired .cm-mark {
+  opacity: 0.55;
+}
+
+ /* Wide, not square. A company logo is usually a wordmark rather than a
+    glyph, and a 40px square renders "LiHi Smart Batteries" at a size nobody
+    can check — which defeats the point of showing it, since the reason it is
+    here is to confirm what a candidate will actually see. */
+.cm-logo {
+  width: 96px;
+  height: 44px;
+  flex: none;
+  /* `contain`, never `cover`: these are logos of wildly different aspect
+     ratios, and cropping one to fill the box cuts the wordmark in half. */
+  object-fit: contain;
+  object-position: left center;
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 4px 6px;
+}
+
+/* The fallback when there is no logo, or the URL has stopped resolving — the
+   same initial badge the candidate portal draws. */
+ /* Same footprint as the logo, so a row without one does not shunt the name
+    column left and break the alignment down the list. */
+.cm-mark {
+  width: 96px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.cm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.cm-body strong {
+  font-weight: 600;
+}
+
+.cm-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.cm-form {
+  width: 100%;
+}
+
+/* ── "Candidate sees" — the company picker on an assessment ──────────────── */
+
+.na-company {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.na-company select {
+  flex: 1;
+  min-width: 0;
+}
+ /* Wide for the same reason as the list: the point of the preview is that
+    somebody can recognise the mark, not merely see that one exists. */
+.na-company-logo {
+  width: 84px;
+  height: 40px;
+  flex: none;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 3px 6px;
+}
+
+.ad-company {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.ad-company label {
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ad-company select {
+  max-width: 320px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -8143,9 +8394,12 @@ body.assess-running .assess-shell {
   }
 }
 
-/* A support address is for the live page, not for a printed copy of it. */
+/* A support address is for the live page, not for a printed copy of it. The
+   watermark goes with it: it is screen texture, and it would print as a page of
+   grey text behind the content at whatever the printer makes of 3.5% ink. */
 @media print {
-  .cand-foot {
+  .cand-foot,
+  .cand-watermark {
     display: none;
   }
 }

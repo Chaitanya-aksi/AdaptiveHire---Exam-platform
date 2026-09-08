@@ -11,6 +11,8 @@ import type {
   CandidateAttemptView,
   CandidateMessage,
   CandidateInvitation,
+  Company,
+  CompanyPatch,
   CreatedUser,
   ModuleCatalogEntry,
   OrganisationProfile,
@@ -302,6 +304,11 @@ export interface CreateAssessmentPayload {
    */
   opensAt?: string;
   closesAt?: string;
+  /**
+   * Which business in the group the candidate is appearing for. Omit for the
+   * workspace's own branding, which is the default.
+   */
+  companyId?: string;
 }
 
 export const assessmentsApi = {
@@ -323,6 +330,15 @@ export const assessmentsApi = {
       .then((r) => r.data),
 
   /**
+   * Sets which business in the group a round is for. `null` returns it to the
+   * workspace's own branding, so null is sent rather than omitted.
+   */
+  setCompany: (id: string, companyId: string | null) =>
+    api
+      .patch<Assessment>(`/assessments/${id}/company`, { companyId })
+      .then((r) => r.data),
+
+  /**
    * Deletes the assessment and every attempt made on it. Candidate accounts
    * survive — only their data for this assessment goes.
    */
@@ -330,6 +346,38 @@ export const assessmentsApi = {
     api
       .delete<AssessmentDeletionResult>(`/assessments/${id}`)
       .then((r) => r.data),
+};
+
+export const companiesApi = {
+  /**
+   * The workspace's businesses.
+   *
+   * `activeOnly` is what the assessment form asks for — a retired business must
+   * not be offered for new work. The settings screen wants everything, because
+   * it has to show a retired one in order to bring it back.
+   */
+  list: (activeOnly = false) =>
+    api
+      .get<Company[]>('/companies', {
+        params: activeOnly ? { active: 'true' } : undefined,
+      })
+      .then((r) => r.data),
+
+  create: (payload: CompanyPatch & { name: string }) =>
+    api.post<Company>('/companies', payload).then((r) => r.data),
+
+  /** Partial: omit a field to keep it, send `null` to clear it. */
+  update: (id: string, changes: CompanyPatch) =>
+    api.patch<Company>(`/companies/${id}`, changes).then((r) => r.data),
+
+  /**
+   * Removes a company. Rounds naming it fall back to the workspace's own
+   * branding rather than being deleted with it — but prefer retiring
+   * (`update(id, { isActive: false })`) for a business that has simply stopped
+   * hiring, which leaves finished attempts naming the company the candidate
+   * actually applied to.
+   */
+  remove: (id: string) => api.delete<void>(`/companies/${id}`).then(() => {}),
 };
 
 export const organisationsApi = {

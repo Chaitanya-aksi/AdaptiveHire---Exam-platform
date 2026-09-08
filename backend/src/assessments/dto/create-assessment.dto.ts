@@ -57,4 +57,20 @@ export class CreateAssessmentDto {
   @IsArray()
   @IsUUID('4', { each: true })
   questionIds?: string[];
+
+  /**
+   * Which business in the group the candidate is appearing for.
+   *
+   * Optional, and omitting it means the workspace's own branding — which is
+   * what every assessment did before group companies existed, and what a
+   * customer who is a single company always wants.
+   *
+   * Validated against the caller's own organisation before anything is written.
+   * The id comes from a browser, so an unchecked one would let a recruiter put
+   * another customer's logo, name and support address in front of their
+   * candidates.
+   */
+  @IsOptional()
+  @IsUUID('4')
+  companyId?: string;
 }

@@ -7,8 +7,10 @@ import {
   IconModules,
   IconPeople,
 } from '../../components/Icons';
+import { useToast } from '../../components/Toast';
 import {
   assessmentsApi,
+  companiesApi,
   invitationsApi,
   reportsApi,
 } from '../../lib/endpoints';
@@ -17,6 +19,7 @@ import type {
   Assessment,
   AssessmentInvitation,
   AttemptListItem,
+  Company,
   InvitationStatus,
   SessionStatus,
 } from '../../lib/types';
@@ -138,11 +141,49 @@ function joinPeople(
  */
 export function AssessmentDetail() {
   const { id } = useParams<{ id: string }>();
+  const toast = useToast();
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /** The group's businesses, for the "candidate sees" control. */
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [savingCompany, setSavingCompany] = useState(false);
+
+  /*
+   * Loaded on its own and failing quietly, like the create form's copy.
+   *
+   * A workspace with no companies is the ordinary case, and this control is an
+   * addition to a page whose job is showing results — its absence should cost a
+   * field, never the page.
+   */
+  useEffect(() => {
+    companiesApi
+      .list(true)
+      .then(setCompanies)
+      .catch(() => setCompanies([]));
+  }, []);
+
+  const changeCompany = async (companyId: string | null) => {
+    if (!id || savingCompany) return;
+
+    setSavingCompany(true);
+    try {
+      const updated = await assessmentsApi.setCompany(id, companyId);
+      setAssessment(updated);
+      toast.success(
+        updated.company
+          ? `Candidates now see ${updated.company.name}.`
+          : 'Candidates now see your workspace branding.',
+      );
+    } catch (err) {
+      toast.error(describeError(err, 'Could not change the company.'));
+    } finally {
+      setSavingCompany(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -206,6 +247,38 @@ export function AssessmentDetail() {
         </div>
         <Link to="/admin/assessments">Back to assessments</Link>
       </div>
+
+      {/*
+       * Which of the group's businesses this round is for.
+       *
+       * Saves on change rather than behind a Save button: it is one value, the
+       * result is visible in the row itself, and a toast confirms it. Hidden
+       * entirely for a workspace with no companies — see `NewAssessment`, which
+       * hides the same field for the same reason.
+       *
+       * Editable after the fact because the mistake it corrects is invisible
+       * from this side of the product: a recruiter sees the title, and only the
+       * candidate sees whose logo is on it.
+       */}
+      {companies.length > 0 && (
+        <div className="ad-company">
+          <label htmlFor="ad-company">Candidate sees</label>
+          <select
+            id="ad-company"
+            value={assessment.companyId ?? ''}
+            disabled={savingCompany}
+            onChange={(e) => void changeCompany(e.target.value || null)}
+          >
+            <option value="">Our workspace (no specific company)</option>
+            {companies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+          </select>
+          {savingCompany && <span className="muted small">Saving…</span>}
+        </div>
+      )}
 
       <div className="row" style={{ marginBottom: 16 }}>
         <Link

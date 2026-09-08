@@ -17,3 +17,8 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 ./backend/.env
+
+frontend.zip
+*.zip
+.claude/worktrees/
+*.backup

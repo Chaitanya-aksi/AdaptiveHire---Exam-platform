@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useMatch, useOutletContext } from 'react-router-dom';
+import {
+  NavLink,
+  Outlet,
+  useMatch,
+  useNavigate,
+  useOutletContext,
+} from 'react-router-dom';
+import { IconSignOut } from './Icons';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 import { useAuth } from '../lib/auth';
 import { invitationsApi } from '../lib/endpoints';
 import { describeError } from '../lib/errors';
+import { useTheme, type ResolvedTheme } from '../lib/theme';
 import type { CandidateInvitation } from '../lib/types';
 
 /**
@@ -92,8 +100,62 @@ const supportHref = (route: SupportRoute) =>
  * unfinished; the panel gives that space to the greeting and to what they were
  * invited to instead.
  */
+/** Degrees the watermark text is laid over at. Negative reads bottom-left up. */
+const WATERMARK_ANGLE = 24;
+
+/** XML-safe: an address may legitimately contain `&`, and `<` is not rejected. */
+const escapeXml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/**
+ * One repeating tile of the account watermark, as an SVG data URI.
+ *
+ * A tiled background rather than a few hundred rotated `<span>`s, which is what
+ * this was first built from. Spans have to be counted, and the count is a guess
+ * at how tall the page will be: enough of them for a candidate's first
+ * invitation left the lower two-thirds of a long list bare, and enough for a
+ * long list is a thousand DOM nodes on a page that has one card. A tile has no
+ * height to guess at — it repeats to whatever the column turns out to be.
+ *
+ * The tile is sized from the address so it can never clip its own text: a
+ * rotated string of width `w` needs `w·cos θ` across and `w·sin θ` down, and the
+ * padding on top of that is what becomes the spacing between repeats.
+ *
+ * The ink is baked in rather than inherited, because a background image has no
+ * CSS context to read `currentColor` from — hence the resolved theme as an
+ * argument. `opacity` stays in the stylesheet, where it can be tuned per theme.
+ */
+function watermarkTile(email: string, theme: ResolvedTheme): string {
+  const radians = (WATERMARK_ANGLE * Math.PI) / 180;
+  // Approximate rather than measured: this only has to be generous enough that
+  // the glyphs never touch the tile edge, and being a little wide simply spaces
+  // the repeats out. Measuring in a canvas would be exact and would also make
+  // this a layout effect that reruns on every font swap.
+  const textWidth = email.length * 7.4 + 12;
+
+  const width = Math.ceil(textWidth * Math.cos(radians)) + 92;
+  const height = Math.ceil(textWidth * Math.sin(radians)) + 64;
+  const baseline = height - 18;
+  const ink = theme === 'dark' ? '#ffffff' : '#000000';
+
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<text x="12" y="${baseline}" transform="rotate(-${WATERMARK_ANGLE} 12 ${baseline})" ` +
+    `fill="${ink}" font-family="system-ui, -apple-system, Segoe UI, sans-serif" ` +
+    `font-size="13" font-weight="600" letter-spacing="0.8">${escapeXml(email)}</text>` +
+    `</svg>`;
+
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
 export function CandidateLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { theme } = useTheme();
+  const navigate = useNavigate();
 
   const [invites, setInvites] = useState<CandidateInvitation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +206,11 @@ export function CandidateLayout() {
 
   const open = invites.filter(isOpen).length;
   const submitted = invites.filter((i) => i.status === 'completed').length;
+
+  const signOut = async () => {
+    await logout();
+    void navigate('/login', { replace: true });
+  };
 
   // The panel is the first thing read on the page, so it should never sit
   // there asserting "0 waiting" while the request is still in flight.
@@ -215,6 +282,30 @@ export function CandidateLayout() {
                   {item.label}
                 </NavLink>
               ))}
+
+              {/*
+               * Sign-out sits at the foot of the panel, under a rule.
+               *
+               * It is the second one on the page — the account menu in the top
+               * bar has the same action — and that is deliberate rather than an
+               * oversight. A candidate has two destinations, so the panel ended
+               * in a band of empty gradient below two links, and the way out of
+               * the product was folded inside a menu that has to be opened to
+               * find out what is in it. This is the one action on this side of
+               * the page that people look for and expect to see.
+               *
+               * A button, not a link: it ends a session rather than going
+               * somewhere, and it is styled as the quietest thing in the nav so
+               * it never competes with the assessments themselves.
+               */}
+              <button
+                type="button"
+                className="cand-signout"
+                onClick={() => void signOut()}
+              >
+                <IconSignOut width={16} height={16} aria-hidden="true" />
+                Sign out
+              </button>
             </nav>
           </div>
         </div>
@@ -222,6 +313,32 @@ export function CandidateLayout() {
 
       {/* ══ RIGHT — the working column ═══════════════════════════════════ */}
       <div className="cand-main">
+        {/*
+         * The signed-in address, tiled faintly across the whole column.
+         *
+         * Whose screen this is, stated on every page — the same reassurance a
+         * candidate gets from seeing their own name on a paper they have been
+         * handed, and a discouragement to passing a screenshot of somebody
+         * else's assessment around as their own.
+         *
+         * Rendered here rather than per page so it covers the column at its
+         * full scrolled height and cannot be forgotten on a page added later.
+         * It is `aria-hidden` and unselectable: it is texture, and a screen
+         * reader announcing an address ninety times is not.
+         *
+         * Deliberately absent from the assessment runtime, which mounts outside
+         * this layout: nothing decorative belongs behind a timed question, and
+         * the same text under every option is exactly the kind of visual noise
+         * the runtime strips out.
+         */}
+        {user?.email && (
+          <div
+            className="cand-watermark"
+            aria-hidden="true"
+            style={{ backgroundImage: watermarkTile(user.email, theme) }}
+          />
+        )}
+
         <header className="cand-topbar">
           {/* Only visible once the panel has collapsed away above it. */}
           <span className="cand-topbar-brand">

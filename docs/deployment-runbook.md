@@ -164,3 +164,40 @@ values that shipped recoverable.
 Serve all static assets — the face-api models included — from Catalyst. Render's
 free tier suspends the service on bandwidth overage rather than billing for it,
 so the API should emit JSON and socket frames and nothing else.
+
+### Building the upload zip
+
+```powershell
+cd frontend
+.\build-slate-zip.ps1
+```
+
+That builds and writes `frontend/frontend-slate.zip`, ready to upload. Add
+`-SkipBuild` to pack an existing `dist/` you know is current.
+
+**Do not use `Compress-Archive`.** Windows PowerShell 5.1 writes zip entries
+with **backslash** separators, which the zip spec does not allow. Windows reads
+them back fine, so the archive looks correct here — but Slate extracts on Linux,
+where `assets\index-abc.js` is not a folder plus a file, it is one file whose
+name contains a backslash. Every asset then 404s and the deployed page is blank
+while `index.html` itself loads, which looks exactly like a hosting or routing
+fault. Measured on this repo: `Compress-Archive` corrupted **25 of 28** entries.
+
+The script builds each entry with a forward-slashed name, then reopens the
+finished archive and **deletes it rather than leave a broken one** if any entry
+still contains a backslash, if `index.html` is not at the root, or if the build
+produced nothing. A zip that exists is a zip that will work. It also warns when
+`models/` is empty, because a missing face-api model breaks the camera check
+rather than the page, so nothing looks wrong until a candidate tries to start.
+
+Three things the archive must get right, all of which the script asserts:
+
+| Requirement | Why |
+|---|---|
+| Forward-slash separators | Linux extraction, as above |
+| `index.html` at the **root**, not under `dist/` | Slate serves the archive root as the site root |
+| `assets/` and `models/` present | the bundle, and the face-api models the camera gate needs |
+
+Upload with the **Static** preset. `React + Vite` runs Init → Clone → Install →
+Build and wants *source*; handed a built `dist` it fails at Install with
+`ENOENT ... /catalyst/source/package.json`.

@@ -247,6 +247,54 @@ export interface Assessment {
    * organisation can see. It does not mean "no questions". Curating is opt-in.
    */
   questionPool: { assessmentId: string; questionId: string }[];
+  /**
+   * Which business in the group this round is for, or null for the workspace
+   * itself — which is what every round had before group companies existed.
+   *
+   * Presentation, never scope: it decides the name and logo a candidate sees on
+   * their invitation, their assessment card and their record. Nothing about who
+   * can read the round depends on it.
+   */
+  companyId: string | null;
+  /** Loaded alongside, so a list can name the business without a request each. */
+  company: Company | null;
+}
+
+/**
+ * One business inside a workspace — what a candidate sees, as opposed to the
+ * account that hosts the assessment.
+ *
+ * A group with six subsidiaries has one organisation and six of these: one
+ * login, one question bank, and six different marks on the candidate's screen
+ * depending on which business the round is for.
+ */
+export interface Company {
+  id: string;
+  name: string;
+  /** Absolute https URL, or null for an initial badge drawn from the name. */
+  logoUrl: string | null;
+  /** `#rrggbb`, or null to inherit the organisation's accent. */
+  accentColor: string | null;
+  /** Null falls back to the organisation's address, then the platform's. */
+  supportEmail: string | null;
+  /**
+   * A retired company keeps its place on every round and report that already
+   * names it, and drops out of the picker for new ones.
+   */
+  isActive: boolean;
+}
+
+/**
+ * A company change. Every field optional, and omitted differs from `null` in
+ * the same way branding does: omitted keeps the value, `null` clears it back to
+ * the organisation's own.
+ */
+export interface CompanyPatch {
+  name?: string;
+  logoUrl?: string | null;
+  accentColor?: string | null;
+  supportEmail?: string | null;
+  isActive?: boolean;
 }
 
 /** Result of a candidate spreadsheet upload. */

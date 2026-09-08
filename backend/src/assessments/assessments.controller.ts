@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { OrgRole, UserRole } from '../common/enums';
 import { AssessmentsService } from './assessments.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
+import { SetCompanyDto } from './dto/set-company.dto';
 import { SetQuestionPoolDto } from './dto/set-question-pool.dto';
 
 /**
@@ -67,6 +69,25 @@ export class AssessmentsController {
       dto.questionIds,
       organisationId,
     );
+  }
+
+  /**
+   * Sets which business in the group this round is for, or `null` for the
+   * workspace itself.
+   *
+   * Hiring manager rather than admin, unlike creating the companies themselves:
+   * choosing which of the group's businesses a round belongs to is ordinary
+   * recruiting work, while deciding what those businesses are and how they look
+   * is a workspace-level decision.
+   */
+  @MinOrgRole(OrgRole.HIRING_MANAGER)
+  @Patch(':id/company')
+  setCompany(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetCompanyDto,
+    @CurrentOrg() organisationId: string,
+  ) {
+    return this.assessments.setCompany(id, dto.companyId, organisationId);
   }
 
   /**

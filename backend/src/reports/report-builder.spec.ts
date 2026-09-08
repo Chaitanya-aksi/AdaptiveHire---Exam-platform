@@ -492,6 +492,80 @@ describe('buildReport — strengths and weaknesses', () => {
     expect(report.weaknesses).toHaveLength(0);
   });
 
+  /*
+   * From a real report. A five-question personality section left Teamwork on
+   * two answers, both pointing the same way, which is a perfect 100 at 67%
+   * confidence — and 67% cleared the old floor of 0.5, so "Teamwork — 100/100"
+   * was printed under Strengths. Two answers is not a finding about a person.
+   */
+  it('will not call a trait a strength on two of its three answers', () => {
+    const report = buildReport(
+      input({
+        modules: [
+          traitModule([
+            { key: 'teamwork', label: 'Teamwork', score: 100, confidence: 0.67 },
+            { key: 'empathy', label: 'Empathy', score: 100, confidence: 0.67 },
+            {
+              key: 'risk_tolerance',
+              label: 'Risk Tolerance',
+              score: 10.5,
+              confidence: 1,
+            },
+          ]),
+        ],
+      }),
+    );
+
+    expect(report.strengths).not.toContain('Teamwork — 100/100');
+    expect(report.strengths).not.toContain('Empathy — 100/100');
+    // The fully-covered trait is still called, in both directions.
+    expect(report.weaknesses).toContain('Risk Tolerance — 10.5/100');
+    // And the narrative must not name it either — same claim, same bar.
+    expect(report.summary).not.toContain('Teamwork');
+  });
+
+  it('still reports the thin trait, it just does not call it a finding', () => {
+    // The distinction the two floors exist for: the number stays visible with
+    // its confidence beside it, and only the claim on top of it is withheld.
+    const report = buildReport(
+      input({
+        modules: [
+          traitModule([
+            { key: 'teamwork', label: 'Teamwork', score: 100, confidence: 0.67 },
+            { key: 'empathy', label: 'Empathy', score: 100, confidence: 0.67 },
+            {
+              key: 'communication',
+              label: 'Communication',
+              score: 100,
+              confidence: 0.67,
+            },
+            { key: 'integrity', label: 'Integrity', score: 100, confidence: 1 },
+          ]),
+        ],
+      }),
+    );
+
+    const collaboration = report.profiles.find(
+      (p) => p.key === 'collaboration',
+    );
+    // Scored and banded — 0.72 clears the reporting floor — but not named.
+    expect(collaboration?.score).toBe(100);
+    expect(collaboration?.band).toBe('strong');
+    expect(report.strengths).not.toContain('Team Collaboration — 100/100');
+  });
+
+  it('will not call a one-question section a strength', () => {
+    const report = buildReport(
+      input({
+        modules: [
+          objectiveModule(90, { questionsAnswered: 1, questionsCorrect: 1 }),
+        ],
+      }),
+    );
+
+    expect(report.strengths).not.toContain('Aptitude — scored 90/100');
+  });
+
   it('flags a section the candidate under-answered', () => {
     const report = buildReport(
       input({

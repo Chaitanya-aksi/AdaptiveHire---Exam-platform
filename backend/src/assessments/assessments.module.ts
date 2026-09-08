@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CompaniesModule } from '../companies/companies.module';
 import { ModuleCatalogEntry } from '../modules-catalog/entities/module.entity';
 import { AssessmentsController } from './assessments.controller';
 import { AssessmentsService } from './assessments.service';
@@ -19,6 +20,10 @@ import { Question } from '../question-bank/entities/question.entity';
       // the service needs to read questions directly.
       Question,
     ]),
+    // A company id on a create or an update is validated against the caller's
+    // own workspace before it is written — an unchecked one would put another
+    // customer's branding in front of these candidates.
+    CompaniesModule,
   ],
   controllers: [AssessmentsController],
   providers: [AssessmentsService],

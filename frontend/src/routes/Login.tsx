@@ -14,10 +14,13 @@ export function Login() {
       title="Welcome back"
       subtitle="Sign in to access your assessment account."
       footer={
-        // Creating an account is a button under the form now; this stays for
-        // the visitor who is on the wrong side of the platform entirely.
+        // The button under the form takes a recruiter to their sign-in; this
+        // catches the other half of that visitor — the one whose company has no
+        // workspace yet. Candidate registration is deliberately not linked from
+        // anywhere on this page: an invitation provisions the account and emails
+        // the credentials, so there is nothing here for a candidate to create.
         <div className="auth-alt-secondary">
-          Recruiter or admin? <Link to="/recruiter/login">Sign in here</Link>
+          New company? <Link to="/recruiter/register">Register to host assessments</Link>
         </div>
       }
     >

@@ -3,6 +3,7 @@ import { PasswordResetToken } from '../auth/entities/password-reset-token.entity
 import { AuditLogEntry } from '../common/audit/audit-log.entity';
 import { AssessmentModule } from '../assessments/entities/assessment-module.entity';
 import { AssessmentQuestion } from '../assessments/entities/assessment-question.entity';
+import { Company } from '../companies/entities/company.entity';
 import { Invitation } from '../invitations/entities/invitation.entity';
 import { ModuleCatalogEntry } from '../modules-catalog/entities/module.entity';
 import { Organisation } from '../organisations/entities/organisation.entity';
@@ -26,6 +27,9 @@ export const entities = [
   // Straight after User: it references nothing else.
   PasswordResetToken,
   ModuleCatalogEntry,
+  // References only Organisation, and Assessment references it — so it has to
+  // come before Assessment and after Organisation.
+  Company,
   // An aggregate over session results, but it hangs off a module and nothing
   // hangs off it — so it sits with the module rather than with the sessions.
   Question,

@@ -8,6 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AssessmentsModule } from './assessments/assessments.module';
 import { AuthModule } from './auth/auth.module';
+import { CompaniesModule } from './companies/companies.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { OrgRolesGuard } from './auth/guards/org-roles.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -113,6 +114,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     ModulesCatalogModule,
+    CompaniesModule,
     QuestionBankModule,
     AssessmentsModule,
     InvitationsModule,

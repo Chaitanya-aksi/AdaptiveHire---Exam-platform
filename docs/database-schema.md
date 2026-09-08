@@ -98,8 +98,50 @@ Index: `(moduleId, status)` — the selector's candidate-pool filter.
 | `title` | varchar(200) | |
 | `description` | text NULL | |
 | `isActive` | boolean | default `true` |
+| `companyId` | uuid FK → `companies` NULL | `ON DELETE SET NULL`. Which business in the group the candidate is appearing for; null uses the organisation's own branding |
 | `createdById` | uuid FK → `users` NULL | `ON DELETE SET NULL` |
 | `createdAt` / `updatedAt` | timestamptz | |
+
+## `companies`
+
+One business inside a customer's workspace — the name and logo a candidate
+actually sees, as opposed to the account that hosts the assessment.
+
+The distinction: an `organisation` is the **workspace**. It is the tenancy
+boundary, it owns the question bank and the assessments, and it is who pays. A
+`company` is one of the businesses that workspace hires for. A group with six
+subsidiaries has one organisation and six companies — one login, one question
+bank, six different marks on the candidate's screen.
+
+Added 2026-09-08 (migration `1786730000000`). Before it, branding lived only on
+the organisation, so every candidate a group invited saw the parent's mark
+whichever subsidiary they had applied to.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | uuid PK | |
+| `organisationId` | uuid FK → `organisations` | `ON DELETE CASCADE`. The tenancy boundary; every query filters on it |
+| `name` | varchar(200) | As a candidate should see it, not the legal entity name |
+| `logoUrl` | varchar(2048) NULL | Absolute https URL. Null falls back to an initial badge |
+| `accentColor` | varchar(7) NULL | `#rrggbb`, or null to inherit the organisation's |
+| `supportEmail` | varchar(255) NULL | Null falls back to the organisation's, then the platform's |
+| `isActive` | boolean | default `true`. Retired companies leave the picker and stay on every round already naming them |
+| `createdAt` / `updatedAt` | timestamptz | |
+
+Indexes: `(organisationId, isActive)` for the picker, and a **unique**
+`(organisationId, lower(name))` — a dropdown holding "KhetPilot" twice is
+unusable, and picking the wrong one puts the wrong logo in front of a candidate.
+Scoped to the organisation, because two customers may both have a subsidiary of
+the same name and neither can see the other's.
+
+There is deliberately **no platform-owned company**. Unlike the question bank,
+there is no such thing as a starter brand every customer can use.
+
+The resolution rule — company first, then organisation, then the platform,
+field by field — lives in one file, `invitations/candidate-branding.ts`, and is
+used by the candidate's invitation list, their attempt record and the rejection
+and message emails. Field by field rather than wholesale so a company that sets
+only a name and a logo inherits the group's accent and shared recruiting inbox.
 
 ## `assessment_modules`
 

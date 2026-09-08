@@ -32,9 +32,9 @@ import {
   type InvitationWindowView,
 } from '../assessments/assessment-window';
 import { AssessmentsService } from '../assessments/assessments.service';
-import type { Organisation } from '../organisations/entities/organisation.entity';
 import type { Branding } from '../organisations/organisations.service';
 import { InviteRowError, mapInviteRow } from './bulk-invite/invite-row-mapper';
+import { resolveBranding } from './candidate-branding';
 import {
   buildStages,
   type AttemptSection,
@@ -43,33 +43,6 @@ import {
 } from './candidate-attempt';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { Invitation } from './entities/invitation.entity';
-
-/**
- * The company's branding, narrowed to what a candidate may see.
- *
- * Deliberately not the whole organisation row: a candidate has no business
- * knowing its id or slug, and passing the entity through would leak both the
- * day somebody adds a field to it.
- *
- * Null on the relation is normal rather than exceptional — an assessment's
- * organisation is only loaded on the candidate-facing queries — so this
- * degrades to AdaptiveHire's own presentation rather than throwing.
- */
-function brandingOf(
-  organisation: Organisation | null | undefined,
-  platformSupportEmail: string | null,
-): Branding {
-  return {
-    name: organisation?.name ?? 'AdaptiveHire',
-    logoUrl: organisation?.logoUrl ?? null,
-    accentColor: organisation?.accentColor ?? null,
-    // Resolved here rather than in the UI: the client should be handed an
-    // address or nothing, never the job of deciding which of two to prefer.
-    // The company that invited them comes first — they are the only ones who
-    // can act on an interrupted attempt.
-    supportEmail: organisation?.supportEmail ?? platformSupportEmail ?? null,
-  };
-}
 
 /**
  * Resolves one candidate's window and renders it for the wire.
@@ -626,6 +599,9 @@ export class InvitationsService {
       .leftJoinAndSelect('assessment.modules', 'am')
       .leftJoinAndSelect('am.module', 'module')
       .leftJoinAndSelect('assessment.organisation', 'organisation')
+      // The business this round is for, which is what the candidate is shown.
+      // Left join: null is the ordinary case and means the workspace's own.
+      .leftJoinAndSelect('assessment.company', 'company')
       .innerJoin(User, 'u', 'u.id = :candidateId', { candidateId })
       .where('i.id = :invitationId', { invitationId })
       .andWhere(
@@ -656,8 +632,9 @@ export class InvitationsService {
         status: invite.status,
         invitedAt: invite.createdAt.toISOString(),
       },
-      organisation: brandingOf(
+      organisation: resolveBranding(
         invite.assessment.organisation,
+        invite.assessment.company,
         this.platformSupportEmail(),
       ),
       window: windowViewOf(invite, invite.assessment),
@@ -772,6 +749,10 @@ export class InvitationsService {
       .leftJoinAndSelect('assessment.modules', 'am')
       .leftJoinAndSelect('am.module', 'module')
       .leftJoinAndSelect('assessment.organisation', 'organisation')
+      // Per-invitation, not per-viewer: a candidate holding rounds from three
+      // of a group's businesses sees three different marks in one list, which
+      // is the whole reason the branding is carried on the row.
+      .leftJoinAndSelect('assessment.company', 'company')
       .innerJoin(User, 'u', 'u.id = :candidateId', { candidateId })
       .where(
         '(i."candidateId" = :candidateId OR lower(i.email) = lower(u.email))',
@@ -799,8 +780,9 @@ export class InvitationsService {
             0,
           ),
         },
-        organisation: brandingOf(
+        organisation: resolveBranding(
           invite.assessment.organisation,
+          invite.assessment.company,
           this.platformSupportEmail(),
         ),
         // Sent so the list can say "opens Tuesday 9am" instead of offering a
@@ -876,8 +858,8 @@ export class InvitationsService {
    * The platform-wide support address, or null when none is configured.
    *
    * `get` rather than `getOrThrow`: an unset address is a supported state, not
-   * a misconfiguration — see `brandingOf`, which then falls through to showing
-   * the candidate no contact route at all.
+   * a misconfiguration — see `resolveBranding`, which then falls through to
+   * showing the candidate no contact route at all.
    */
   private platformSupportEmail(): string | null {
     return this.config.get<string | null>('supportEmail') ?? null;

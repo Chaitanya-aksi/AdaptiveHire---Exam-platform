@@ -4,6 +4,7 @@ import { QuestionPoolPicker } from '../../components/questions/QuestionPoolPicke
 import { useToast } from '../../components/Toast';
 import {
   assessmentsApi,
+  companiesApi,
   modulesApi,
   questionsApi,
   type AssessmentModulePayload,
@@ -11,7 +12,7 @@ import {
 import { describeError } from '../../lib/errors';
 import { defaultsFor } from '../../lib/module-defaults';
 import { fromLocalInput } from '../../lib/schedule';
-import type { ModuleCatalogEntry, Question } from '../../lib/types';
+import type { Company, ModuleCatalogEntry, Question } from '../../lib/types';
 
 /*
  * Building an assessment, on a page of its own.
@@ -87,8 +88,19 @@ export function NewAssessment() {
   const [modules, setModules] = useState<ModuleCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * The group's businesses, active ones only.
+   *
+   * Empty for a customer who is a single company, and the whole field is hidden
+   * in that case — a dropdown with one option and no alternative is a control
+   * asking a question its reader has no reason to answer.
+   */
+  const [companies, setCompanies] = useState<Company[]>([]);
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  /** Empty string is "the workspace itself", which is the default. */
+  const [companyId, setCompanyId] = useState('');
   // Held as datetime-local strings — local wall clock, no zone — and converted
   // on submit. See `lib/schedule.ts` for why that conversion is not inline.
   const [opensAt, setOpensAt] = useState('');
@@ -116,6 +128,22 @@ export function NewAssessment() {
       .then(setModules)
       .catch((err) => setError(describeError(err, 'Could not load subjects.')))
       .finally(() => setLoading(false));
+  }, []);
+
+  /*
+   * Loaded separately, and its failure is deliberately swallowed.
+   *
+   * Choosing a company is optional — omitting it brands the round to the
+   * workspace, which is what every round did before this existed. So a
+   * workspace with no companies, or a request that fails, should cost the
+   * recruiter a field they may not need rather than the whole form. The
+   * subjects above are load-bearing and do surface their error.
+   */
+  useEffect(() => {
+    companiesApi
+      .list(true)
+      .then(setCompanies)
+      .catch(() => setCompanies([]));
   }, []);
 
   const rowFor = (id: string): ModuleRow => rows[id] ?? DEFAULT_ROW;
@@ -197,6 +225,7 @@ export function NewAssessment() {
 
   const selected = modules.filter((m) => rowFor(m.id).included);
   const canSubmit = title.trim().length >= 2 && selected.length > 0;
+  const selectedCompany = companies.find((c) => c.id === companyId) ?? null;
 
   const totalMinutes = Math.round(
     selected.reduce((total, m) => total + rowFor(m.id).timeLimitSeconds, 0) /
@@ -265,6 +294,9 @@ export function NewAssessment() {
         // the create DTO has no null to accept.
         ...(opensIso && { opensAt: opensIso }),
         ...(closesIso && { closesAt: closesIso }),
+        // Omitted for "the workspace itself" — the same absent-means-default
+        // shape as the two above, and what the DTO expects.
+        ...(companyId && { companyId }),
       });
       toast.success(
         questionIds.length > 0
@@ -321,6 +353,64 @@ export function NewAssessment() {
               maxLength={2000}
             />
           </div>
+
+          {/*
+           * Hidden entirely for a workspace with no companies.
+           *
+           * A single-company customer has nothing to choose between, and a
+           * dropdown holding one option asks a question its reader has no
+           * reason to answer. It appears the moment somebody adds a second
+           * business in Settings.
+           */}
+          {companies.length > 0 && (
+            <div className="field">
+              <label htmlFor="company">Which company is this for?</label>
+              <div className="na-company">
+                <select
+                  id="company"
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                >
+                  <option value="">
+                    Our workspace (no specific company)
+                  </option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/*
+                 * The chosen logo, at the size the candidate meets it.
+                 *
+                 * A name in a dropdown is not the thing being decided — the
+                 * logo is — and these are hot-linked from each company's own
+                 * site, so a URL that has stopped resolving is visible here
+                 * rather than discovered by a candidate. `onError` hides a
+                 * broken image so the row degrades to the name alone, which is
+                 * exactly what the portal does.
+                 */}
+                {selectedCompany?.logoUrl && (
+                  <img
+                    className="na-company-logo"
+                    src={selectedCompany.logoUrl}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                )}
+              </div>
+              <p className="field-note">
+                This is the name and logo the candidate sees on their
+                invitation, their assessment card and their record. Leave it on
+                the workspace to use your own branding. You can change it later
+                from the assessment&rsquo;s own page.
+              </p>
+            </div>
+          )}
 
           <div className="field">
             <label>When candidates can sit it (optional)</label>

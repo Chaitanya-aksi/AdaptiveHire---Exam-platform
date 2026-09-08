@@ -21,10 +21,57 @@ export const STRONG_SCORE = 65;
 export const WEAK_SCORE = 35;
 
 /**
- * A trait measured with less confidence than this is reported but never called
- * a strength or a weakness — two answers is not a personality finding.
+ * A trait measured with less confidence than this carries no score of its own
+ * in the composites, and no composite built below it is scored or banded.
+ *
+ * This is the floor for *reporting a number at all*. It is deliberately not the
+ * floor for calling that number a strength or a weakness — see
+ * `MIN_FINDING_CONFIDENCE`, which is higher.
  */
 export const MIN_TRAIT_CONFIDENCE = 0.5;
+
+/**
+ * Evidence required before a score is named as a **strength or a weakness**,
+ * rather than merely reported.
+ *
+ * Higher than `MIN_TRAIT_CONFIDENCE` on purpose, and the two answer different
+ * questions. Showing "Teamwork 100, confidence 67%" in the trait table states a
+ * measurement next to how much is behind it. Printing "Teamwork — 100/100"
+ * under the heading **Strengths** makes a claim about the person, and a claim
+ * needs more than a measurement does.
+ *
+ * The number is chosen so that a trait needs full coverage. Trait confidence is
+ * `answers / TRAIT_TARGET_QUESTIONS` capped at 1, with the target at 3, so 0.8
+ * admits three answers and refuses two — which is what the old floor of 0.5
+ * claimed to do and did not: 2/3 is 0.67, comfortably over it. A candidate who
+ * answered two questions touching Teamwork the same way was being reported as
+ * having Teamwork as a strong area on a perfect 100.
+ *
+ * For a composite the same number means its traits are *mostly* fully covered,
+ * with room for one thinner contributor — a composite aggregates four or five
+ * traits, so demanding a clean 1.0 from every one of them would make the
+ * finding disappear on a single short-measured trait.
+ *
+ * Nothing here changes a score, a band, the behavioural index or the
+ * recommendation. It changes only what the report is willing to call a finding,
+ * which is the same division of labour as `expectedByChance` and the proctoring
+ * signals: state the evidence, and do not overclaim on top of it.
+ */
+export const MIN_FINDING_CONFIDENCE = 0.8;
+
+/**
+ * The same rule on the objective side: how many questions a section must have
+ * actually served before its score is named a strength or a weakness.
+ *
+ * An objective module has no confidence figure, so the count is the evidence. A
+ * candidate who answered one question correctly has not demonstrated a strong
+ * section, and one who got it wrong has not demonstrated a weak one.
+ *
+ * The under-answered-section weakness is deliberately *not* gated on this. That
+ * one is a statement about coverage rather than about ability, and it is at its
+ * most useful precisely when the count is low.
+ */
+export const MIN_FINDING_ANSWERS = 3;
 
 /** Overall-score bands for the rule-based recommendation. */
 export const STRONGLY_RECOMMENDED_AT = 75;
