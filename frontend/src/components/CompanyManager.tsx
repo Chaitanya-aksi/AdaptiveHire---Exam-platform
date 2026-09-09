@@ -1,20 +1,27 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useToast } from './Toast';
-import { companiesApi } from '../lib/endpoints';
+import { companiesApi, organisationsApi } from '../lib/endpoints';
 import { describeError } from '../lib/errors';
-import type { Company, CompanyPatch } from '../lib/types';
+import type { Company, OrganisationProfile } from '../lib/types';
 
 /*
- * The businesses inside one workspace.
+ * Everything a candidate sees about who is assessing them, in one list.
  *
- * A group hires under several names from one account, and the candidate applied
- * to one of them — so this is what decides whose logo is on their invitation,
- * not the workspace's own branding above it.
+ * This was two stacked cards — "Candidate-facing branding" for the workspace,
+ * then "Companies" underneath — and they read as rivals. Both were headed with
+ * a logo, an accent and a support address, neither said which one a candidate
+ * would actually get, and the honest answer ("it depends on the assessment")
+ * appeared nowhere. Merging them makes the precedence the structure of the
+ * page rather than something to be inferred.
  *
- * Admin-and-above, like the branding it sits under and for the same reason:
- * every field here reaches people outside the company. The server enforces it;
- * the read-only rendering below only stops a viewer being shown controls that
- * would 403.
+ * The workspace row is NOT decoration and must not be dropped. It is the
+ * fallback for an assessment that names no company, and it is what every
+ * company inherits for any field it leaves blank — a group running one
+ * recruiting inbox across six brands fills it in exactly once, here.
+ *
+ * Admin-and-above, because all of it reaches people outside the company. The
+ * server enforces that; the read-only rendering here only avoids showing
+ * controls that would 403.
  */
 
 /** Empty means "clear it", which is how a field is unset through a text box. */
@@ -37,27 +44,22 @@ const EMPTY: Draft = {
   supportEmail: '',
 };
 
-const draftOf = (company: Company): Draft => ({
-  name: company.name,
-  logoUrl: company.logoUrl ?? '',
-  accentColor: company.accentColor ?? '',
-  supportEmail: company.supportEmail ?? '',
-});
+/** The workspace row's id. Not a uuid, so it can never collide with a company. */
+const WORKSPACE = 'workspace';
 
 /**
- * One company's logo, or nothing.
+ * One row's logo, or the initial badge the candidate portal falls back to.
  *
- * These are hot-linked from each company's own site, so a URL that has stopped
+ * Logos are hot-linked from each company's own site, so a URL that has stopped
  * resolving must degrade rather than leave a broken-image glyph in a settings
- * table. Hiding it on error matches the candidate portal, which falls back to an
- * initial badge — and seeing it missing here is how somebody finds out before a
- * candidate does.
+ * table. Seeing it missing here is how somebody finds out before a candidate
+ * does.
  */
-function Logo({ company }: { company: Company }) {
-  if (!company.logoUrl) {
+function Logo({ name, logoUrl }: { name: string; logoUrl: string | null }) {
+  if (!logoUrl) {
     return (
       <span className="cm-mark" aria-hidden="true">
-        {company.name.trim().charAt(0).toUpperCase()}
+        {name.trim().charAt(0).toUpperCase() || '?'}
       </span>
     );
   }
@@ -65,7 +67,7 @@ function Logo({ company }: { company: Company }) {
   return (
     <img
       className="cm-logo"
-      src={company.logoUrl}
+      src={logoUrl}
       alt=""
       loading="lazy"
       onError={(e) => {
@@ -75,7 +77,15 @@ function Logo({ company }: { company: Company }) {
   );
 }
 
-export function CompanyManager({ canEdit }: { canEdit: boolean }) {
+export function CompanyManager({
+  canEdit,
+  organisation,
+  onOrganisationChange,
+}: {
+  canEdit: boolean;
+  organisation: OrganisationProfile;
+  onOrganisationChange: (next: OrganisationProfile) => void;
+}) {
   const toast = useToast();
 
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -83,7 +93,7 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  /** Which row is open for editing, or 'new' for the add form. */
+  /** Row open for editing: a company id, `WORKSPACE`, 'new', or null. */
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
 
@@ -116,9 +126,26 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
     setDraft(EMPTY);
   };
 
-  const openEdit = (company: Company) => {
+  const openCompany = (company: Company) => {
     setEditing(company.id);
-    setDraft(draftOf(company));
+    setDraft({
+      name: company.name,
+      logoUrl: company.logoUrl ?? '',
+      accentColor: company.accentColor ?? '',
+      supportEmail: company.supportEmail ?? '',
+    });
+  };
+
+  const openWorkspace = () => {
+    setEditing(WORKSPACE);
+    setDraft({
+      // The workspace name is set at registration and is not editable here, so
+      // the form hides the field rather than offering one that goes nowhere.
+      name: organisation.name,
+      logoUrl: organisation.logoUrl ?? '',
+      accentColor: organisation.accentColor ?? '',
+      supportEmail: organisation.supportEmail ?? '',
+    });
   };
 
   const close = () => {
@@ -128,10 +155,10 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canEdit || busy || !draft.name.trim()) return;
+    if (!canEdit || busy) return;
+    if (editing !== WORKSPACE && !draft.name.trim()) return;
 
-    const changes: CompanyPatch = {
-      name: draft.name.trim(),
+    const shared = {
       logoUrl: normalise(draft.logoUrl),
       accentColor: normalise(draft.accentColor),
       supportEmail: normalise(draft.supportEmail),
@@ -140,17 +167,25 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      if (editing === 'new') {
+      if (editing === WORKSPACE) {
+        // Different endpoint, same three fields — the workspace is an
+        // organisation row, not a company, and only its branding is editable.
+        onOrganisationChange(await organisationsApi.updateBranding(shared));
+        toast.success('Saved. Candidates see this where no company is set.');
+      } else if (editing === 'new') {
         const created = await companiesApi.create({
-          ...changes,
-          name: changes.name!,
+          ...shared,
+          name: draft.name.trim(),
         });
         setCompanies((current) =>
           [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
         );
         toast.success(`Added ${created.name}.`);
       } else if (editing) {
-        const updated = await companiesApi.update(editing, changes);
+        const updated = await companiesApi.update(editing, {
+          ...shared,
+          name: draft.name.trim(),
+        });
         setCompanies((current) =>
           current.map((c) => (c.id === updated.id ? updated : c)),
         );
@@ -158,7 +193,7 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
       }
       close();
     } catch (err) {
-      setError(describeError(err, 'Could not save that company.'));
+      setError(describeError(err, 'Could not save that.'));
     } finally {
       setBusy(false);
     }
@@ -192,22 +227,28 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
     }
   };
 
+  const isWorkspaceForm = editing === WORKSPACE;
+
   const form = (
     <form className="cm-form stack" onSubmit={(e) => void submit(e)}>
-      <div className="field">
-        <label htmlFor="cm-name">Company name</label>
-        <input
-          id="cm-name"
-          value={draft.name}
-          maxLength={200}
-          required
-          placeholder="KhetPilot"
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-        />
-        <p className="field-note">
-          As a candidate should see it, not the registered legal name.
-        </p>
-      </div>
+      {/* No name field on the workspace: it is set when the company registers,
+          and an input that silently does nothing is worse than no input. */}
+      {!isWorkspaceForm && (
+        <div className="field">
+          <label htmlFor="cm-name">Company name</label>
+          <input
+            id="cm-name"
+            value={draft.name}
+            maxLength={200}
+            required
+            placeholder="KhetPilot"
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          />
+          <p className="field-note">
+            As a candidate should see it, not the registered legal name.
+          </p>
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor="cm-logo">Logo URL</label>
@@ -226,7 +267,7 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <div className="field">
-        <label htmlFor="cm-accent">Accent colour (optional)</label>
+        <label htmlFor="cm-accent">Accent colour</label>
         <div className="set-colour">
           <input
             id="cm-accent"
@@ -247,24 +288,25 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
           />
         </div>
         <p className="field-note">
-          Leave empty to inherit the workspace&rsquo;s colour above.
+          {isWorkspaceForm
+            ? "Leave empty for AdaptiveHire's own."
+            : 'Leave empty to inherit the default below.'}
         </p>
       </div>
 
       <div className="field">
-        <label htmlFor="cm-support">Support email (optional)</label>
+        <label htmlFor="cm-support">Support email for candidates</label>
         <input
           id="cm-support"
           type="email"
           value={draft.supportEmail}
-          placeholder="careers@company.com"
-          onChange={(e) =>
-            setDraft({ ...draft, supportEmail: e.target.value })
-          }
+          placeholder="hiring@yourcompany.com"
+          onChange={(e) => setDraft({ ...draft, supportEmail: e.target.value })}
         />
         <p className="field-note">
-          Leave empty to use the workspace address above, which is usually right
-          for a group sharing one recruiting inbox.
+          {isWorkspaceForm
+            ? 'Shown to a candidate whose assessment was interrupted, by a power cut or a dropped connection, so they can tell you what happened. The clock keeps running whether or not their browser is open, so this is the only way they can reach you. Leave empty and they are shown no contact route at all.'
+            : 'Leave empty to use the default address below, which is usually right for a group sharing one recruiting inbox.'}
         </p>
       </div>
 
@@ -283,11 +325,13 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
     <section className="card set-card">
       <div className="card-head">
         <div>
-          <h2>Companies</h2>
+          <h2>Candidate-facing branding</h2>
+          {/* The precedence rule, stated once, before the list that embodies
+              it. Without this the two halves read as rival settings. */}
           <p className="muted small">
-            The businesses you hire for. Pick one when creating an assessment
-            and the candidate sees that company&rsquo;s name and logo instead of
-            the workspace&rsquo;s.
+            An assessment names the business it is for, and the candidate sees
+            that business. Anything it leaves blank falls back to the default at
+            the bottom.
           </p>
         </div>
         {canEdit && editing !== 'new' && (
@@ -302,12 +346,6 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
 
         {loading ? (
           <div className="ci-skeleton" style={{ height: 90 }} />
-        ) : companies.length === 0 && editing !== 'new' ? (
-          <p className="muted">
-            None yet. Every assessment uses the workspace branding above, which
-            is right if you hire under one name. Add a company if you hire under
-            several.
-          </p>
         ) : (
           <ul className="cm-list">
             {companies.map((company) => (
@@ -319,12 +357,12 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
                   form
                 ) : (
                   <>
-                    <Logo company={company} />
+                    <Logo name={company.name} logoUrl={company.logoUrl} />
                     <div className="cm-body">
                       <strong>{company.name}</strong>
                       <span className="muted small">
                         {company.isActive ? (
-                          company.supportEmail ?? 'Workspace support address'
+                          (company.supportEmail ?? 'Uses the default address')
                         ) : (
                           <em>
                             Retired — stays on existing rounds, not offered for
@@ -338,7 +376,7 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
                         <button
                           type="button"
                           className="button"
-                          onClick={() => openEdit(company)}
+                          onClick={() => openCompany(company)}
                         >
                           Edit
                         </button>
@@ -358,10 +396,57 @@ export function CompanyManager({ canEdit }: { canEdit: boolean }) {
                 )}
               </li>
             ))}
+
+            {editing === 'new' && <li className="cm-row">{form}</li>}
+
+            {/*
+             * The workspace, last and labelled as the fallback.
+             *
+             * Last because it is the least-touched row: a group fills it in
+             * once and then works in the companies above it. Kept visible
+             * because it is what an assessment with no company shows, and what
+             * every blank field above inherits — and because a fallback nobody
+             * can see is one nobody knows is being used.
+             *
+             * No Retire button. There is no version of this product where the
+             * workspace has no branding at all.
+             */}
+            <li className="cm-row cm-row--default">
+              {editing === WORKSPACE ? (
+                form
+              ) : (
+                <>
+                  <Logo
+                    name={organisation.name}
+                    logoUrl={organisation.logoUrl}
+                  />
+                  <div className="cm-body">
+                    <strong>
+                      {organisation.name}
+                      <span className="cm-tag">Default</span>
+                    </strong>
+                    <span className="muted small">
+                      {companies.length === 0
+                        ? 'What every candidate sees. Add a company above to override it per assessment.'
+                        : 'Used when an assessment names no company, and inherited by any field left blank above.'}
+                    </span>
+                  </div>
+                  {canEdit && (
+                    <div className="cm-actions">
+                      <button
+                        type="button"
+                        className="button"
+                        onClick={openWorkspace}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </li>
           </ul>
         )}
-
-        {editing === 'new' && form}
       </div>
     </section>
   );

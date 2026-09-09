@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { ZohoApiTransport, type ZohoApiConfig } from './zoho-api.transport';
 
 /**
  * What `sendMail` actually returns here: SMTP's envelope info (which
@@ -82,7 +83,18 @@ export class MailService {
   constructor(private readonly config: ConfigService) {
     this.from = this.config.getOrThrow<string>('mail.from');
     this.smtpHost = this.config.get<string>('mail.host') ?? '';
-    this.devMode = !this.smtpHost;
+    /*
+     * "No real transport", not "no SMTP host".
+     *
+     * This used to be `!this.smtpHost`, which was the same thing while SMTP was
+     * the only way out. It stopped being so once the Zoho API path existed: a
+     * deployment sending over HTTPS has no MAIL_HOST at all, and the old test
+     * would have called that dev mode — logging Ethereal preview URLs for
+     * messages that had really been delivered to real people.
+     */
+    this.devMode =
+      this.config.get<string>('mail.transport') !== 'zoho-api' &&
+      !this.smtpHost;
   }
 
   async sendInvite(params: InviteEmailParams): Promise<void> {
@@ -197,6 +209,29 @@ export class MailService {
   }
 
   private async createTransporter(): Promise<nodemailer.Transporter> {
+    /*
+     * Checked first, and only on an explicit opt-in.
+     *
+     * Render blocks outbound SMTP ports 25, 465 and 587 on free web services,
+     * so every send timed out and — because invite jobs are queued
+     * `removeOnFail: true` to keep a plaintext password out of Redis — deleted
+     * its own evidence. This route speaks HTTPS instead. The switch is an
+     * explicit `MAIL_TRANSPORT=zoho-api` rather than "use it if the keys are
+     * present", so a partially filled `.env` cannot change how production sends
+     * mail, and reverting is one line.
+     *
+     * `env.validation.ts` refuses to boot if a credential is missing while this
+     * is selected, so there is nothing to guard here.
+     */
+    if (this.config.get<string>('mail.transport') === 'zoho-api') {
+      const zoho = this.config.getOrThrow<ZohoApiConfig>('mail.zoho');
+      this.logger.log(
+        `Zoho Mail API transport ready (mail.zoho.${zoho.region}, ` +
+          `account ${zoho.accountId})`,
+      );
+      return nodemailer.createTransport(new ZohoApiTransport(zoho));
+    }
+
     if (this.smtpHost) {
       const user = this.config.get<string>('mail.user') ?? '';
       const pass = this.config.get<string>('mail.pass') ?? '';

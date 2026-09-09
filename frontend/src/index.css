@@ -6343,7 +6343,42 @@ button.block {
   flex: 1;
 }
 .cm-body strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
+}
+
+/*
+ * The workspace row, set apart as the fallback rather than as a sixth company.
+ *
+ * A heavier rule above it and a tinted ground: it is in the same list because
+ * it answers the same question, but it is not a peer of the rows above — it is
+ * what they fall back to. Reading order carries the rule, so the separation has
+ * to be visible without being a second card.
+ */
+.cm-row--default {
+  margin-top: 6px;
+  border-top: 2px solid var(--border);
+  border-bottom: 0;
+  padding-top: 14px;
+  background: var(--surface-2);
+  border-radius: 0 0 10px 10px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.cm-tag {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .cm-actions {

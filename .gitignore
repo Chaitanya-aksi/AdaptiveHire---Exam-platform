@@ -3,9 +3,18 @@ dist/
 build/
 coverage/
 
+# Every .env variant, not just the three that existed when this was written.
+#
+# `.env.production`, `.env.staging` and `.env.bak-<date>` were all committable
+# until 2026-09-09, and the first two are exactly what someone reaches for when
+# juggling a local and a deployed config — which is how `env.production.backup`
+# came to exist holding the live Aiven, Redis, JWT and mail credentials.
+#
+# `!.env.example` keeps the documented template tracked, which is the one file
+# here that must stay in the repo.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 *.log
 npm-debug.log*
@@ -21,4 +30,23 @@ Thumbs.db
 frontend.zip
 *.zip
 .claude/worktrees/
+
+# Copies of .env made while switching between local and deployed config. These
+# held the live database, Redis, JWT and mail credentials in the repo root for
+# days, untracked but not ignored, one `git add -A` from being published.
 *.backup
+
+# Keys and certificates. None are in the tree today, but `POSTGRES_CA_CERT` is
+# base64 of a real CA and the runbook tells you to `base64 -w0 ca.pem` — so the
+# moment anyone does that, the PEM is sitting here.
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Conventional dumping grounds for credentials.
+secrets.json
+credentials.json
+*.credentials.json

@@ -57,12 +57,25 @@ if ($SkipBuild) {
 } else {
   Write-Host 'Building...' -ForegroundColor Cyan
   Push-Location $here
+  # $ErrorActionPreference is relaxed for the npm call only, and the exit code
+  # is the sole verdict.
+  #
+  # Windows PowerShell 5.1 turns a native command's stderr into an ErrorRecord
+  # whenever the caller redirects it (`.\build-slate-zip.ps1 2>&1 | ...`), which
+  # under 'Stop' aborts the script even though the build succeeded. Vite always
+  # writes at least one warning to stderr - the face-api "fs has been
+  # externalized" note - so this fired every time and looked like a build
+  # failure. The exit code was 0 throughout.
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
   try {
     npm run build
-    if ($LASTEXITCODE -ne 0) { throw "npm run build failed (exit $LASTEXITCODE)." }
+    $code = $LASTEXITCODE
   } finally {
+    $ErrorActionPreference = $previous
     Pop-Location
   }
+  if ($code -ne 0) { throw "npm run build failed (exit $code)." }
 }
 
 if (-not (Test-Path $dist)) {

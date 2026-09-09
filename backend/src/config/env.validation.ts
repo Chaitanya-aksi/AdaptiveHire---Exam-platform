@@ -100,6 +100,52 @@ export const envValidationSchema = Joi.object({
   MAIL_USER: Joi.string().allow('').default(''),
   MAIL_PASS: Joi.string().allow('').default(''),
   MAIL_FROM: Joi.string().default('AdaptiveHire <no-reply@adaptivehire.local>'),
+
+  /*
+   * How mail leaves. `smtp` is the default and the pre-existing behaviour.
+   *
+   * `zoho-api` exists because Render blocks outbound SMTP ports on free web
+   * services, so the only way out is HTTPS. When it is selected the four
+   * credentials below become **required** — an unset one is refused at boot
+   * rather than discovered later, because the failure it would otherwise cause
+   * is the one this whole transport was written to end: mail that appears to
+   * send and silently goes nowhere.
+   */
+  MAIL_TRANSPORT: Joi.string().valid('smtp', 'zoho-api').default('smtp'),
+
+  MAIL_ZOHO_CLIENT_ID: Joi.string()
+    .allow('')
+    .default('')
+    .when('MAIL_TRANSPORT', {
+      is: 'zoho-api',
+      then: Joi.string().required().disallow(''),
+    }),
+  MAIL_ZOHO_CLIENT_SECRET: Joi.string()
+    .allow('')
+    .default('')
+    .when('MAIL_TRANSPORT', {
+      is: 'zoho-api',
+      then: Joi.string().required().disallow(''),
+    }),
+  MAIL_ZOHO_REFRESH_TOKEN: Joi.string()
+    .allow('')
+    .default('')
+    .when('MAIL_TRANSPORT', {
+      is: 'zoho-api',
+      then: Joi.string().required().disallow(''),
+    }),
+  MAIL_ZOHO_ACCOUNT_ID: Joi.string()
+    .allow('')
+    .default('')
+    .when('MAIL_TRANSPORT', {
+      is: 'zoho-api',
+      then: Joi.string().required().disallow(''),
+    }),
+  // The data centre the mailbox lives in. A token minted in one is rejected by
+  // another, and the symptom is an unhelpful 401.
+  MAIL_ZOHO_REGION: Joi.string()
+    .valid('in', 'com', 'eu', 'au', 'jp', 'ca', 'sa')
+    .default('in'),
 })
   // Every current browser drops a `SameSite=None` cookie that is not also
   // `Secure`, so the pair is refused at boot rather than found in production —

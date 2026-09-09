@@ -96,6 +96,15 @@ export interface AppConfig {
    */
   supportEmail: string | null;
   mail: {
+    /**
+     * Which way mail actually leaves. `smtp` is the default and is what every
+     * deployment used before 2026-09-09; `zoho-api` sends over HTTPS instead.
+     *
+     * An explicit switch rather than "use the API if its keys happen to be
+     * set", so a half-filled `.env` cannot quietly change how production sends
+     * mail, and so switching back is one obvious line.
+     */
+    transport: 'smtp' | 'zoho-api';
     /** Empty in dev: the mailer then logs messages instead of sending them. */
     host: string;
     port: number;
@@ -103,6 +112,18 @@ export interface AppConfig {
     user: string;
     pass: string;
     from: string;
+    /**
+     * Only read when `transport` is `zoho-api`. Exists because Render blocks
+     * outbound SMTP ports on free web services — see `zoho-api.transport.ts`.
+     */
+    zoho: {
+      clientId: string;
+      clientSecret: string;
+      refreshToken: string;
+      accountId: string;
+      /** Data-centre suffix of the Zoho account: `in`, `com`, `eu`, `au`, `jp`. */
+      region: string;
+    };
   };
 }
 
@@ -164,11 +185,25 @@ export default (): AppConfig => ({
   appUrl: process.env.APP_URL ?? 'http://localhost:5174',
   supportEmail: process.env.SUPPORT_EMAIL?.trim() || null,
   mail: {
+    // Anything other than the exact string 'zoho-api' keeps the SMTP path, so a
+    // typo degrades to the behaviour that was already there rather than to a
+    // transport that cannot send.
+    transport: process.env.MAIL_TRANSPORT === 'zoho-api' ? 'zoho-api' : 'smtp',
     host: process.env.MAIL_HOST ?? '',
     port: parseInt(process.env.MAIL_PORT ?? '587', 10),
     secure: process.env.MAIL_SECURE === 'true',
     user: process.env.MAIL_USER ?? '',
     pass: process.env.MAIL_PASS ?? '',
     from: process.env.MAIL_FROM ?? 'AdaptiveHire <no-reply@adaptivehire.local>',
+    zoho: {
+      clientId: process.env.MAIL_ZOHO_CLIENT_ID ?? '',
+      clientSecret: process.env.MAIL_ZOHO_CLIENT_SECRET ?? '',
+      refreshToken: process.env.MAIL_ZOHO_REFRESH_TOKEN ?? '',
+      accountId: process.env.MAIL_ZOHO_ACCOUNT_ID ?? '',
+      // `in` rather than `com`: this workspace's mailbox is in Zoho's Indian
+      // data centre, which is where `smtp.zoho.in` and `mail.zoho.in` live. A
+      // token minted in one DC is rejected by another.
+      region: process.env.MAIL_ZOHO_REGION ?? 'in',
+    },
   },
 });

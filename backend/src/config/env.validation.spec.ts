@@ -127,3 +127,74 @@ describe('envValidationSchema', () => {
     expect(error?.message).toBeUndefined();
   });
 });
+
+/**
+ * The transport switch, added 2026-09-09 when Render's SMTP port block forced a
+ * second way out.
+ *
+ * The rule that matters is the conditional one: selecting `zoho-api` without
+ * its credentials must be refused at boot. Left permissive it would produce the
+ * exact failure the whole transport was written to end — a mailer that looks
+ * configured, reports success, and delivers nothing.
+ */
+describe('MAIL_TRANSPORT', () => {
+  const base = {
+    POSTGRES_USER: 'u',
+    POSTGRES_PASSWORD: 'p',
+    POSTGRES_DB: 'd',
+    JWT_ACCESS_SECRET: 'x'.repeat(20),
+    JWT_REFRESH_SECRET: 'y'.repeat(20),
+  };
+  const validate = (env: Record<string, string> = {}) =>
+    envValidationSchema.validate({ ...base, ...env });
+
+  const zohoKeys = {
+    MAIL_ZOHO_CLIENT_ID: 'cid',
+    MAIL_ZOHO_CLIENT_SECRET: 'secret',
+    MAIL_ZOHO_REFRESH_TOKEN: 'refresh',
+    MAIL_ZOHO_ACCOUNT_ID: '12345',
+  };
+
+  it('defaults to smtp, so an untouched deployment is unaffected', () => {
+    const { error, value } = validate();
+    expect(error).toBeUndefined();
+    expect(value.MAIL_TRANSPORT).toBe('smtp');
+  });
+
+  it('needs no Zoho credentials while it stays on smtp', () => {
+    expect(validate({ MAIL_TRANSPORT: 'smtp' }).error).toBeUndefined();
+  });
+
+  it('refuses zoho-api with no credentials at all', () => {
+    expect(validate({ MAIL_TRANSPORT: 'zoho-api' }).error).toBeDefined();
+  });
+
+  it.each(Object.keys(zohoKeys))('refuses zoho-api missing %s', (missing) => {
+    const partial = { ...zohoKeys, [missing]: '' };
+    expect(
+      validate({ MAIL_TRANSPORT: 'zoho-api', ...partial }).error,
+    ).toBeDefined();
+  });
+
+  it('accepts zoho-api once every credential is present', () => {
+    const { error, value } = validate({
+      MAIL_TRANSPORT: 'zoho-api',
+      ...zohoKeys,
+    });
+    expect(error).toBeUndefined();
+    expect(value.MAIL_TRANSPORT).toBe('zoho-api');
+    // The Indian data centre, because a token minted there is rejected
+    // elsewhere and this workspace's mailbox lives in it.
+    expect(value.MAIL_ZOHO_REGION).toBe('in');
+  });
+
+  it('rejects an unknown transport rather than guessing', () => {
+    expect(validate({ MAIL_TRANSPORT: 'sendgrid' }).error).toBeDefined();
+  });
+
+  it('rejects a data centre that does not exist', () => {
+    expect(
+      validate({ MAIL_TRANSPORT: 'smtp', MAIL_ZOHO_REGION: 'uk' }).error,
+    ).toBeDefined();
+  });
+});
