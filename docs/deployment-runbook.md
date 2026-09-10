@@ -161,6 +161,30 @@ change it, `npm run build`, redeploy the output. Everything `VITE_` is public by
 definition, so a committed `.env.production` carries no secret and makes the
 values that shipped recoverable.
 
+### The one file that can silently poison a production build
+
+`frontend/.env.development.local` points the SPA at `http://localhost:3001/api`
+for local work. It is untracked, and it is safe **because of its name**: Vite
+loads `.env.development.*` only when the mode is development, which
+`vite dev` sets and `vite build` does not.
+
+`.env.local` is the trap. Vite loads that one in **every** mode, production
+included, so a localhost URL there is compiled into the uploaded bundle. The
+deployed site then talks to a machine that is not on the internet, every request
+fails with no response at all, and the error the SPA shows is "Could not reach
+the API. Is the backend running on port 3001?" — which sends you looking at the
+API while the fault is in a file on your laptop.
+
+If a deploy ever comes up dead, check what the bundle actually points at before
+anything else:
+
+```powershell
+Select-String -Path dist/assets/*.js -Pattern 'localhost:3001' -SimpleMatch
+```
+
+Any hit means the build read a dev env file. Nothing found is what you want; the
+production URL comes from `frontend/.env`.
+
 Serve all static assets — the face-api models included — from Catalyst. Render's
 free tier suspends the service on bandwidth overage rather than billing for it,
 so the API should emit JSON and socket frames and nothing else.
