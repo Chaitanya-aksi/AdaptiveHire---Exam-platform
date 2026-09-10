@@ -147,3 +147,21 @@ export enum HiringRecommendation {
   BORDERLINE = 'borderline',
   NOT_RECOMMENDED = 'not_recommended',
 }
+
+/**
+ * How an invitation came about.
+ *
+ * `recruiter` is every invitation created before public links existed, which is
+ * why the column defaults to it — no backfill was needed.
+ *
+ * `self` means the candidate reached the assessment through a shared link and
+ * typed their own address. That attempt is **weaker evidence about a person**
+ * than an invited one: the address is self-asserted and nobody vouched for it.
+ * The results page and the report both say so, for the same reason
+ * `expectedByChance` sits next to a score — state what is behind a number
+ * rather than letting it read as more than it is.
+ */
+export enum InvitationSource {
+  RECRUITER = 'recruiter',
+  SELF = 'self',
+}

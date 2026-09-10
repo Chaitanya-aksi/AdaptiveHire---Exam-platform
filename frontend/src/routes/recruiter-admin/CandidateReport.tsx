@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { SourceBadge } from '../../components/SourceBadge';
 import { reportsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
 // Aliased: this file already has a `formatDuration` that takes milliseconds,
@@ -454,6 +455,15 @@ export function CandidateReport() {
           <h1>{candidate.fullName}</h1>
           <p>
             {summary.assessment.title} · {candidate.email}
+          </p>
+          {/*
+           * How they reached this assessment, in full rather than abbreviated:
+           * there is room here, and this is the page where the strength of the
+           * evidence behind everything below it is decided. The PDF prints the
+           * same sentence — keep the two in step.
+           */}
+          <p className="report-source">
+            <SourceBadge source={summary.source} tone="full" />
           </p>
           {/*
            * When they sat it and how long it took.

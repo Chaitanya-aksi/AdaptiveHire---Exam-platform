@@ -9,7 +9,7 @@ import {
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
-import { InvitationStatus } from '../../common/enums';
+import { InvitationSource, InvitationStatus } from '../../common/enums';
 import { Assessment } from '../../assessments/entities/assessment.entity';
 import { User } from '../../users/entities/user.entity';
 
@@ -88,6 +88,51 @@ export class Invitation {
 
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt!: Date | null;
+
+  /**
+   * Whether a recruiter invited this address or the candidate typed it in
+   * themselves through a public link.
+   *
+   * Defaults to `recruiter`, which is what every row created before public
+   * links existed genuinely was — so no backfill was needed and no historic
+   * attempt is mislabelled.
+   *
+   * This is not bookkeeping. An invited attempt is evidence about a named
+   * person because somebody vouched for the address; a self-registered one is
+   * evidence about whoever typed it. The results list and the report both show
+   * the difference, because a recruiter comparing two candidates deserves to
+   * know which is which.
+   */
+  @Index()
+  @Column({
+    type: 'enum',
+    enum: InvitationSource,
+    default: InvitationSource.RECRUITER,
+  })
+  source!: InvitationSource;
+
+  /**
+   * Where the candidate was when they claimed this invitation, and with what.
+   *
+   * Null for every recruiter-created invitation, since nobody registered.
+   *
+   * **Recorded and shown, never enforced.** Refusing a repeat IP was considered
+   * and rejected: a college, an office or a household shares one address, and
+   * Indian mobile carriers put thousands of users behind carrier-grade NAT, so
+   * it would turn away legitimate candidates in bulk while a VPN defeats it in
+   * seconds — many false rejections, few true ones, which is the worst shape a
+   * gate can have. Recording it lets a recruiter notice that three attempts came
+   * from one address and judge for themselves, which is the same rule the whole
+   * proctoring stack runs on.
+   *
+   * 45 characters because an IPv6 address with an embedded IPv4 suffix is the
+   * longest form we can be handed.
+   */
+  @Column({ type: 'varchar', length: 45, nullable: true })
+  registeredIp!: string | null;
+
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  registeredUserAgent!: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

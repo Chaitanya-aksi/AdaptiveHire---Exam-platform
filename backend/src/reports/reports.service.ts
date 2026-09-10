@@ -22,6 +22,7 @@ import { Assessment } from '../assessments/entities/assessment.entity';
 import {
   BehavioralPattern,
   HiringRecommendation,
+  InvitationSource,
   OrgRole,
   ProctoringEventType,
   ScoringType,
@@ -69,6 +70,17 @@ export interface ReportSummaryView {
   timing: AttemptTiming;
   assessment: { id: string; title: string };
   candidate: { id: string; fullName: string; email: string };
+  /**
+   * How this candidate reached the assessment: invited by a recruiter, or
+   * self-registered through a public link.
+   *
+   * On the report because the two are not equally strong evidence. An invited
+   * attempt is about a named person, because somebody vouched for the address;
+   * a self-registered one is about whoever typed it in. Stating that is the
+   * same principle as `expectedByChance` and the proctoring signals — say what
+   * is behind a number rather than letting it be read as more than it is.
+   */
+  source: InvitationSource;
   report: {
     summary: string;
     strengths: string[];
@@ -216,6 +228,13 @@ export interface CandidateMessageView {
 export interface AttemptListItem {
   sessionId: string;
   candidate: { id: string; fullName: string; email: string };
+  /**
+   * Invited, or self-registered through a public link. In the list as well as
+   * on the report, because this is where a recruiter compares candidates
+   * against each other and it is exactly the comparison the distinction bears
+   * on.
+   */
+  source: InvitationSource;
   status: SessionStatus;
   startedAt: string;
   submittedAt: string | null;
@@ -276,6 +295,8 @@ export interface OrgAttemptListItem {
   sessionId: string;
   assessment: { id: string; title: string };
   candidate: { id: string; fullName: string; email: string };
+  /** Invited, or self-registered through a public link. */
+  source: InvitationSource;
   status: SessionStatus;
   startedAt: string;
   submittedAt: string | null;
@@ -516,6 +537,10 @@ export class ReportsService {
         fullName: session.candidate.fullName,
         email: session.candidate.email,
       },
+      // Defaulted rather than asserted: the relation is loaded on every path
+      // that reaches here, but a missed one should report the ordinary case
+      // rather than crash a report a recruiter is trying to read.
+      source: session.invitation?.source ?? InvitationSource.RECRUITER,
       report: {
         summary: report.summary,
         strengths: report.strengths,
@@ -753,7 +778,9 @@ export class ReportsService {
 
     const sessions = await this.sessions.find({
       where: { assessmentId },
-      relations: { candidate: true },
+      // The invitation for its `source` alone — whether this attempt was
+      // invited by name or self-registered through the public link.
+      relations: { candidate: true, invitation: true },
       order: { startedAt: 'DESC' },
     });
     if (sessions.length === 0) return [];
@@ -789,6 +816,7 @@ export class ReportsService {
           fullName: session.candidate.fullName,
           email: session.candidate.email,
         },
+        source: session.invitation?.source ?? InvitationSource.RECRUITER,
         status: session.status,
         startedAt: session.startedAt.toISOString(),
         submittedAt: session.submittedAt?.toISOString() ?? null,
@@ -842,7 +870,7 @@ export class ReportsService {
     // link a session has — a candidate belongs to no organisation.
     const sessions = await this.sessions.find({
       where: { assessment: { organisationId } },
-      relations: { candidate: true, assessment: true },
+      relations: { candidate: true, assessment: true, invitation: true },
       order: { startedAt: 'DESC' },
       take,
     });
@@ -878,6 +906,7 @@ export class ReportsService {
           fullName: session.candidate.fullName,
           email: session.candidate.email,
         },
+        source: session.invitation?.source ?? InvitationSource.RECRUITER,
         status: session.status,
         startedAt: session.startedAt.toISOString(),
         submittedAt: session.submittedAt?.toISOString() ?? null,
@@ -1407,7 +1436,17 @@ export class ReportsService {
       // here are signed by the business the candidate applied to, not by the
       // group that owns the workspace. Null is the ordinary case and falls back
       // to the organisation — see `senderFor`.
-      relations: { candidate: true, assessment: { company: true } },
+      //
+      // The invitation comes along for its `source`: whether a recruiter
+      // invited this address or the candidate typed it into a public link
+      // themselves. That is the difference between a report about a named
+      // person and a report about whoever typed the address, and it has to be
+      // on the page.
+      relations: {
+        candidate: true,
+        assessment: { company: true },
+        invitation: true,
+      },
     });
     // Same 404 whether the session does not exist or belongs to another
     // company, so the API cannot be used to probe for other customers' sessions.

@@ -8,6 +8,7 @@ import { OrganisationsModule } from '../organisations/organisations.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { SessionCookieService } from './session-cookie.service';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -27,7 +28,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule.register({}),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy],
-  exports: [AuthService],
+  providers: [
+    SessionCookieService,
+    AuthService,
+    JwtStrategy,
+    JwtRefreshStrategy,
+  ],
+  exports: [SessionCookieService, AuthService],
 })
 export class AuthModule {}

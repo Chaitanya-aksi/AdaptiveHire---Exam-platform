@@ -9,6 +9,7 @@ import type {
 } from 'pdfmake/interfaces';
 import {
   HiringRecommendation,
+  InvitationSource,
   ProctoringEventType,
   ScoringType,
 } from '../common/enums';
@@ -58,6 +59,24 @@ const RECOMMENDATION_LABEL: Record<HiringRecommendation, string> = {
   [HiringRecommendation.RECOMMENDED]: 'Recommended',
   [HiringRecommendation.BORDERLINE]: 'Borderline',
   [HiringRecommendation.NOT_RECOMMENDED]: 'Not recommended',
+};
+
+/**
+ * How the candidate reached the assessment.
+ *
+ * **Both cases are stated, never only the self-registered one.** Printed
+ * selectively it would read as an accusation against that candidate, which is a
+ * different feature and a different decision; printed always it is simply a
+ * fact about how the attempt arose. Exactly the rule `expectedByChance`
+ * follows, and for the same reason.
+ *
+ * The wording is duplicated in the frontend's report page — the two builds
+ * share no package, like `module-defaults.ts` — so a change here needs the same
+ * change there.
+ */
+const SOURCE_LABEL: Record<InvitationSource, string> = {
+  [InvitationSource.RECRUITER]: 'Invited by a recruiter',
+  [InvitationSource.SELF]: 'Self-registered through a public link',
 };
 
 const RECOMMENDATION_COLOUR: Record<HiringRecommendation, string> = {
@@ -251,6 +270,7 @@ function figure(text: string, style?: string): TableCell {
 function headerBlock(view: ReportSummaryView): Content[] {
   const facts = [
     `${view.assessment.title} · ${view.candidate.email}`,
+    SOURCE_LABEL[view.source],
     [
       `Started ${formatDateTime(view.timing.startedAt)}`,
       `Submitted ${formatDateTime(view.timing.submittedAt)}`,

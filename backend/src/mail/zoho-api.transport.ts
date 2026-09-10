@@ -120,11 +120,32 @@ export class ZohoApiTransport {
      * confusing 401 on the next send instead of a clear failure now.
      */
     if (!response.ok || payload.error || !payload.access_token) {
+      /*
+       * `IP_NOT_ALLOWED` is not a credential problem and must not be reported
+       * as one.
+       *
+       * It means Zoho's account-level IP Restriction is on and the caller's
+       * address is not on the allowlist. The credentials are perfectly valid —
+       * the identical token refreshes fine from an allowed machine, which is
+       * exactly how this hid: `check:mail` passed from a laptop while every
+       * send from the server failed. The first version of this message told the
+       * reader to check four environment variables that were all correct, which
+       * cost an hour of looking in the wrong place.
+       */
+      const detail =
+        payload.error === 'IP_NOT_ALLOWED'
+          ? 'IP_NOT_ALLOWED — the credentials are fine; Zoho is refusing this ' +
+            "machine's IP address. Zoho account IP Restriction is enabled " +
+            '(accounts.zoho.<region> > Security > Allowed IP Address). Add this ' +
+            "host's outbound addresses there, or turn the restriction off. " +
+            'Note this passes from any allowed machine, so a local test proves ' +
+            'nothing about the server.'
+          : `${payload.error ?? 'no access_token in response'}. ` +
+            'Check MAIL_ZOHO_CLIENT_ID, MAIL_ZOHO_CLIENT_SECRET, ' +
+            'MAIL_ZOHO_REFRESH_TOKEN and MAIL_ZOHO_REGION.';
+
       throw new Error(
-        `Zoho token refresh failed (HTTP ${response.status}): ` +
-          `${payload.error ?? 'no access_token in response'}. ` +
-          'Check MAIL_ZOHO_CLIENT_ID, MAIL_ZOHO_CLIENT_SECRET, ' +
-          'MAIL_ZOHO_REFRESH_TOKEN and MAIL_ZOHO_REGION.',
+        `Zoho token refresh failed (HTTP ${response.status}): ${detail}`,
       );
     }
 

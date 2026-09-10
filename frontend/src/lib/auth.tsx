@@ -23,6 +23,19 @@ interface AuthState {
   ) => Promise<AuthUser>;
   /** Self-service sign-up, for a candidate or a company. */
   register: (payload: RegisterPayload) => Promise<AuthUser>;
+  /**
+   * Takes up a session another endpoint already issued.
+   *
+   * For the public assessment link, which signs a candidate in through
+   * `/public/assessments/:token/enter` rather than `/auth/login`. That endpoint
+   * sets the same httpOnly refresh cookie and returns the same access token and
+   * user, so the only thing left is to put them where the rest of the app looks
+   * — which is what this does, using the same two writes `login` performs.
+   *
+   * Not a second sign-in path: it mints nothing and verifies nothing. Never
+   * call it with anything but a response from an endpoint that authenticated.
+   */
+  adoptSession: (accessToken: string, user: AuthUser) => void;
   logout: () => Promise<void>;
   /** Merge fresh fields (e.g. a renamed profile) into the cached user. */
   updateUser: (patch: Partial<AuthUser>) => void;
@@ -83,6 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return created;
   }, []);
 
+  const adoptSession = useCallback((token: string, signedIn: AuthUser) => {
+    setAccessToken(token);
+    setUser(signedIn);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -117,8 +135,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loading, user]);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, updateUser }),
-    [user, loading, login, register, logout, updateUser],
+    () => ({
+      user,
+      loading,
+      login,
+      register,
+      adoptSession,
+      logout,
+      updateUser,
+    }),
+    [user, loading, login, register, adoptSession, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -23,6 +23,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
 import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
 import { ProctoringModule } from './proctoring/proctoring.module';
+import { PublicEntryModule } from './public-entry/public-entry.module';
 import { QuestionBankModule } from './question-bank/question-bank.module';
 import { QueueErrorsModule } from './queues/queue-errors.module';
 import { redisConnectionOptions } from './redis/redis-connection';
@@ -118,6 +119,10 @@ import { UsersModule } from './users/users.module';
     QuestionBankModule,
     AssessmentsModule,
     InvitationsModule,
+    // After the three it composes. A leaf module: the unauthenticated entry
+    // point for public assessment links, which borrows auth wholesale rather
+    // than growing a second way to mint a session.
+    PublicEntryModule,
     SessionsModule,
     ProctoringModule,
     ReportsModule,

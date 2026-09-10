@@ -24,6 +24,11 @@ import type {
   Paginated,
   ProctoringSignalSummary,
   PracticeQuestion,
+  PublicAssessmentIntro,
+  PublicEntryCheck,
+  PublicLink,
+  PublicLinkPatch,
+  MintedPublicLink,
   Question,
   QuestionDraft,
   LoginPortal,
@@ -345,6 +350,93 @@ export const assessmentsApi = {
   remove: (id: string) =>
     api
       .delete<AssessmentDeletionResult>(`/assessments/${id}`)
+      .then((r) => r.data),
+
+  /* ── The public link ──────────────────────────────────────────────────── */
+
+  /** The link's current settings and state, or `configured: false`. */
+  publicLink: (id: string) =>
+    api.get<PublicLink>(`/assessments/${id}/public-link`).then((r) => r.data),
+
+  /**
+   * Mints a link, replacing any existing one.
+   *
+   * **The URL is in the response once and is never retrievable again** — only
+   * its hash is stored. Whatever calls this has to put it in front of the
+   * recruiter there and then; there is no "show me it again".
+   *
+   * This is also how a link is revoked in a hurry: minting kills the previous
+   * one immediately.
+   */
+  rotatePublicLink: (id: string, settings: PublicLinkPatch = {}) =>
+    api
+      .post<MintedPublicLink>(`/assessments/${id}/public-link`, settings)
+      .then((r) => r.data),
+
+  /**
+   * Changes the settings without touching the token, so a round can be closed
+   * and reopened without reissuing a link a cohort already holds.
+   *
+   * Omit a field to leave it alone; send `null` to clear it.
+   */
+  updatePublicLink: (id: string, changes: PublicLinkPatch) =>
+    api
+      .patch<PublicLink>(`/assessments/${id}/public-link`, changes)
+      .then((r) => r.data),
+
+  /** Destroys the link for good. Attempts already made through it survive. */
+  revokePublicLink: (id: string) =>
+    api
+      .delete<PublicLink>(`/assessments/${id}/public-link`)
+      .then((r) => r.data),
+};
+
+/**
+ * The candidate's way in through a public link. Unauthenticated by definition —
+ * nobody holding one of these URLs has an account yet, or is signed in if they
+ * do.
+ */
+export const publicEntryApi = {
+  /** What this assessment is, who it is for, and whether it is open. */
+  intro: (token: string) =>
+    api
+      .get<PublicAssessmentIntro>(
+        `/public/assessments/${encodeURIComponent(token)}`,
+      )
+      .then((r) => r.data),
+
+  /**
+   * Step one: the email alone.
+   *
+   * Creates nothing. It answers only whether the next screen asks this person
+   * to choose a password or to enter the one they already have — and refuses a
+   * closed link or a disallowed domain here, before anybody has typed a
+   * password they are about to be told they cannot use.
+   */
+  check: (token: string, email: string) =>
+    api
+      .post<PublicEntryCheck>(
+        `/public/assessments/${encodeURIComponent(token)}/check`,
+        { email },
+      )
+      .then((r) => r.data),
+
+  /**
+   * Step two: sign in or sign up, and get back the invitation to go to.
+   *
+   * `fullName` is only read when the account is being created; the server
+   * decides which case this is from its own records rather than from what step
+   * one told the client.
+   */
+  enter: (
+    token: string,
+    payload: { email: string; password: string; fullName?: string },
+  ) =>
+    api
+      .post<AuthResponse & { invitationId: string }>(
+        `/public/assessments/${encodeURIComponent(token)}/enter`,
+        payload,
+      )
       .then((r) => r.data),
 };
 

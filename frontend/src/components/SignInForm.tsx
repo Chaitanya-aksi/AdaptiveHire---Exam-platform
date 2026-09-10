@@ -38,7 +38,7 @@ const SECONDARY: Record<
 > = {
   candidate: {
     to: '/recruiter/login',
-    label: 'Recruiter or admin sign in',
+    label: 'Sign in as a Recruiter?',
     lead: 'Hiring with AdaptiveHire?',
   },
   recruiter: {

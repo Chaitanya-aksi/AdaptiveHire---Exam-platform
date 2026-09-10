@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { IconArrow } from '../../components/Icons';
 import { Modal } from '../../components/Modal';
+import { SourceBadge } from '../../components/SourceBadge';
 import { useToast } from '../../components/Toast';
 import { assessmentsApi, reportsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
@@ -386,6 +387,14 @@ export function AssessmentReports() {
                       <td>
                         <strong>{row.candidate.fullName}</strong>
                         <div className="muted small">{row.candidate.email}</div>
+
+                        {/* Invited by name, or self-registered through the
+                            public link. Shown on every row, both ways — see
+                            `SourceBadge` for why marking only one would be
+                            the wrong shape. */}
+                        <div className="cohort-source">
+                          <SourceBadge source={row.source} />
+                        </div>
 
                         {(row.review?.tags.length ?? 0) > 0 && (
                           <div className="cohort-tags">

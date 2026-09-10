@@ -20,6 +20,7 @@ import { ResetPassword } from './routes/ResetPassword';
 import { SetPassword } from './routes/SetPassword';
 import { RecruiterLogin } from './routes/RecruiterLogin';
 import { RecruiterRegister } from './routes/RecruiterRegister';
+import { PublicEntry } from './routes/PublicEntry';
 import { Register } from './routes/Register';
 import { Assessments } from './routes/candidate/Assessments';
 import { AttemptDetail } from './routes/candidate/AttemptDetail';
@@ -298,6 +299,21 @@ export default function App() {
                       </GuestOnly>
                     }
                   />
+
+                  {/*
+                    The public assessment link.
+
+                    Not `GuestOnly`: a candidate signed in on this browser may
+                    legitimately be handed a link to a *different* company's
+                    round, and bouncing them to their dashboard would strand
+                    them with no way to reach it. The page asks for an address
+                    regardless of who is signed in, and entering signs in as
+                    whoever that address belongs to.
+
+                    Short path on purpose — it gets pasted into WhatsApp
+                    messages and job posts.
+                  */}
+                  <Route path="/a/:token" element={<PublicEntry />} />
 
                   {/*
                     Deliberately NOT `GuestOnly`, unlike the sign-in pages.

@@ -8438,3 +8438,235 @@ body.assess-running .assess-shell {
     display: none;
   }
 }
+
+/* -- Public assessment link (/a/:token) ----------------------------------------
+ *
+ * The one page an anonymous visitor can reach an assessment from. Deliberately
+ * plain next to the sign-in pages' marketing panel: this page belongs to the
+ * company doing the hiring, not to AdaptiveHire, and a candidate arriving from
+ * a job post has no reason to be sold the platform. `--pe-accent` is set inline
+ * from the company's own colour where it has one, so the heading and the button
+ * pick it up together.
+ */
+.pe-page {
+  --pe-accent: var(--accent);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 40px 16px;
+  background: var(--bg);
+}
+.pe-frame {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pe-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pe-logo {
+  height: 30px;
+  width: auto;
+  /* Logos arrive at whatever aspect ratio the company had to hand; bounding the
+   * height and letting the width follow is what keeps a wide wordmark and a
+   * square mark on the same line without either being distorted. */
+  max-width: 160px;
+  object-fit: contain;
+}
+.pe-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--pe-accent);
+  color: #fff;
+  font-weight: 650;
+}
+.pe-brand-name {
+  font-weight: 600;
+}
+
+.pe-card,
+.pe-closed {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 26px 24px;
+}
+
+.pe-head h1,
+.pe-closed h1 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  line-height: 1.25;
+}
+.pe-org {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pe-accent);
+}
+.pe-desc {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+}
+.pe-muted {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pe-sections {
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.pe-sections ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pe-sections li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.pe-total {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* `.auth-form` itself is scoped to the sign-in panel, so the layout it provides
+ * has to be restated rather than inherited. */
+.pe-card .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 18px;
+}
+.pe-card button.primary {
+  background: var(--pe-accent);
+  border-color: var(--pe-accent);
+  color: #fff;
+}
+
+/* The address from step one, with the way back to it. Shown throughout step two
+ * so nobody types a password for an address they did not mean to use. */
+.pe-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 14px;
+  word-break: break-all;
+}
+.pe-forgot {
+  margin: 2px 0 0;
+  text-align: center;
+}
+
+.pe-footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* A button that reads as a link. Needed because `button` is styled as a control
+ * globally, and the way back to the email step is a real button — it changes
+ * state rather than navigating. */
+.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-weight: 550;
+  text-decoration: underline;
+  flex: none;
+}
+.linkish:hover:not(:disabled) {
+  background: none;
+}
+
+/* -- Shareable assessment link (recruiter side) --------------------------------- */
+
+/* The minted URL. Monospaced and allowed to wrap, because the token is 43
+ * characters of base64 and a recruiter has to be able to see all of it — a
+ * truncated credential looks copyable and is not. */
+.pl-url {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+.pl-url code {
+  font-size: 13px;
+  word-break: break-all;
+}
+.pl-url .field-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.pl-facts {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 20px;
+}
+.pl-facts div {
+  min-width: 0;
+}
+.pl-facts dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pl-facts dd {
+  margin: 3px 0 0;
+  font-size: 14px;
+}
+
+.pl-settings {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* Provenance — invited by name, or self-registered through a public link.
+ * Both are labelled: marking only one would read as an accusation rather than
+ * as the scale the result sits on. See `SourceBadge`. */
+.cohort-source {
+  margin-top: 5px;
+}
+.report-source {
+  margin: 6px 0 0;
+}

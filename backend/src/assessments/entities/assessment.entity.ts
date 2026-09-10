@@ -72,6 +72,70 @@ export class Assessment {
   @JoinColumn({ name: 'companyId' })
   company!: Company | null;
 
+  /*
+   * ── Public link ────────────────────────────────────────────────────────
+   *
+   * A shareable link that lets a candidate reach this assessment without an
+   * emailed invitation. Every field below is null or false until somebody
+   * turns it on, so an assessment that never uses one behaves exactly as it
+   * did before this existed.
+   *
+   * See `docs/public-assessment-links.md` for what this deliberately gives up:
+   * with an open link the email is self-asserted, so a self-registered attempt
+   * is weaker evidence about a person than an invited one, and both the results
+   * list and the report say so.
+   */
+
+  /**
+   * SHA-256 of the token, never the token itself.
+   *
+   * The token is a credential — whoever holds it can start an attempt and see
+   * questions from a curated bank. Storing it in the clear would put a live
+   * credential in every database backup for no benefit: it is generated once,
+   * shown to the recruiter once, and only ever compared against afterwards.
+   * Same reasoning as `password_reset_tokens`.
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  publicLinkTokenHash!: string | null;
+
+  /**
+   * An off switch that does not destroy the token.
+   *
+   * Separate from the hash so a recruiter can close a round and reopen it
+   * without reissuing a link they have already shared with a cohort.
+   */
+  @Column({ type: 'boolean', default: false })
+  publicLinkEnabled!: boolean;
+
+  /**
+   * When the link stops working, independent of the assessment's own window.
+   *
+   * Null means it is bound by `closesAt` instead, or is open-ended when there
+   * is no window either — the same "null means inherit, not unbounded" rule the
+   * per-invitation overrides follow.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  publicLinkExpiresAt!: Date | null;
+
+  /**
+   * How many attempts the link may create in total, or null for no cap.
+   *
+   * The blast radius control for a leaked link: without it, a URL posted
+   * somewhere public can be used to mine the question bank indefinitely.
+   */
+  @Column({ type: 'integer', nullable: true })
+  publicLinkMaxAttempts!: number | null;
+
+  /**
+   * Restricts entry to one email domain, e.g. a single college for a campus
+   * drive. Null accepts any address.
+   *
+   * The single most effective narrowing available once there is no invited
+   * list, and the reason it is worth having in the first version.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  publicLinkEmailDomain!: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   createdById!: string | null;
 

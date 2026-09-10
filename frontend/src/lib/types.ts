@@ -387,6 +387,104 @@ export interface BrandingPatch {
   supportEmail?: string | null;
 }
 
+/* ── Public assessment links ─────────────────────────────────────────────── */
+
+/**
+ * How a candidate reached an assessment.
+ *
+ * `recruiter` — somebody invited that address by name, so the report is
+ * evidence about a named person. `self` — they typed it into a public link
+ * themselves, so it is evidence about whoever typed it. The results list and
+ * the report both say which, because that is exactly the difference a recruiter
+ * comparing two candidates needs to know.
+ */
+export type InvitationSource = 'recruiter' | 'self';
+
+/**
+ * The wording for each, in one place.
+ *
+ * Duplicated in the backend's `report-pdf.ts` — the two builds share no
+ * package, like `module-defaults.ts` — so a change here needs the same change
+ * there, or a report and its PDF will describe the same attempt differently.
+ *
+ * **Both cases are labelled, never only the self-registered one.** Shown
+ * selectively it reads as an accusation against that candidate; shown always it
+ * is a fact about how the attempt arose. The same rule `expectedByChance`
+ * follows.
+ */
+export const SOURCE_LABEL: Record<InvitationSource, string> = {
+  recruiter: 'Invited by a recruiter',
+  self: 'Self-registered through a public link',
+};
+
+/** Why a public link is not letting anybody in, or `open` if it is. */
+export type PublicLinkState =
+  | 'open'
+  | 'not_configured'
+  | 'disabled'
+  | 'expired'
+  | 'not_yet'
+  | 'full';
+
+/** An assessment's public link, as its recruiter manages it. */
+export interface PublicLink {
+  configured: boolean;
+  enabled: boolean;
+  expiresAt: string | null;
+  maxAttempts: number | null;
+  emailDomain: string | null;
+  /** Self-registered attempts so far. Recruiter invites do not count. */
+  attemptsUsed: number;
+  state: PublicLinkState;
+}
+
+/**
+ * A freshly minted link.
+ *
+ * `url` comes back **once and never again** — only its hash is stored — so the
+ * screen that receives this has to show it and mean it. Losing it means
+ * minting another, which invalidates the one already shared.
+ */
+export interface MintedPublicLink {
+  url: string;
+  link: PublicLink;
+}
+
+/** A change to the settings. Omitted leaves a field alone; `null` clears it. */
+export interface PublicLinkPatch {
+  enabled?: boolean;
+  expiresAt?: string | null;
+  maxAttempts?: number | null;
+  emailDomain?: string | null;
+}
+
+/** What a candidate sees on opening a public link, before typing anything. */
+export interface PublicAssessmentIntro {
+  assessment: {
+    title: string;
+    description: string | null;
+    sections: { name: string; timeLimitSeconds: number }[];
+    /** Sum of the per-module limits — an upper bound, not a promise. */
+    totalTimeSeconds: number;
+  };
+  organisation: Branding;
+  state: PublicLinkState;
+  /** What to tell the candidate, or null when the link is open. */
+  message: string | null;
+  /** A domain restriction, so the form can say so before they type. */
+  emailDomain: string | null;
+}
+
+/**
+ * What step one decided: whether this address is choosing a password or
+ * entering the one it already has.
+ */
+export interface PublicEntryCheck {
+  step: 'create' | 'password';
+  /** The address, normalised. Send this back in step two, not what was typed. */
+  email: string;
+}
+
 /** An invitation as the candidate sees it, in their own list. */
 export interface CandidateInvitation {
   id: string;
@@ -757,6 +855,14 @@ export interface ReportSummary {
   timing: AttemptTiming;
   assessment: { id: string; title: string };
   candidate: { id: string; fullName: string; email: string };
+  /**
+   * Invited by a recruiter, or self-registered through a public link.
+   *
+   * On the report because the two are not equally strong evidence, and the
+   * page must say so rather than let a self-asserted address read as a
+   * verified one. Render it with `SOURCE_LABEL`, both cases.
+   */
+  source: InvitationSource;
   report: {
     summary: string;
     strengths: string[];
@@ -933,6 +1039,8 @@ export interface ReviewPatch {
 export interface AttemptListItem {
   sessionId: string;
   candidate: { id: string; fullName: string; email: string };
+  /** Invited, or self-registered through a public link. */
+  source: InvitationSource;
   status: SessionStatus;
   startedAt: string;
   submittedAt: string | null;
@@ -971,6 +1079,8 @@ export interface OrgAttemptListItem {
   sessionId: string;
   assessment: { id: string; title: string };
   candidate: { id: string; fullName: string; email: string };
+  /** Invited, or self-registered through a public link. */
+  source: InvitationSource;
   status: SessionStatus;
   startedAt: string;
   submittedAt: string | null;

@@ -11,15 +11,15 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
-import type { CookieOptions, Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   CurrentUser,
   type AuthenticatedUser,
 } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UsersService } from '../users/users.service';
-import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH } from './auth.constants';
 import { AuthService, type AuthResult } from './auth.service';
+import { SessionCookieService } from './session-cookie.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -33,6 +33,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
+    private readonly sessionCookie: SessionCookieService,
   ) {}
 
   @Public()
@@ -108,7 +109,10 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.auth.logout(userId);
-    res.clearCookie(REFRESH_COOKIE_NAME, this.refreshCookieOptions());
+    // Through the service, which knows the attributes it was written with —
+    // `clearCookie` given different ones leaves the cookie in place, and a
+    // sign-out that silently does not sign out is the worst version of this.
+    this.sessionCookie.clear(res);
   }
 
   @Get('me')
@@ -123,36 +127,14 @@ export class AuthController {
   }
 
   /**
-   * The attributes the refresh cookie is written with.
-   *
-   * `clearCookie` has to be given the same `secure`, `sameSite` and `path`, or
-   * the browser treats it as a different cookie and leaves the original in
-   * place — so both sites read from here rather than repeating the literals.
-   *
-   * `sameSite` is configurable because a split deployment puts the SPA and the
-   * API on different sites, where a `lax` cookie is silently withheld and every
-   * session dies on the next page load. `none` without `secure` is refused at
-   * boot in `env.validation.ts`.
-   */
-  private refreshCookieOptions(): CookieOptions {
-    return {
-      httpOnly: true,
-      secure: this.config.get<boolean>('cookieSecure') ?? false,
-      sameSite:
-        this.config.get<'lax' | 'strict' | 'none'>('cookieSameSite') ?? 'lax',
-      path: REFRESH_COOKIE_PATH,
-    };
-  }
-
-  /**
    * The refresh token goes out as an httpOnly cookie only — never in the JSON
    * body — so page scripts can't read it.
+   *
+   * A thin wrapper over `SessionCookieService`, which is where the cookie
+   * attributes live now that a second controller hands out sessions: the public
+   * assessment link signs a candidate in without their ever visiting this one.
    */
   private respondWithTokens(result: AuthResult, res: Response) {
-    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, {
-      ...this.refreshCookieOptions(),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-    return { accessToken: result.accessToken, user: result.user };
+    return this.sessionCookie.respond(result, res);
   }
 }

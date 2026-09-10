@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Modal } from '../../components/Modal';
+import { PublicLinkPanel } from '../../components/PublicLinkPanel';
 import { assessmentsApi, invitationsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
 import {
@@ -214,6 +215,15 @@ export function InviteCandidates() {
       {added && <div className="alert success">{added}</div>}
 
       <div className="stack">
+        {/*
+         * First, and not by accident. Invitation email has never been
+         * deliverable from this deployment — Render blocks outbound SMTP and
+         * Zoho refuses its IP ranges for the API — so the shareable link is
+         * how candidates actually get in, and the two paths below are the ones
+         * that depend on mail arriving.
+         */}
+        <PublicLinkPanel assessmentId={id} />
+
         {/*
          * Listed before the dropzone: adding one or two people is the common
          * case, and it should not look like the fallback for the upload.

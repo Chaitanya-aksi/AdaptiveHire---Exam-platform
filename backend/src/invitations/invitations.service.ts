@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { IsNull, Repository } from 'typeorm';
-import { InvitationStatus, UserRole } from '../common/enums';
+import { InvitationSource, InvitationStatus, UserRole } from '../common/enums';
 import {
   INVITE_EMAILS_QUEUE,
   type InviteEmailJob,
@@ -831,6 +831,84 @@ export class InvitationsService {
       // organisation, and the practice set is the inviting company's.
       invite.assessment.organisationId,
     );
+  }
+
+  /**
+   * The invitation a candidate creates for themselves by opening a public link.
+   *
+   * Deliberately *not* `inviteOne`. That path exists to contact somebody a
+   * recruiter named: it provisions an account, mints a temporary password and
+   * queues an email. All three are wrong here — the candidate is standing at
+   * the form choosing their own password, and the whole reason public links
+   * exist is that the email never arrives.
+   *
+   * What it shares with `inviteOne` is the part that matters: the row is keyed
+   * on the email, `candidateId` is set when an account already exists and
+   * backfilled by `linkUserToInvitations` when one is about to be created, and
+   * the unique constraint on (assessmentId, email) is what keeps one address to
+   * one attempt.
+   *
+   * Returns the existing row untouched if this address is already invited —
+   * including by a recruiter. Someone who was invited by name and then arrived
+   * through the link instead is still that invited candidate, and overwriting
+   * `source` would quietly downgrade the evidence attached to their report.
+   *
+   * The caller has already verified the address belongs to whoever is asking:
+   * either they just proved the password, or the account is being created now.
+   */
+  async createSelfRegistered(
+    assessmentId: string,
+    email: string,
+    candidateId: string | null,
+    registeredIp: string | null,
+    registeredUserAgent: string | null,
+  ): Promise<{ created: boolean; invitation: Invitation }> {
+    const normalised = email.trim().toLowerCase();
+
+    const already = await this.invitations.findOne({
+      where: { assessmentId, email: normalised },
+    });
+    if (already) return { created: false, invitation: already };
+
+    const invitation = await this.invitations.save(
+      this.invitations.create({
+        assessmentId,
+        email: normalised,
+        candidateId,
+        // Nobody invited them, so there is no inviter to record. The column is
+        // nullable for exactly this, and `ON DELETE SET NULL` on the recruiter
+        // side means null is already a state the rest of the code handles.
+        invitedById: null,
+        status: InvitationStatus.PENDING,
+        source: InvitationSource.SELF,
+        registeredIp,
+        registeredUserAgent: registeredUserAgent?.slice(0, 512) ?? null,
+      }),
+    );
+
+    this.logger.log(
+      `Self-registered invitation for assessment ${assessmentId} via public link`,
+    );
+    return { created: true, invitation };
+  }
+
+  /**
+   * Undoes a self-registration whose account creation then failed.
+   *
+   * The invitation has to be written first — `AuthService.register` refuses a
+   * candidate with no invitation, and that gate is worth keeping — so a failure
+   * afterwards would otherwise strand a row granting access to an address with
+   * no account behind it, and spend a slot against the link's attempt cap.
+   *
+   * Narrow on purpose: it will only remove a row this flow just created, and
+   * only while nothing hangs off it.
+   */
+  async discardSelfRegistered(invitationId: string): Promise<void> {
+    await this.invitations.delete({
+      id: invitationId,
+      source: InvitationSource.SELF,
+      status: InvitationStatus.PENDING,
+    });
   }
 
   /** Register gate: only invited emails may create an account. */

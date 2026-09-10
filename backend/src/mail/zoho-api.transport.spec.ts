@@ -229,3 +229,60 @@ describe('addressList', () => {
     expect(addressList({ name: 'nobody' })).toEqual([]);
   });
 });
+
+/**
+ * The failure that actually happened in production, and the one this message
+ * has to get right.
+ *
+ * Zoho answers HTTP 200 with `IP_NOT_ALLOWED` when its account-level IP
+ * Restriction is on and the caller is not on the allowlist. The credentials are
+ * valid — the same refresh token works from an allowed machine — so reporting
+ * it as "check your client id and secret" sends the reader to inspect four
+ * correct values while the real cause is a setting in a different console.
+ */
+describe('ZohoApiTransport IP_NOT_ALLOWED', () => {
+  const message = () =>
+    ({
+      data: {
+        from: 'AdaptiveHire <ds09.user@aksiaerospace.com>',
+        to: 'candidate@example.com',
+        subject: 's',
+        text: 't',
+      },
+    }) as unknown as MailMessage;
+
+  const send = (t: ZohoApiTransport) =>
+    new Promise((resolve, reject) => {
+      t.send(message(), (e, i) => (e ? reject(e) : resolve(i)));
+    });
+
+  beforeEach(() => {
+    // A 200 carrying an error body, which is the shape Zoho actually returns.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ error: 'IP_NOT_ALLOWED' }),
+    });
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('names the real cause instead of blaming the credentials', async () => {
+    const transport = new ZohoApiTransport({
+      clientId: 'cid',
+      clientSecret: 'secret',
+      refreshToken: 'refresh',
+      accountId: '123',
+      region: 'in',
+    });
+
+    const error = await send(transport).catch((e: Error) => e);
+    const text = (error as Error).message;
+
+    expect(text).toContain('IP_NOT_ALLOWED');
+    expect(text).toMatch(/credentials are fine/i);
+    expect(text).toMatch(/Allowed IP Address/i);
+    // The point: it must NOT send the reader back to the env vars.
+    expect(text).not.toContain('MAIL_ZOHO_CLIENT_ID');
+  });
+});

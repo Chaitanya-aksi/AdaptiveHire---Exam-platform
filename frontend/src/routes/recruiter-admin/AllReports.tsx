@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconArrow } from '../../components/Icons';
 import { SubNav } from '../../components/SubNav';
+import { SourceBadge } from '../../components/SourceBadge';
 import { reportsApi } from '../../lib/endpoints';
 import { describeError } from '../../lib/errors';
 import { formatWhen } from '../../lib/schedule';
@@ -199,6 +200,9 @@ export function AllReports() {
                       <td>
                         <strong>{row.candidate.fullName}</strong>
                         <div className="muted small">{row.candidate.email}</div>
+                        <div className="cohort-source">
+                          <SourceBadge source={row.source} />
+                        </div>
                       </td>
 
                       <td>

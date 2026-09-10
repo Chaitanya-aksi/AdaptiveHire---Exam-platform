@@ -364,7 +364,7 @@ export function NewAssessment() {
            */}
           {companies.length > 0 && (
             <div className="field">
-              <label htmlFor="company">Which company is this for?</label>
+              <label htmlFor="company">Select your company</label>
               <div className="na-company">
                 <select
                   id="company"
