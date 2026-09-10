@@ -47,10 +47,7 @@ export function BulkImport() {
       <div className="page-head">
         <div>
           <h1>Question bank</h1>
-          <p>
-            Upload a CSV or Excel sheet. Rows import independently — a bad row
-            is reported and skipped, never failing the whole file.
-          </p>
+          <p>A bad row is reported and skipped, never the whole file.</p>
           <SubNav items={QUESTION_TABS} />
         </div>
       </div>

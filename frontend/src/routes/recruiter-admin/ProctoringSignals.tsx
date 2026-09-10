@@ -224,11 +224,7 @@ export function ProctoringSignals() {
       <div className="page-head">
         <div>
           <h1>Assessments</h1>
-          <p>
-            Everything the platform watches for while a candidate is sitting an
-            assessment, what each signal can and cannot tell you, and what your
-            own attempts have recorded.
-          </p>
+          <p>What each signal can and cannot tell you.</p>
           <SubNav items={ASSESSMENT_TABS} />
         </div>
       </div>

@@ -114,7 +114,6 @@ export function Assessments() {
       <div className="page-head">
         <div>
           <h1>Assessments</h1>
-          <p>Every round this workspace has built.</p>
           <SubNav items={ASSESSMENT_TABS} />
         </div>
         <Link className="button primary" to="/admin/assessments/new">

@@ -26,7 +26,15 @@ interface Destination {
   to: string;
   Icon: ComponentType;
   title: string;
-  body: string;
+  /**
+   * Optional, and omitted wherever the title already says it.
+   *
+   * A line under "Host a test" explaining that it hosts a test is furniture:
+   * it costs a reader attention and returns nothing. Keep one only where it
+   * carries something the title cannot — what is actually inside, or a
+   * behaviour that would surprise.
+   */
+  body?: string;
 }
 
 /**
@@ -48,19 +56,16 @@ const PRIMARY: Destination[] = [
     to: '/admin/assessments/new',
     Icon: IconAssessment,
     title: 'Host a test',
-    body: 'Choose subjects, set how many questions and how long, and pick which questions the engine may draw from.',
   },
   {
     to: '/admin/assessments',
     Icon: IconPeople,
     title: 'Hire candidates',
-    body: 'Invite people by email or upload a spreadsheet, then track who has started, finished or not replied.',
   },
   {
     to: '/admin/questions/new',
     Icon: IconBank,
     title: 'Build your question bank',
-    body: 'Use the questions that ship with the platform, or write your own — private to your organisation.',
   },
 ];
 
@@ -76,13 +81,13 @@ const EXPLORE: Destination[] = [
     to: '/admin/import',
     Icon: IconImport,
     title: 'Bulk import questions',
-    body: 'Upload a CSV or Excel sheet. Bad rows are reported, not fatal.',
+    body: 'A bad row is reported and skipped, never the whole file.',
   },
   {
     to: '/admin/reports',
     Icon: IconReport,
     title: 'Candidate reports',
-    body: 'Every attempt across your workspace, newest first — score, recommendation and every answer.',
+    body: 'Every attempt across your workspace, newest first.',
   },
   {
     to: bankLink({ status: 'draft' }),
@@ -93,14 +98,14 @@ const EXPLORE: Destination[] = [
   {
     to: '/admin/people',
     Icon: IconPeople,
-    title: 'People in your organization.',
-    body: 'View people who are present in your organization.',
+    title: 'People',
+    body: 'Recruiters here, and the candidates you have invited.',
   },
   {
     to: '/admin/proctoring',
     Icon: IconShield,
     title: 'Proctoring signals',
-    body: 'What the platform watches for during an attempt, what each signal can and cannot tell you, and what yours have recorded.',
+    body: 'What each signal can and cannot tell you.',
   },
 ];
 
@@ -119,7 +124,7 @@ function TileLink({
         <Icon />
       </span>
       <strong>{title}</strong>
-      <span className="tile-body muted">{body}</span>
+      {body && <span className="tile-body muted">{body}</span>}
       <span className="tile-go" aria-hidden="true">
         <IconArrow />
       </span>
@@ -188,11 +193,6 @@ export function Dashboard() {
         <div className="hero-copy">
           <span className="eyebrow">Your workspace</span>
           <h1>Welcome back, {firstName}.</h1>
-          <p>
-            AdaptiveHire runs the assessment side of hiring — a test whose
-            difficulty adjusts question by question, and a report that shows you
-            exactly how the score was reached.
-          </p>
           <div className="hero-actions">
             <Link to="/admin/assessments/new" className="button primary">
               Create an assessment
@@ -230,7 +230,6 @@ export function Dashboard() {
       <section>
         <div className="section-head">
           <h2>Start here</h2>
-          <p>The three things most sessions begin with.</p>
         </div>
         <div className="tile-grid tile-grid-lg">
           {PRIMARY.map((destination) => (
@@ -244,7 +243,6 @@ export function Dashboard() {
       <section>
         <div className="section-head">
           <h2>Explore</h2>
-          <p>Look out for other features as well.</p>
         </div>
         <div className="tile-grid">
           {EXPLORE.map((destination) => (

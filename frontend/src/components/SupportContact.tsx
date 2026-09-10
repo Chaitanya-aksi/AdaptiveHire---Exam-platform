@@ -81,9 +81,6 @@ export function SupportContact({
   return (
     <section className="card card-pad sc-card">
       <h2 className="sc-title">Something went wrong?</h2>
-      <p className="sc-body">
-        In case of any issues, please contact at {organisation.name}
-      </p>
       <a className="sc-link" href={href}>
         Email {organisation.supportEmail}
       </a>

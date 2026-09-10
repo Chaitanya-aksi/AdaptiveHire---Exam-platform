@@ -80,7 +80,7 @@ const STEPS: StepSpec[] = [
     guidance: [
       'Line your face up inside the oval and look straight at the camera.',
       'Light on your face rather than behind you — a bright window behind you leaves you in shadow.',
-      'The camera stays on for the whole assessment. No video is recorded or sent anywhere.',
+      'Your camera stays on for the whole assessment.',
     ],
   },
   {
@@ -90,7 +90,7 @@ const STEPS: StepSpec[] = [
     guidance: [
       'Say something — the bar below has to move before you can continue.',
       'If it stays flat, the microphone is muted in your computer settings rather than in the browser.',
-      'Noise levels are recorded during the assessment. Audio itself is never recorded or sent anywhere.',
+      'Noise levels are recorded throughout the assessment.',
     ],
   },
   {
@@ -384,11 +384,11 @@ export function ReadinessCheck() {
                 key: 'microphone',
                 label: 'Microphone',
                 status: 'ok',
-                // Says what is measured and what is not. The candidate is
-                // entitled to know an always-on microphone is not an always-on
-                // recording.
+                // Says what is measured, and stops. Naming what the
+                // platform does *not* capture hands the reader a map of where
+                // it is not looking — see `.claude/rules/proctoring.md`.
                 detail:
-                  'Microphone functioning perfectly. All the noises are recorded during the assessment.',
+                  'Working. Noise levels are recorded throughout the assessment.',
                 fix: null,
               });
             }

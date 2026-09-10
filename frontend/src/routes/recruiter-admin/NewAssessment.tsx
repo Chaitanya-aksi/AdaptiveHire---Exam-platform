@@ -323,7 +323,6 @@ export function NewAssessment() {
             ← Assessments
           </Link>
           <h1>New assessment</h1>
-          <p>Set it up here, then invite candidates from its own page.</p>
         </div>
       </div>
 

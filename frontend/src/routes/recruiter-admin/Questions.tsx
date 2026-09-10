@@ -286,7 +286,6 @@ export function Questions() {
       <div className="page-head">
         <div>
           <h1>Question bank</h1>
-          <p>Every question the adaptive engine can draw from.</p>
           <SubNav items={QUESTION_TABS} />
         </div>
         {/* A link, not a button: writing a question now has an address, and a

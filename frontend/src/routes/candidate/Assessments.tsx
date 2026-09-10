@@ -261,7 +261,6 @@ export function Assessments() {
       <div className="page-head">
         <div>
           <h1>Your assessments</h1>
-          <p>Everything you have been invited to take.</p>
         </div>
       </div>
 
