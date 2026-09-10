@@ -145,7 +145,11 @@ describe('MAIL_TRANSPORT', () => {
     JWT_ACCESS_SECRET: 'x'.repeat(20),
     JWT_REFRESH_SECRET: 'y'.repeat(20),
   };
-  const validate = (env: Record<string, string> = {}) =>
+  // Typed like the helper above, so `value` is not `any` and the assertions
+  // on what came back stay checked.
+  const validate = (
+    env: Record<string, string> = {},
+  ): { error?: Joi.ValidationError; value: Record<string, unknown> } =>
     envValidationSchema.validate({ ...base, ...env });
 
   const zohoKeys = {

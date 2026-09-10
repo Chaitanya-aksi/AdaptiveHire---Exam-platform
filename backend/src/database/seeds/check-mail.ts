@@ -4,6 +4,13 @@ import { connect as tlsConnect } from 'node:tls';
 import * as nodemailer from 'nodemailer';
 import { ZohoApiTransport } from '../../mail/zoho-api.transport';
 
+/** What both transports report back after a send. */
+interface SendReceipt {
+  response?: string;
+  messageId?: string;
+  rejected?: (string | { address: string })[];
+}
+
 /*
  * Proves the whole email chain, or says exactly which link is broken.
  *
@@ -122,15 +129,7 @@ async function bounceDelegation(domain: string): Promise<string | null> {
  * provider console is the authority on whether the record has landed.
  */
 async function anyDkimSelector(domain: string): Promise<string | null> {
-  const candidates = [
-    'zoho',
-    'zmail',
-    'default',
-    's1',
-    's2',
-    'google',
-    'k1',
-  ];
+  const candidates = ['zoho', 'zmail', 'default', 's1', 's2', 'google', 'k1'];
   for (const selector of candidates) {
     try {
       const records = await resolveTxt(`${selector}._domainkey.${domain}`);
@@ -191,7 +190,16 @@ async function main(): Promise<void> {
    * production would use. A check that sent by some other means would prove
    * something about the check rather than about the deployment.
    */
-  const buildTransporter = (): nodemailer.Transporter =>
+  /*
+   * Only the fields section 5 reads back.
+   *
+   * Named because `nodemailer.Transporter` with no type argument is
+   * `Transporter<any>`, which makes every field of the receipt an `any` and
+   * silently unchecks the four lines that print it. The two transports return
+   * different shapes — SMTP's own `SentMessageInfo` and the Zoho API's — and
+   * this is the part they agree on.
+   */
+  const buildTransporter = (): nodemailer.Transporter<SendReceipt> =>
     transport === 'zoho-api'
       ? nodemailer.createTransport(new ZohoApiTransport(zoho))
       : nodemailer.createTransport({
@@ -234,11 +242,15 @@ async function main(): Promise<void> {
     try {
       // 401 is the expected answer without a token, and it still proves the
       // host answered, which is all this section asks.
-      const answer = await fetch(`https://mail.zoho.${zoho.region}/api/accounts`);
+      const answer = await fetch(
+        `https://mail.zoho.${zoho.region}/api/accounts`,
+      );
       console.log(
         ok(`answered ${answer.status} in ${Date.now() - reachStarted}ms`),
       );
-      console.log(info('Port 443, so no SMTP port block applies. That is the point.'));
+      console.log(
+        info('Port 443, so no SMTP port block applies. That is the point.'),
+      );
     } catch (error) {
       fail(`unreachable: ${(error as Error).message}`);
     }
@@ -267,10 +279,16 @@ async function main(): Promise<void> {
       // status code on its own is not the verdict.
       if (payload.error || !payload.access_token) {
         fail(`refused: ${payload.error ?? 'no access_token returned'}`);
-        console.log(info('Re-run `npm run zoho:setup` with a fresh grant code,'));
-        console.log(info('and check MAIL_ZOHO_REGION matches the console you used.'));
+        console.log(
+          info('Re-run `npm run zoho:setup` with a fresh grant code,'),
+        );
+        console.log(
+          info('and check MAIL_ZOHO_REGION matches the console you used.'),
+        );
       } else {
-        console.log(ok(`access token issued in ${Date.now() - tokenStarted}ms`));
+        console.log(
+          ok(`access token issued in ${Date.now() - tokenStarted}ms`),
+        );
       }
     } catch (error) {
       fail((error as Error).message);
@@ -278,18 +296,20 @@ async function main(): Promise<void> {
   } else if (!host) {
     fail('MAIL_HOST is empty.');
     console.log(
-      info(
-        'The app falls back to an Ethereal test inbox: sends "succeed" and',
-      ),
+      info('The app falls back to an Ethereal test inbox: sends "succeed" and'),
     );
-    console.log(info('reach nobody. This is the failure that looks like success.'));
+    console.log(
+      info('reach nobody. This is the failure that looks like success.'),
+    );
     process.exitCode = 1;
     return;
   } else {
     console.log(ok(`transport smtp — host ${host}:${port} secure=${secure}`));
     console.log(
       pass
-        ? ok(`credentials present (user "${user}", password ${pass.length} chars)`)
+        ? ok(
+            `credentials present (user "${user}", password ${pass.length} chars)`,
+          )
         : warn('no MAIL_PASS set — fine only if this relay needs no auth'),
     );
     if (!from) console.log(warn('MAIL_FROM is empty'));
@@ -310,17 +330,27 @@ async function main(): Promise<void> {
     const reach = await probe(host, port, secure);
     if (!reach.reachable) {
       fail(`no answer on port ${port}.`);
-      console.log(info('A timeout here is usually the host blocking the port, not'));
-      console.log(info('the mail provider. Render blocks 25, 465 and 587 on free'));
-      console.log(info('web services; 2525 is not blocked. Run this ON the machine'));
-      console.log(info('that sends — passing on your laptop proves nothing about it.'));
+      console.log(
+        info('A timeout here is usually the host blocking the port, not'),
+      );
+      console.log(
+        info('the mail provider. Render blocks 25, 465 and 587 on free'),
+      );
+      console.log(
+        info('web services; 2525 is not blocked. Run this ON the machine'),
+      );
+      console.log(
+        info('that sends — passing on your laptop proves nothing about it.'),
+      );
     } else {
       console.log(ok(reach.banner.slice(0, 90)));
       const starttls = reach.capabilities.some((c) => /STARTTLS/i.test(c));
       console.log(
         starttls || secure
           ? ok(secure ? 'implicit TLS' : 'STARTTLS offered')
-          : warn('no STARTTLS offered and secure=false — mail would go in clear'),
+          : warn(
+              'no STARTTLS offered and secure=false — mail would go in clear',
+            ),
       );
     }
 
@@ -370,7 +400,9 @@ async function main(): Promise<void> {
         const bounce = await bounceDelegation(domain);
 
         if (!hint) {
-          console.log(warn('unrecognised provider — check the include by hand'));
+          console.log(
+            warn('unrecognised provider — check the include by hand'),
+          );
         } else if (spf.toLowerCase().includes(hint.include)) {
           console.log(ok(`SPF includes ${hint.label}`));
         } else if (bounce) {
@@ -407,7 +439,9 @@ async function main(): Promise<void> {
             ),
           );
           console.log(
-            info('Until then Gmail may spam or reject; your own tenant will not.'),
+            info(
+              'Until then Gmail may spam or reject; your own tenant will not.',
+            ),
           );
         }
 
@@ -465,7 +499,13 @@ async function main(): Promise<void> {
       console.log(info(`server said: ${receipt.response}`));
       console.log(info(`message id:  ${receipt.messageId}`));
       if (receipt.rejected?.length) {
-        fail(`rejected: ${receipt.rejected.join(', ')}`);
+        // SMTP reports plain addresses; other transports report objects.
+        // Joining the raw array would print "[object Object]" and hide which
+        // recipient was actually refused, on the one line that matters here.
+        const refused = receipt.rejected.map((r) =>
+          typeof r === 'string' ? r : r.address,
+        );
+        fail(`rejected: ${refused.join(', ')}`);
       }
       console.log(
         info(

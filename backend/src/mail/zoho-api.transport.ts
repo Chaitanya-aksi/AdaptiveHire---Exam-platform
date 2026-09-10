@@ -149,7 +149,8 @@ export class ZohoApiTransport {
       );
     }
 
-    const lifetime = (payload.expires_in ?? 0) * 1000 || ASSUMED_TOKEN_LIFETIME_MS;
+    const lifetime =
+      (payload.expires_in ?? 0) * 1000 || ASSUMED_TOKEN_LIFETIME_MS;
     this.accessToken = payload.access_token;
     this.expiresAt = Date.now() + lifetime - REFRESH_SKEW_MS;
     return this.accessToken;

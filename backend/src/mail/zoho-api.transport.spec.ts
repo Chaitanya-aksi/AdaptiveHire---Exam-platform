@@ -38,12 +38,27 @@ const send = (transport: ZohoApiTransport, mail: MailMessage) =>
   });
 
 const tokenOk = { access_token: 'access-1', expires_in: 3600 };
-const sendOk = { status: { code: 200, description: 'success' }, data: { messageId: 'm-1' } };
+const sendOk = {
+  status: { code: 200, description: 'success' },
+  data: { messageId: 'm-1' },
+};
 
-function mockFetch(
-  responses: { status?: number; body: unknown }[],
-): jest.Mock {
-  const fn = jest.fn();
+/** Only the parts of a Response the transport actually reads. */
+interface FakeResponse {
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+}
+
+/**
+ * Typed on both sides, so `mock.calls[n][1]` is a `RequestInit` rather than
+ * `any`. Untyped, every assertion about what was sent to Zoho was unchecked —
+ * a renamed field would have kept passing.
+ */
+type FetchMock = jest.Mock<Promise<FakeResponse>, [string, RequestInit]>;
+
+function mockFetch(responses: { status?: number; body: unknown }[]): FetchMock {
+  const fn = jest.fn<Promise<FakeResponse>, [string, RequestInit]>();
   for (const { status = 200, body } of responses) {
     fn.mockResolvedValueOnce({
       ok: status >= 200 && status < 300,
@@ -55,6 +70,15 @@ function mockFetch(
   return fn;
 }
 
+/** The JSON body of request `index`, parsed once and typed. */
+function sentBody(
+  fetchMock: FetchMock,
+  index: number,
+): Record<string, unknown> {
+  const [, init] = fetchMock.mock.calls[index];
+  return JSON.parse(init.body as string) as Record<string, unknown>;
+}
+
 afterEach(() => jest.restoreAllMocks());
 
 describe('ZohoApiTransport', () => {
@@ -64,13 +88,13 @@ describe('ZohoApiTransport', () => {
 
     const info = (await send(transport, message())) as { messageId: string };
 
-    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe('https://mail.zoho.in/api/accounts/12345/messages');
     expect((init.headers as Record<string, string>).Authorization).toBe(
       'Zoho-oauthtoken access-1',
     );
 
-    const body = JSON.parse(init.body as string);
+    const body = sentBody(fetchMock, 1);
     expect(body).toMatchObject({
       fromAddress: 'AdaptiveHire <ds09.user@aksiaerospace.com>',
       toAddress: 'candidate@example.com',
@@ -83,15 +107,16 @@ describe('ZohoApiTransport', () => {
   });
 
   it('falls back to the plain-text body when there is no HTML', async () => {
-    mockFetch([{ body: tokenOk }, { body: sendOk }]);
+    const fetchMock = mockFetch([{ body: tokenOk }, { body: sendOk }]);
     const transport = new ZohoApiTransport(CONFIG);
 
     await send(transport, message({ html: undefined }));
 
-    const body = JSON.parse(
-      (global.fetch as jest.Mock).mock.calls[1][1].body as string,
-    );
-    expect(body).toMatchObject({ content: 'plain body', mailFormat: 'plaintext' });
+    const body = sentBody(fetchMock, 1);
+    expect(body).toMatchObject({
+      content: 'plain body',
+      mailFormat: 'plaintext',
+    });
   });
 
   /*
@@ -131,7 +156,7 @@ describe('ZohoApiTransport', () => {
     await send(transport, message());
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    const retry = fetchMock.mock.calls[3][1] as RequestInit;
+    const retry = fetchMock.mock.calls[3][1];
     expect((retry.headers as Record<string, string>).Authorization).toBe(
       'Zoho-oauthtoken access-2',
     );
@@ -191,25 +216,20 @@ describe('ZohoApiTransport', () => {
 
   it('uses the configured data centre', async () => {
     const fetchMock = mockFetch([{ body: tokenOk }, { body: sendOk }]);
-    await send(
-      new ZohoApiTransport({ ...CONFIG, region: 'com' }),
-      message(),
-    );
+    await send(new ZohoApiTransport({ ...CONFIG, region: 'com' }), message());
 
     expect(String(fetchMock.mock.calls[0][0])).toContain('accounts.zoho.com');
     expect(String(fetchMock.mock.calls[1][0])).toContain('mail.zoho.com');
   });
 
   it('carries cc and bcc only when they are set', async () => {
-    mockFetch([{ body: tokenOk }, { body: sendOk }]);
+    const fetchMock = mockFetch([{ body: tokenOk }, { body: sendOk }]);
     await send(
       new ZohoApiTransport(CONFIG),
       message({ cc: ['a@example.com', 'b@example.com'] }),
     );
 
-    const body = JSON.parse(
-      (global.fetch as jest.Mock).mock.calls[1][1].body as string,
-    );
+    const body = sentBody(fetchMock, 1);
     expect(body.ccAddress).toBe('a@example.com,b@example.com');
     expect(body).not.toHaveProperty('bccAddress');
   });

@@ -69,9 +69,7 @@ async function main(): Promise<void> {
     }),
   });
 
-  const token = (await tokenResponse
-    .json()
-    .catch(() => ({}))) as TokenResponse;
+  const token = (await tokenResponse.json().catch(() => ({}))) as TokenResponse;
 
   // Zoho answers HTTP 200 with an `error` field for a bad or reused code, so
   // the status alone is not the verdict.
@@ -130,7 +128,9 @@ async function main(): Promise<void> {
   }
 
   const account = list[0];
-  console.log(`  ${account.primaryEmailAddress ?? 'account'} -> ${String(account.accountId)}`);
+  console.log(
+    `  ${account.primaryEmailAddress ?? 'account'} -> ${String(account.accountId)}`,
+  );
 
   // ── 3. What to paste ──────────────────────────────────────────────────────
   console.log(

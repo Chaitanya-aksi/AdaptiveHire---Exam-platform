@@ -107,7 +107,9 @@ async function run(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`Loading ${COMPANIES.length} companies into ${organisation.name}\n`);
+  console.log(
+    `Loading ${COMPANIES.length} companies into ${organisation.name}\n`,
+  );
 
   for (const seed of COMPANIES) {
     // Matched case-insensitively, like the unique index, so a re-run cannot

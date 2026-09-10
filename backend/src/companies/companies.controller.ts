@@ -44,10 +44,7 @@ export class CompaniesController {
    * list even though they may not edit it.
    */
   @Get()
-  list(
-    @CurrentOrg() organisationId: string,
-    @Query('active') active?: string,
-  ) {
+  list(@CurrentOrg() organisationId: string, @Query('active') active?: string) {
     return active === 'true'
       ? this.companies.activeFor(organisationId)
       : this.companies.listFor(organisationId);

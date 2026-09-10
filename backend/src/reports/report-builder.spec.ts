@@ -503,7 +503,12 @@ describe('buildReport — strengths and weaknesses', () => {
       input({
         modules: [
           traitModule([
-            { key: 'teamwork', label: 'Teamwork', score: 100, confidence: 0.67 },
+            {
+              key: 'teamwork',
+              label: 'Teamwork',
+              score: 100,
+              confidence: 0.67,
+            },
             { key: 'empathy', label: 'Empathy', score: 100, confidence: 0.67 },
             {
               key: 'risk_tolerance',
@@ -531,7 +536,12 @@ describe('buildReport — strengths and weaknesses', () => {
       input({
         modules: [
           traitModule([
-            { key: 'teamwork', label: 'Teamwork', score: 100, confidence: 0.67 },
+            {
+              key: 'teamwork',
+              label: 'Teamwork',
+              score: 100,
+              confidence: 0.67,
+            },
             { key: 'empathy', label: 'Empathy', score: 100, confidence: 0.67 },
             {
               key: 'communication',
