@@ -1,0 +1,82 @@
+# Is Zoho refusing *all* non-office IPs, or Render's specifically?
+#
+# Run by hand: Actions -> "Zoho OAuth IP probe" -> Run workflow.
+#
+# WHY THIS MATTERS
+#
+# Token refreshes from Render answer IP_NOT_ALLOWED, while the identical
+# credentials work from the office. Three explanations fit that, and they lead
+# to opposite actions:
+#
+#   1. An organisation allowlist containing the office network.  -> admin fixes it
+#   2. Geo-fencing to India.                                     -> admin fixes it
+#   3. Zoho auto-refusing datacenter IPs for OAuth as anti-abuse. -> NO admin can
+#      fix it; the answer is to move off shared cloud ranges, or stop using the
+#      API and use SMTP, which we already proved Zoho accepts from a cloud IP.
+#
+# This runs from a GitHub-hosted runner: a datacenter IP, outside India, and
+# definitely not on any allowlist your organisation maintains.
+#
+#   IP_NOT_ALLOWED  -> every non-allowlisted IP is refused. Cases 1 or 2.
+#                      Chasing the admin is the right move.
+#   invalid_client  -> the IP was ACCEPTED and Zoho went on to check the
+#                      credentials. Cloud IPs are fine in general, so Render's
+#                      ranges are being refused specifically. Case 3 — an admin
+#                      cannot help, and moving hosts would.
+#
+# NO CREDENTIALS ARE USED. Deliberately fake ones are sent, because we only care
+# which refusal comes back — whether Zoho rejected the caller before or after it
+# looked at what they presented.
+#
+# Delete this once the question is answered. It is a diagnostic, not product.
+
+name: Zoho OAuth IP probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Where is this runner
+        run: |
+          echo "Runner public IP: $(curl -s --max-time 10 https://api.ipify.org || echo unknown)"
+          echo "A datacenter IP, outside India, on no allowlist of yours."
+
+      - name: Ask Zoho for a token with fake credentials
+        run: |
+          echo "POST https://accounts.zoho.in/oauth/v2/token"
+          echo
+          RESPONSE=$(curl -s --max-time 25 \
+            -X POST 'https://accounts.zoho.in/oauth/v2/token' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=refresh_token' \
+            --data-urlencode 'refresh_token=1000.this-is-not-a-real-token.probe' \
+            --data-urlencode 'client_id=1000.PROBEPROBEPROBEPROBEPROBEPROBE' \
+            --data-urlencode 'client_secret=not-a-real-secret')
+
+          echo "Zoho replied: $RESPONSE"
+          echo
+
+          case "$RESPONSE" in
+            *IP_NOT_ALLOWED*)
+              echo "VERDICT: refused on IP, before looking at the credentials."
+              echo "         Every non-allowlisted address is blocked, so this is an"
+              echo "         organisation allowlist or geo-fence."
+              echo "         -> Your Zoho admin CAN fix it. Send the message."
+              ;;
+            *invalid_client*|*invalid_code*|*invalid_grant*)
+              echo "VERDICT: the IP was ACCEPTED — Zoho went on to check the"
+              echo "         credentials and rejected the fake ones."
+              echo "         Cloud IPs are fine in general, so Render's ranges are"
+              echo "         being refused specifically, most likely on reputation."
+              echo "         -> No admin can fix that. Moving off Render would,"
+              echo "            and so would SMTP, which we already proved works"
+              echo "            from a cloud IP."
+              ;;
+            *)
+              echo "VERDICT: unexpected reply. Neither an IP refusal nor a"
+              echo "         credential refusal — read the raw response above."
+              ;;
+          esac
