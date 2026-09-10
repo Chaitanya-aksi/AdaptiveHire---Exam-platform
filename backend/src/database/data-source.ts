@@ -3,8 +3,26 @@ import { DataSource } from 'typeorm';
 import { readCaCert } from '../config/configuration';
 import { entities } from './entities';
 
-loadEnv({ path: '../.env', override: true });
-loadEnv({ path: '.env', override: true });
+/*
+ * Loaded nearest-file-first, and WITHOUT `override`, so an environment set by
+ * the caller wins over both files.
+ *
+ * Both calls used to pass `override: true`, which made a caller-supplied
+ * environment impossible to honour — the file clobbered it every time. That
+ * turned out to matter: `test/global-teardown.ts` imports this module, so
+ * running the e2e suites on a machine holding a production `.env` pointed the
+ * suites at a local database (NestJS lets process env win) while pointing the
+ * teardown sweep's DELETE statements at production. CI never saw it, because a
+ * checkout has no `.env` at all and dotenv finds nothing to load.
+ *
+ * Reversing the order preserves the precedence between the two files —
+ * `backend/.env` still beats the repo-root one — while dotenv's default
+ * "first value wins, and an existing process.env value always wins" gives the
+ * caller the last word. An ordinary `npm run migration:run` sets none of these
+ * variables and so behaves exactly as before.
+ */
+loadEnv({ path: '.env' });
+loadEnv({ path: '../.env' });
 
 /**
  * The migration CLI's own connection. It deliberately does not go through
