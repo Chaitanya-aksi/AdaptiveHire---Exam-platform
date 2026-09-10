@@ -230,6 +230,9 @@ export function InviteCandidates() {
          */}
         <div className="card card-pad">
           <h2>Add a candidate</h2>
+          <p className="muted small" style={{ margin: '3px 0 12px' }}>
+            Invite one candidate without preparing a spreadsheet.
+          </p>
 
           <form
             className="row"

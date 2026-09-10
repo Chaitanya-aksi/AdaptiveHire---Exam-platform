@@ -68,6 +68,7 @@ export function Profile() {
       <div className="page-head">
         <div>
           <h1>{recruiter ? 'Settings' : 'My account'}</h1>
+          <p>Manage your profile and sign-in details.</p>
           {/* Tabs only for a recruiter. A candidate has no workspace to
               configure, so this is their whole account page and a strip with
               one usable tab on it would be furniture. */}

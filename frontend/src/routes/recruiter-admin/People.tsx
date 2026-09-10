@@ -194,6 +194,7 @@ export function People() {
       <div className="page-head">
         <div>
           <h1>People</h1>
+          <p>Recruiters in your organisation, and candidates you have invited.</p>
         </div>
         <button className="primary" onClick={() => setAddOpen(true)}>
           Add person

@@ -5734,9 +5734,17 @@ button.block {
 }
 
 .sc-title {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-size: 14px;
   font-weight: 650;
+}
+
+.sc-body {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 62ch;
 }
 
 .sc-link {

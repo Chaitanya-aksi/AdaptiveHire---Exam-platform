@@ -141,7 +141,8 @@ export function PublicLinkPanel({ assessmentId }: { assessmentId: string }) {
         <div>
           <h2>Shareable link</h2>
           <p className="muted small" style={{ margin: '3px 0 0' }}>
-            One link for the whole round — no invitation email needed.
+            Share one link with every candidate for this assessment. No
+            invitation email required.
           </p>
         </div>
         {link?.configured && (

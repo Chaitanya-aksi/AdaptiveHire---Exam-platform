@@ -56,16 +56,19 @@ const PRIMARY: Destination[] = [
     to: '/admin/assessments/new',
     Icon: IconAssessment,
     title: 'Host a test',
+    body: 'Pick the subjects, question count and time limit for a new assessment.',
   },
   {
     to: '/admin/assessments',
     Icon: IconPeople,
     title: 'Hire candidates',
+    body: 'Invite candidates individually or by spreadsheet, and track their progress.',
   },
   {
     to: '/admin/questions/new',
     Icon: IconBank,
     title: 'Build your question bank',
+    body: 'Write your own questions, or use the ones included with the platform.',
   },
 ];
 
@@ -74,38 +77,38 @@ const EXPLORE: Destination[] = [
   {
     to: '/admin/modules',
     Icon: IconModules,
-    title: 'Take a look at the modules',
-    body: 'Aptitude, logical reasoning, verbal ability and a behavioural profile.',
+    title: 'Modules',
+    body: 'Aptitude, logical reasoning, verbal ability and behavioural profiling.',
   },
   {
     to: '/admin/import',
     Icon: IconImport,
     title: 'Bulk import questions',
-    body: 'A bad row is reported and skipped, never the whole file.',
+    body: 'Upload questions in bulk from a CSV or Excel file.',
   },
   {
     to: '/admin/reports',
     Icon: IconReport,
     title: 'Candidate reports',
-    body: 'Every attempt across your workspace, newest first.',
+    body: 'Every attempt across your workspace, most recent first.',
   },
   {
     to: bankLink({ status: 'draft' }),
     Icon: IconAssessment,
     title: 'Review drafts',
-    body: 'Imported questions land as drafts until you activate them.',
+    body: 'Imported questions stay as drafts until you activate them.',
   },
   {
     to: '/admin/people',
     Icon: IconPeople,
     title: 'People',
-    body: 'Recruiters here, and the candidates you have invited.',
+    body: 'Recruiters in your organisation and the candidates you have invited.',
   },
   {
     to: '/admin/proctoring',
     Icon: IconShield,
     title: 'Proctoring signals',
-    body: 'What each signal can and cannot tell you.',
+    body: 'What was flagged during each attempt, and what it means.',
   },
 ];
 
@@ -193,6 +196,10 @@ export function Dashboard() {
         <div className="hero-copy">
           <span className="eyebrow">Your workspace</span>
           <h1>Welcome back, {firstName}.</h1>
+          <p>
+            Set up assessments, invite candidates, and review how they
+            performed.
+          </p>
           <div className="hero-actions">
             <Link to="/admin/assessments/new" className="button primary">
               Create an assessment
@@ -230,6 +237,7 @@ export function Dashboard() {
       <section>
         <div className="section-head">
           <h2>Start here</h2>
+          <p>The tasks you will use most often.</p>
         </div>
         <div className="tile-grid tile-grid-lg">
           {PRIMARY.map((destination) => (
@@ -243,6 +251,7 @@ export function Dashboard() {
       <section>
         <div className="section-head">
           <h2>Explore</h2>
+          <p>The rest of the workspace.</p>
         </div>
         <div className="tile-grid">
           {EXPLORE.map((destination) => (

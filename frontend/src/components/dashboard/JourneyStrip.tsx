@@ -14,16 +14,31 @@ import {
  * in one glance. The two buttons underneath are the only things that actually go
  * anywhere.
  *
- * Labels only, no per-stage sentence. Five icons in a row already say "these
- * happen in this order", and a line of prose under each one was explaining a
- * step whose name had already explained it.
+ * Each stage carries a short fragment rather than a sentence. Enough to say
+ * what happens at that point, not enough to read as documentation.
  */
 const STAGES = [
-  { Icon: IconAssessment, label: 'Build the test' },
-  { Icon: IconInvite, label: 'Invite candidates' },
-  { Icon: IconAdaptive, label: 'Candidates take the assessment' },
-  { Icon: IconReport, label: 'Read the report' },
-  { Icon: IconHired, label: 'Hire' },
+  {
+    Icon: IconAssessment,
+    label: 'Build the test',
+    detail: 'Pick subjects and questions',
+  },
+  {
+    Icon: IconInvite,
+    label: 'Invite candidates',
+    detail: 'By email or spreadsheet',
+  },
+  {
+    Icon: IconAdaptive,
+    label: 'Candidates take the assessment',
+    detail: 'Difficulty adapts as they answer',
+  },
+  {
+    Icon: IconReport,
+    label: 'Read the report',
+    detail: 'Ability, behaviour, every answer',
+  },
+  { Icon: IconHired, label: 'Hire', detail: 'Make the decision' },
 ];
 
 export function JourneyStrip() {
@@ -31,10 +46,11 @@ export function JourneyStrip() {
     <section className="journey">
       <div className="journey-head">
         <h2>How a hire runs on AdaptiveHire</h2>
+        <p>How the process works, end to end.</p>
       </div>
 
       <ol className="journey-steps">
-        {STAGES.map(({ Icon, label }, index) => (
+        {STAGES.map(({ Icon, label, detail }, index) => (
           <li key={label}>
             {/* The connector is drawn by the item, not between items, so the
                 first one can simply omit it — no stray line off the left edge. */}
@@ -43,6 +59,7 @@ export function JourneyStrip() {
               <Icon />
             </span>
             <strong>{label}</strong>
+            <span className="muted small">{detail}</span>
           </li>
         ))}
       </ol>

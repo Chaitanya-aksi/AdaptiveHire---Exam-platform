@@ -114,7 +114,10 @@ export function AllReports() {
       <div className="page-head">
         <div>
           <h1>Assessments</h1>
-          <p>Every attempt across your workspace, most recent first.</p>
+          <p>
+            Every attempt across your workspace, most recent first. Open one to
+            see the full report.
+          </p>
           <SubNav items={ASSESSMENT_TABS} />
         </div>
       </div>

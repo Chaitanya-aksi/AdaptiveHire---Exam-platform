@@ -224,7 +224,10 @@ export function ProctoringSignals() {
       <div className="page-head">
         <div>
           <h1>Assessments</h1>
-          <p>What each signal can and cannot tell you.</p>
+          <p>
+            What was flagged during each attempt, what it means, and what it
+            does not.
+          </p>
           <SubNav items={ASSESSMENT_TABS} />
         </div>
       </div>
